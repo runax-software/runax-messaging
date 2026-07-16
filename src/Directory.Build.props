@@ -11,19 +11,20 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
-    <!-- XML docs are generated, but missing member docs shouldn't fail the build. -->
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- CS1591: XML docs are generated, but missing member docs shouldn't fail the build.
+         CA1848/CA1873: high-performance LoggerMessage delegates are not required here. -->
+    <NoWarn>$(NoWarn);CS1591;CA1848;CA1873</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Label="Packaging">
     <IsPackable>true</IsPackable>
+    <PackageId>$(MSBuildProjectName)</PackageId>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageReadmeFile Condition="Exists('README.md')">README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <Authors>Runax</Authors>
-    <Company>Runax</Company>
+    <Company>Runax Software</Company>
     <Product>Runax.Messaging</Product>
     <PackageTags>messaging;pubsub;publish-subscribe;events;runax</PackageTags>
     <PackageProjectUrl>https://github.com/runax-software/runax-messaging</PackageProjectUrl>

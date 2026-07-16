@@ -1,19 +1,7 @@
 <Solution>
-  <Folder Name="/Solution Items/">
-    <File Path=".editorconfig" />
-    <File Path=".gitattributes" />
-    <File Path=".gitignore" />
-    <File Path="Directory.Packages.props" />
-    <File Path="global.json" />
-    <File Path="nuget.config" />
-    <File Path="src/Directory.Build.props" />
-    <File Path="tests/Directory.Build.props" />
-  </Folder>
-  <Folder Name="/Docs/">
-    <File Path="README.md" />
-    <File Path="CONTRIBUTING.md" />
-    <File Path="CODE_OF_CONDUCT.md" />
-    <File Path="SECURITY.md" />
-    <File Path="LICENSE" />
-  </Folder>
+  <Project Path="src\Runax.Messaging.Abstractions\Runax.Messaging.Abstractions.csproj" Type="Classic C#" />
+  <Project Path="src\Runax.Messaging.RabbitMq\Runax.Messaging.RabbitMq.csproj" Type="Classic C#" />
+  <Project Path="src\Runax.Messaging.Sqs\Runax.Messaging.Sqs.csproj" Type="Classic C#" />
+  <Project Path="src\Runax.Messaging\Runax.Messaging.csproj" Type="Classic C#" />
+  <Project Path="tests\Runax.Messaging.Tests\Runax.Messaging.Tests.csproj" Type="Classic C#" />
 </Solution>

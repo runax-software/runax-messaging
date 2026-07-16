@@ -18,10 +18,8 @@ jobs:
         with:
           warnings-as-errors: "true"
 
-      # TODO: re-enable once test projects exist under tests/.
-      # With an empty solution `dotnet test` crashes ("solution configuration '|' is invalid").
-      # - name: Unit tests
-      #   run: dotnet test --no-build --verbosity normal -- --filter-not-trait "Category=Integration"
+      - name: Unit tests
+        run: dotnet test --no-build --verbosity normal -- --filter-not-trait "Category=Integration"
 
       - name: Format check
         run: dotnet format --verify-no-changes

@@ -9,6 +9,8 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- xUnit1051: tests manage their own cancellation/timeouts rather than the ambient test token. -->
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Label="Test host">
