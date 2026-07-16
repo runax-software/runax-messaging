@@ -1,0 +1,37 @@
+<Project>
+  <!-- Central Package Management (CPM): every NuGet version is declared ONCE here.
+       MSBuild finds this file by walking up the tree, so it governs both src/ and
+       tests/. Individual .csproj files (and the Directory.Build.props files) reference
+       packages WITHOUT a Version attribute; the version is resolved from below. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <!-- Core / shared abstractions used by Runax.Messaging and every transport. -->
+  <ItemGroup Label="Core">
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.10" />
+  </ItemGroup>
+
+  <!-- Transport implementations, each in its own Runax.Messaging.<Transport> library. -->
+  <ItemGroup Label="Transports">
+    <PackageVersion Include="AWSSDK.SQS" Version="4.0.100.4" />
+    <PackageVersion Include="RabbitMQ.Client" Version="7.2.1" />
+    <PackageVersion Include="Google.Cloud.PubSub.V1" Version="3.36.0" />
+    <PackageVersion Include="Confluent.Kafka" Version="2.15.0" />
+    <PackageVersion Include="Azure.Messaging.ServiceBus" Version="7.20.2" />
+  </ItemGroup>
+
+  <!-- Test-only. Runner is Microsoft.Testing.Platform (see global.json) + xUnit v3. -->
+  <ItemGroup Label="Tests">
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.9.0" />
+    <PackageVersion Include="NSubstitute" Version="6.0.0" />
+    <PackageVersion Include="Shouldly" Version="4.3.0" />
+  </ItemGroup>
+</Project>

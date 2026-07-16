@@ -1,0 +1,26 @@
+# Auto detect text files and normalise line endings to LF
+* text=auto eol=lf
+
+# Explicit text files
+*.cs text diff=csharp
+*.csproj text
+*.sln text
+*.props text
+*.targets text
+*.config text
+*.json text
+*.yaml text
+*.yml text
+*.xml text
+*.md text
+*.sh text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.dll binary
+*.exe binary
+*.pdb binary
+*.nupkg binary

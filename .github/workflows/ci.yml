@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup and build
+        uses: ./.github/actions/setup-dotnet-build
+        with:
+          warnings-as-errors: "true"
+
+      # TODO: re-enable once test projects exist under tests/.
+      # With an empty solution `dotnet test` crashes ("solution configuration '|' is invalid").
+      # - name: Unit tests
+      #   run: dotnet test --no-build --verbosity normal -- --filter-not-trait "Category=Integration"
+
+      - name: Format check
+        run: dotnet format --verify-no-changes
