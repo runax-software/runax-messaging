@@ -1,0 +1,102 @@
+# Runax.Messaging
+
+A lightweight publish/subscribe messaging library for .NET. A small core of
+abstractions with a pluggable transport per broker — publish and consume
+strongly-typed messages without coupling your application to a specific broker.
+
+## Packages
+
+| Package | Description |
+| --- | --- |
+| [`Runax.Messaging.Abstractions`](src/Runax.Messaging.Abstractions/README.md) | Contracts only: `IMessagePublisher`, the `IMessagingTransport` SPI, `MessageContext`, and the `MessagingConfigurator` builder. Reference this from application and transport code. |
+| [`Runax.Messaging`](src/Runax.Messaging/README.md) | Default implementation: DI wiring, JSON serialization, hosted consumers, and an in-memory transport. |
+| [`Runax.Messaging.Sqs`](src/Runax.Messaging.Sqs/README.md) | Amazon SQS transport. |
+| [`Runax.Messaging.RabbitMq`](src/Runax.Messaging.RabbitMq/README.md) | RabbitMQ transport. |
+
+Application code that only publishes needs `Runax.Messaging.Abstractions`. The
+composition root (where you call `AddRunaxMessaging`) needs `Runax.Messaging`
+plus one transport package.
+
+## Install
+
+```bash
+dotnet add package Runax.Messaging
+dotnet add package Runax.Messaging.Sqs        # or .RabbitMq, or use the built-in in-memory transport
+```
+
+## Quick start
+
+Register messaging, pick a transport, and add consumers:
+
+```csharp
+using Runax.Messaging;              // AddRunaxMessaging, AddInMemory, AddConsumer, MessageConsumer<T>
+using Runax.Messaging.Abstractions; // IMessagePublisher
+
+var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.AddRunaxMessaging(messaging => messaging
+    .AddInMemory()                  // transport: in-process (great for tests / single process)
+    .AddConsumer<OrderPlacedConsumer>());
+
+var host = builder.Build();
+```
+
+Publish a message by injecting `IMessagePublisher`:
+
+```csharp
+public sealed class Checkout(IMessagePublisher publisher)
+{
+    public ValueTask PlaceOrderAsync(Order order) =>
+        publisher.PublishAsync("orders.placed", order);
+}
+```
+
+Consume by deriving from `MessageConsumer<TMessage>`:
+
+```csharp
+using Runax.Messaging;
+
+public sealed class OrderPlacedConsumer : MessageConsumer<Order>
+{
+    public override string Topic => "orders.placed";
+
+    protected override ValueTask HandleAsync(Order order, CancellationToken cancellationToken)
+    {
+        Console.WriteLine($"Received order {order.Id}");
+        return ValueTask.CompletedTask;
+    }
+}
+```
+
+Consumers are dispatched by a hosted background service, so consuming requires a
+.NET Generic Host (`Microsoft.Extensions.Hosting`). Publishing does not.
+
+## Switching transports
+
+Only the composition root changes; publishers and consumers stay the same:
+
+```csharp
+// Amazon SQS
+using Runax.Messaging.Sqs;
+messaging.AddSqs(o => o.Region = "us-east-1").AddConsumer<OrderPlacedConsumer>();
+
+// RabbitMQ
+using Runax.Messaging.RabbitMq;
+messaging.AddRabbitMq(o => o.HostName = "localhost").AddConsumer<OrderPlacedConsumer>();
+```
+
+Each transport's options are documented on its package page linked in the table
+above.
+
+## Documentation
+
+- [Architecture & message flow](docs/architecture.md)
+- [Writing a custom transport](docs/writing-a-custom-transport.md)
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[MIT](LICENSE).

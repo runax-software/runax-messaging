@@ -1,0 +1,42 @@
+# Runax.Messaging.Abstractions
+
+Core publish/subscribe contracts for [Runax.Messaging](https://github.com/runax-software/runax-messaging).
+This package has almost no dependencies — reference it from application code that
+only needs to publish, and from transport packages that implement the SPI.
+
+## Install
+
+```bash
+dotnet add package Runax.Messaging.Abstractions
+```
+
+## What's inside
+
+| Type | Role |
+| --- | --- |
+| `IMessagePublisher` | Publishes a strongly-typed message to a topic, optionally with headers. |
+| `IMessagingTransport` | Provider SPI. Each transport implements broker-specific publish/subscribe. |
+| `MessageContext` | A received message: topic, raw JSON body, headers, and a `Deserialize<T>()` helper. |
+| `MessagingConfigurator` | Fluent builder that transports and consumers attach to via extension methods. |
+
+## Usage
+
+Depend on `IMessagePublisher` wherever you publish:
+
+```csharp
+using Runax.Messaging.Abstractions;
+
+public sealed class Checkout(IMessagePublisher publisher)
+{
+    public ValueTask PlaceOrderAsync(Order order) =>
+        publisher.PublishAsync("orders.placed", order);
+}
+```
+
+The implementation, transports, and hosting live in
+[`Runax.Messaging`](https://www.nuget.org/packages/Runax.Messaging) and the
+transport packages.
+
+## License
+
+MIT
