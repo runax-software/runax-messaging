@@ -11,6 +11,7 @@ public sealed class MessagingConfigurator
     /// <summary>
     /// Creates a configurator over the given service collection.
     /// </summary>
+    /// <param name="services">The service collection that transports and consumers register into.</param>
     public MessagingConfigurator(IServiceCollection services) => Services = services;
 
     /// <summary>

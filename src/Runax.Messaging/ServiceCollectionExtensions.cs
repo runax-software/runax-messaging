@@ -17,6 +17,7 @@ public static class ServiceCollectionExtensions
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configure">Action to configure the transport and consumers.</param>
+    /// <returns>The same service collection, to allow chaining.</returns>
     public static IServiceCollection AddRunaxMessaging(
         this IServiceCollection services,
         Action<MessagingConfigurator> configure)

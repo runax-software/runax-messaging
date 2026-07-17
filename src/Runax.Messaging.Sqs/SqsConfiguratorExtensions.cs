@@ -13,6 +13,7 @@ public static class SqsConfiguratorExtensions
     /// </summary>
     /// <param name="configurator">The messaging configurator.</param>
     /// <param name="configure">Action to configure <see cref="SqsOptions"/>.</param>
+    /// <returns>The same configurator, to allow chaining.</returns>
     public static MessagingConfigurator AddSqs(
         this MessagingConfigurator configurator,
         Action<SqsOptions> configure)

@@ -13,6 +13,7 @@ public static class RabbitMqConfiguratorExtensions
     /// </summary>
     /// <param name="configurator">The messaging configurator.</param>
     /// <param name="configure">Action to configure <see cref="RabbitMqOptions"/>.</param>
+    /// <returns>The same configurator, to allow chaining.</returns>
     public static MessagingConfigurator AddRabbitMq(
         this MessagingConfigurator configurator,
         Action<RabbitMqOptions> configure)

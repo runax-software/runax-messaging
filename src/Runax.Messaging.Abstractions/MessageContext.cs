@@ -25,5 +25,7 @@ public sealed class MessageContext
     /// <summary>
     /// Deserializes the message body to the specified type.
     /// </summary>
+    /// <typeparam name="T">The type to deserialize the body into.</typeparam>
+    /// <returns>The deserialized message, or <see langword="null"/> if the body is JSON null.</returns>
     public T? Deserialize<T>() => JsonSerializer.Deserialize<T>(Body);
 }

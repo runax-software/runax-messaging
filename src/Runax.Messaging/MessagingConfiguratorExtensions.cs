@@ -13,6 +13,8 @@ public static class MessagingConfiguratorExtensions
     /// Registers a message consumer to be started by the hosted service.
     /// </summary>
     /// <typeparam name="TConsumer">The consumer type to register.</typeparam>
+    /// <param name="configurator">The messaging configurator.</param>
+    /// <returns>The same configurator, to allow chaining.</returns>
     public static MessagingConfigurator AddConsumer<TConsumer>(this MessagingConfigurator configurator)
         where TConsumer : class
     {

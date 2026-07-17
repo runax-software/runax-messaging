@@ -9,6 +9,7 @@ namespace Runax.Messaging;
 /// The framework deserializes the message body to <typeparamref name="TMessage"/>
 /// before invoking <see cref="HandleAsync(TMessage, CancellationToken)"/>.
 /// </summary>
+/// <typeparam name="TMessage">The message type this consumer handles.</typeparam>
 public abstract class MessageConsumer<TMessage> : IMessageConsumer
 {
     /// <summary>
@@ -19,6 +20,9 @@ public abstract class MessageConsumer<TMessage> : IMessageConsumer
     /// <summary>
     /// Handles a deserialized message.
     /// </summary>
+    /// <param name="message">The deserialized message payload.</param>
+    /// <param name="cancellationToken">Token that is signaled when the host is shutting down.</param>
+    /// <returns>A task that completes when the message has been handled.</returns>
     protected abstract ValueTask HandleAsync(TMessage message, CancellationToken cancellationToken = default);
 
     string IMessageConsumer.Topic => Topic;
