@@ -204,3 +204,6 @@ MSBuild_Logs/
 
 # APM dependencies
 apm_modules/
+
+# Claude Code personal/local settings
+.claude/settings.local.json

@@ -1,6 +1,0 @@
-{
-  "enabledMcpjsonServers": [
-    "binlog"
-  ],
-  "enableAllProjectMcpServers": true
-}
