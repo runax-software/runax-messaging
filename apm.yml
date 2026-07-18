@@ -1,0 +1,20 @@
+name: runax-messaging
+version: 1.0.0
+# Which agent platforms to deploy to.
+# Resolution order: --target flag > this field > auto-detect from filesystem.
+# Accepted values: agent-skills, antigravity, claude, codex, copilot, cursor, gemini, kiro, opencode, windsurf
+targets:
+  - claude
+dependencies:
+  apm:
+    - git: github/awesome-copilot
+      skills:
+        - csharp-async
+        - csharp-docs
+        - csharp-xunit
+        - dotnet-best-practices
+        - nuget-manager
+    - dotnet/skills/plugins/dotnet-msbuild
+  mcp: []
+includes: auto
+scripts: {}

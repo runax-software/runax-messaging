@@ -1,0 +1,650 @@
+lockfile_version: '1'
+generated_at: '2026-07-18T16:02:28.908112+00:00'
+apm_version: 0.25.0
+dependencies:
+- repo_url: dotnet/skills
+  name: dotnet-msbuild
+  host: github.com
+  resolved_commit: ab72985132b79adcc4818d1fc5c41d9543f12498
+  version: 0.1.0
+  virtual_path: plugins/dotnet-msbuild
+  is_virtual: true
+  package_type: marketplace_plugin
+  deployed_files:
+  - .claude/agents/build-perf.md
+  - .claude/agents/msbuild-code-review.md
+  - .claude/agents/msbuild.md
+  - .claude/skills/binlog-failure-analysis
+  - .claude/skills/binlog-failure-analysis/SKILL.md
+  - .claude/skills/binlog-generation
+  - .claude/skills/binlog-generation/SKILL.md
+  - .claude/skills/build-parallelism
+  - .claude/skills/build-parallelism/SKILL.md
+  - .claude/skills/build-perf-baseline
+  - .claude/skills/build-perf-baseline/SKILL.md
+  - .claude/skills/build-perf-diagnostics
+  - .claude/skills/build-perf-diagnostics/SKILL.md
+  - .claude/skills/check-bin-obj-clash
+  - .claude/skills/check-bin-obj-clash/SKILL.md
+  - .claude/skills/copy-to-output-directory
+  - .claude/skills/copy-to-output-directory/SKILL.md
+  - .claude/skills/directory-build-organization
+  - .claude/skills/directory-build-organization/SKILL.md
+  - .claude/skills/directory-build-organization/references/common-patterns.md
+  - .claude/skills/directory-build-organization/references/multi-level-examples.md
+  - .claude/skills/directory-build-organization/references/targetframework-props-pitfall.md
+  - .claude/skills/eval-performance
+  - .claude/skills/eval-performance/SKILL.md
+  - .claude/skills/extension-points
+  - .claude/skills/extension-points/SKILL.md
+  - .claude/skills/including-generated-files
+  - .claude/skills/including-generated-files/SKILL.md
+  - .claude/skills/incremental-build
+  - .claude/skills/incremental-build/SKILL.md
+  - .claude/skills/item-management
+  - .claude/skills/item-management/SKILL.md
+  - .claude/skills/msbuild-antipatterns
+  - .claude/skills/msbuild-antipatterns/SKILL.md
+  - .claude/skills/msbuild-antipatterns/references/additional-antipatterns.md
+  - .claude/skills/msbuild-antipatterns/references/incremental-build-inputs-outputs.md
+  - .claude/skills/msbuild-antipatterns/references/private-assets.md
+  - .claude/skills/msbuild-modernization
+  - .claude/skills/msbuild-modernization/SKILL.md
+  - .claude/skills/msbuild-server
+  - .claude/skills/msbuild-server/SKILL.md
+  - .claude/skills/property-patterns
+  - .claude/skills/property-patterns/SKILL.md
+  - .claude/skills/resolve-project-references
+  - .claude/skills/resolve-project-references/SKILL.md
+  - .claude/skills/target-authoring
+  - .claude/skills/target-authoring/SKILL.md
+  deployed_file_hashes:
+    .claude/agents/build-perf.md: sha256:ad7f5870b1f999889ed564523af609b3b7cda14bab5f6ddda80767c747871d92
+    .claude/agents/msbuild-code-review.md: sha256:f13f09782d58b6ff2580809dc43aaff9d6ab68f42de69182720da79309d678d9
+    .claude/agents/msbuild.md: sha256:95a19416439a50a74dcf7e2df54b6ae5fc24fb61c8ea30ff50b558bd2066c45d
+    .claude/skills/binlog-failure-analysis/SKILL.md: sha256:0424369ec57d99dd244605ce01f84ff2b62fdc24acd26c4103e3b378735e403b
+    .claude/skills/binlog-generation/SKILL.md: sha256:6a35bd9871239d314e36836bd425c93e50c295e9794166aef620bbd0754bca85
+    .claude/skills/build-parallelism/SKILL.md: sha256:1d5bf8518ef43108fac23c47b28a08e49b7486d41c2f25078632b2758dd6eab8
+    .claude/skills/build-perf-baseline/SKILL.md: sha256:9546a5d3a22432142a193cec052405e7a64977a9b57ca2268f975b20c512a909
+    .claude/skills/build-perf-diagnostics/SKILL.md: sha256:8575541b9b13f28c44ab62a248c3b141eb0fbb906893b46981b4b0546bb995a2
+    .claude/skills/check-bin-obj-clash/SKILL.md: sha256:160357b3e5926d4e762fb68c47b3fce42957b2ebc116bbabe112eae80c9dd210
+    .claude/skills/copy-to-output-directory/SKILL.md: sha256:f099db9b3165ca2e49e4c3117612ef2d4e133af67c4a33b9b32775c9b493e52c
+    .claude/skills/directory-build-organization/SKILL.md: sha256:19236a9a5ccac500f1d2bc4023bbe5c427e4ec598220af7366257de686835ff8
+    .claude/skills/directory-build-organization/references/common-patterns.md: sha256:6e651cb87034e162e8a966228cbf837612e434c564fd7f9928d38ef44a12e7f3
+    .claude/skills/directory-build-organization/references/multi-level-examples.md: sha256:6120bf2b385eb2cf348c66173bb27ade493d570db8c497881cc8319f448c820a
+    .claude/skills/directory-build-organization/references/targetframework-props-pitfall.md: sha256:a5f0b84a3138e5fdf1fdf103268493006756a1c86312952926f3a10c3e5dd738
+    .claude/skills/eval-performance/SKILL.md: sha256:54f04e50c459aaaa466cfcad4e5742be1ad3df65a96107ccfc16e1501a03c0f2
+    .claude/skills/extension-points/SKILL.md: sha256:fa274ec554b0a40f43060782a4aba9d9152ac0b162e93943ddbccbfd0bab25f8
+    .claude/skills/including-generated-files/SKILL.md: sha256:921f3cbe3078d13f6429e0ec820dbb95832c4cb4df896d80de0449c4c37c2246
+    .claude/skills/incremental-build/SKILL.md: sha256:05db7b97519627bcaaa9fd7d3212e8a6a2d68fb686c6ebf8a0472bf3a6ff8657
+    .claude/skills/item-management/SKILL.md: sha256:86d3ba145c9b334b337161cb2d25af7bfa4db20d7ca4fc3cc879461c519d0568
+    .claude/skills/msbuild-antipatterns/SKILL.md: sha256:08b36b41196b1282fc96bee299cbabf10e876969be0d9abb5b40ae4f15665ae4
+    .claude/skills/msbuild-antipatterns/references/additional-antipatterns.md: sha256:4a62a12ba5173eb5c3d8b66e2ec4a9f0248e815aacd065664175b6db72adb6d9
+    .claude/skills/msbuild-antipatterns/references/incremental-build-inputs-outputs.md: sha256:006a123ea16f95aeb216ae9e2a59be48fc82f15e66ecccdbb92fdcf03b05fdc4
+    .claude/skills/msbuild-antipatterns/references/private-assets.md: sha256:1e678c0ef9667d9df92ff71ca12737ac3a4ed26050d73e5197a2478356e0b4f5
+    .claude/skills/msbuild-modernization/SKILL.md: sha256:6abc8b21c8fbd78e59d2358783d75b0febaa5dde0bb0d9495e41a1d9d99e246d
+    .claude/skills/msbuild-server/SKILL.md: sha256:4b2d14f7bcef2e00c67a10513fba8267df03d98e82d90042e61d965f6ff3cd7b
+    .claude/skills/property-patterns/SKILL.md: sha256:d20ac0adca21952f0dba7501595b2bb7c9ae5cff1b236e5ef912fbd3a32da838
+    .claude/skills/resolve-project-references/SKILL.md: sha256:5aa288d6f2204bdf7c3519a74596b9c7c501e9e655c1cd0369a3b877fa732fd9
+    .claude/skills/target-authoring/SKILL.md: sha256:e39b9ad0bfe65746c8110f971847a1dd8988feccc10b8ad19674ab544926bcc0
+  content_hash: sha256:eee399e7acf40f102d46ab395c0c03618e185318db60b855e174ed745ef4df16
+- repo_url: github/awesome-copilot
+  name: awesome-copilot
+  host: github.com
+  resolved_commit: 26fe2d126bf79aafb38f43344d450b69632200f8
+  version: unknown
+  package_type: skill_bundle
+  deployed_files:
+  - .claude/skills/csharp-async
+  - .claude/skills/csharp-async/SKILL.md
+  - .claude/skills/csharp-docs
+  - .claude/skills/csharp-docs/SKILL.md
+  - .claude/skills/csharp-xunit
+  - .claude/skills/csharp-xunit/SKILL.md
+  - .claude/skills/dotnet-best-practices
+  - .claude/skills/dotnet-best-practices/SKILL.md
+  - .claude/skills/nuget-manager
+  - .claude/skills/nuget-manager/SKILL.md
+  deployed_file_hashes:
+    .claude/skills/csharp-async/SKILL.md: sha256:d52c0812a3e4325ab0d89aebd074efe5e6246e722522180f8613ef3c72a72acc
+    .claude/skills/csharp-docs/SKILL.md: sha256:ddcc59c5f0320af04a59ba090b8e6490ce537aad2d8b2667fdf386686d037826
+    .claude/skills/csharp-xunit/SKILL.md: sha256:7a2d020e24a5788c4999c05c86902599bb31a5df70b2595b37c00beb802cdb49
+    .claude/skills/dotnet-best-practices/SKILL.md: sha256:3181f44dfc866313c96cd784a7f003b4b109836a6f02648f95b3323e73e85d62
+    .claude/skills/nuget-manager/SKILL.md: sha256:0da298a7ede2c1267b2e9eca0ad394f9df7296689d010bbbc7cd818ed4a59567
+  content_hash: sha256:cd4b51959a562ecf75d449b5321cf60c28dedb84fd3b8edc8dd7ad10a46bba25
+  skill_subset:
+  - csharp-async
+  - csharp-docs
+  - csharp-xunit
+  - dotnet-best-practices
+  - nuget-manager
+deployments:
+- kind: project-relative
+  target: claude
+  value: .claude/agents/build-perf.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:ad7f5870b1f999889ed564523af609b3b7cda14bab5f6ddda80767c747871d92
+- kind: project-relative
+  target: claude
+  value: .claude/agents/msbuild-code-review.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:f13f09782d58b6ff2580809dc43aaff9d6ab68f42de69182720da79309d678d9
+- kind: project-relative
+  target: claude
+  value: .claude/agents/msbuild.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:95a19416439a50a74dcf7e2df54b6ae5fc24fb61c8ea30ff50b558bd2066c45d
+- kind: project-relative
+  target: claude
+  value: .claude/skills/binlog-failure-analysis
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/binlog-failure-analysis/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:0424369ec57d99dd244605ce01f84ff2b62fdc24acd26c4103e3b378735e403b
+- kind: project-relative
+  target: claude
+  value: .claude/skills/binlog-generation
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/binlog-generation/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:6a35bd9871239d314e36836bd425c93e50c295e9794166aef620bbd0754bca85
+- kind: project-relative
+  target: claude
+  value: .claude/skills/build-parallelism
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/build-parallelism/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:1d5bf8518ef43108fac23c47b28a08e49b7486d41c2f25078632b2758dd6eab8
+- kind: project-relative
+  target: claude
+  value: .claude/skills/build-perf-baseline
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/build-perf-baseline/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:9546a5d3a22432142a193cec052405e7a64977a9b57ca2268f975b20c512a909
+- kind: project-relative
+  target: claude
+  value: .claude/skills/build-perf-diagnostics
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/build-perf-diagnostics/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:8575541b9b13f28c44ab62a248c3b141eb0fbb906893b46981b4b0546bb995a2
+- kind: project-relative
+  target: claude
+  value: .claude/skills/check-bin-obj-clash
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/check-bin-obj-clash/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:160357b3e5926d4e762fb68c47b3fce42957b2ebc116bbabe112eae80c9dd210
+- kind: project-relative
+  target: claude
+  value: .claude/skills/copy-to-output-directory
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/copy-to-output-directory/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:f099db9b3165ca2e49e4c3117612ef2d4e133af67c4a33b9b32775c9b493e52c
+- kind: project-relative
+  target: claude
+  value: .claude/skills/csharp-async
+  runtime: null
+  scope: project
+  owners:
+  - github/awesome-copilot
+  active_owner: github/awesome-copilot
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/csharp-async/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - github/awesome-copilot
+  active_owner: github/awesome-copilot
+  content_hash: sha256:d52c0812a3e4325ab0d89aebd074efe5e6246e722522180f8613ef3c72a72acc
+- kind: project-relative
+  target: claude
+  value: .claude/skills/csharp-docs
+  runtime: null
+  scope: project
+  owners:
+  - github/awesome-copilot
+  active_owner: github/awesome-copilot
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/csharp-docs/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - github/awesome-copilot
+  active_owner: github/awesome-copilot
+  content_hash: sha256:ddcc59c5f0320af04a59ba090b8e6490ce537aad2d8b2667fdf386686d037826
+- kind: project-relative
+  target: claude
+  value: .claude/skills/csharp-xunit
+  runtime: null
+  scope: project
+  owners:
+  - github/awesome-copilot
+  active_owner: github/awesome-copilot
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/csharp-xunit/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - github/awesome-copilot
+  active_owner: github/awesome-copilot
+  content_hash: sha256:7a2d020e24a5788c4999c05c86902599bb31a5df70b2595b37c00beb802cdb49
+- kind: project-relative
+  target: claude
+  value: .claude/skills/directory-build-organization
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/directory-build-organization/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:19236a9a5ccac500f1d2bc4023bbe5c427e4ec598220af7366257de686835ff8
+- kind: project-relative
+  target: claude
+  value: .claude/skills/directory-build-organization/references/common-patterns.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:6e651cb87034e162e8a966228cbf837612e434c564fd7f9928d38ef44a12e7f3
+- kind: project-relative
+  target: claude
+  value: .claude/skills/directory-build-organization/references/multi-level-examples.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:6120bf2b385eb2cf348c66173bb27ade493d570db8c497881cc8319f448c820a
+- kind: project-relative
+  target: claude
+  value: .claude/skills/directory-build-organization/references/targetframework-props-pitfall.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:a5f0b84a3138e5fdf1fdf103268493006756a1c86312952926f3a10c3e5dd738
+- kind: project-relative
+  target: claude
+  value: .claude/skills/dotnet-best-practices
+  runtime: null
+  scope: project
+  owners:
+  - github/awesome-copilot
+  active_owner: github/awesome-copilot
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/dotnet-best-practices/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - github/awesome-copilot
+  active_owner: github/awesome-copilot
+  content_hash: sha256:3181f44dfc866313c96cd784a7f003b4b109836a6f02648f95b3323e73e85d62
+- kind: project-relative
+  target: claude
+  value: .claude/skills/eval-performance
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/eval-performance/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:54f04e50c459aaaa466cfcad4e5742be1ad3df65a96107ccfc16e1501a03c0f2
+- kind: project-relative
+  target: claude
+  value: .claude/skills/extension-points
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/extension-points/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:fa274ec554b0a40f43060782a4aba9d9152ac0b162e93943ddbccbfd0bab25f8
+- kind: project-relative
+  target: claude
+  value: .claude/skills/including-generated-files
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/including-generated-files/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:921f3cbe3078d13f6429e0ec820dbb95832c4cb4df896d80de0449c4c37c2246
+- kind: project-relative
+  target: claude
+  value: .claude/skills/incremental-build
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/incremental-build/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:05db7b97519627bcaaa9fd7d3212e8a6a2d68fb686c6ebf8a0472bf3a6ff8657
+- kind: project-relative
+  target: claude
+  value: .claude/skills/item-management
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/item-management/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:86d3ba145c9b334b337161cb2d25af7bfa4db20d7ca4fc3cc879461c519d0568
+- kind: project-relative
+  target: claude
+  value: .claude/skills/msbuild-antipatterns
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/msbuild-antipatterns/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:08b36b41196b1282fc96bee299cbabf10e876969be0d9abb5b40ae4f15665ae4
+- kind: project-relative
+  target: claude
+  value: .claude/skills/msbuild-antipatterns/references/additional-antipatterns.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:4a62a12ba5173eb5c3d8b66e2ec4a9f0248e815aacd065664175b6db72adb6d9
+- kind: project-relative
+  target: claude
+  value: .claude/skills/msbuild-antipatterns/references/incremental-build-inputs-outputs.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:006a123ea16f95aeb216ae9e2a59be48fc82f15e66ecccdbb92fdcf03b05fdc4
+- kind: project-relative
+  target: claude
+  value: .claude/skills/msbuild-antipatterns/references/private-assets.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:1e678c0ef9667d9df92ff71ca12737ac3a4ed26050d73e5197a2478356e0b4f5
+- kind: project-relative
+  target: claude
+  value: .claude/skills/msbuild-modernization
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/msbuild-modernization/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:6abc8b21c8fbd78e59d2358783d75b0febaa5dde0bb0d9495e41a1d9d99e246d
+- kind: project-relative
+  target: claude
+  value: .claude/skills/msbuild-server
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/msbuild-server/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:4b2d14f7bcef2e00c67a10513fba8267df03d98e82d90042e61d965f6ff3cd7b
+- kind: project-relative
+  target: claude
+  value: .claude/skills/nuget-manager
+  runtime: null
+  scope: project
+  owners:
+  - github/awesome-copilot
+  active_owner: github/awesome-copilot
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/nuget-manager/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - github/awesome-copilot
+  active_owner: github/awesome-copilot
+  content_hash: sha256:0da298a7ede2c1267b2e9eca0ad394f9df7296689d010bbbc7cd818ed4a59567
+- kind: project-relative
+  target: claude
+  value: .claude/skills/property-patterns
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/property-patterns/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:d20ac0adca21952f0dba7501595b2bb7c9ae5cff1b236e5ef912fbd3a32da838
+- kind: project-relative
+  target: claude
+  value: .claude/skills/resolve-project-references
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/resolve-project-references/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:5aa288d6f2204bdf7c3519a74596b9c7c501e9e655c1cd0369a3b877fa732fd9
+- kind: project-relative
+  target: claude
+  value: .claude/skills/target-authoring
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/target-authoring/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - dotnet/skills/plugins/dotnet-msbuild
+  active_owner: dotnet/skills/plugins/dotnet-msbuild
+  content_hash: sha256:e39b9ad0bfe65746c8110f971847a1dd8988feccc10b8ad19674ab544926bcc0
+mcp_servers:
+- binlog
+mcp_configs:
+  binlog:
+    name: binlog
+    transport: stdio
+    args:
+    - dnx
+    - Microsoft.AITools.BinlogMcp
+    - --yes
+    registry: false
+    tools:
+    - '*'
+    command: dotnet
+mcp_config_provenance:
+  binlog: dotnet-msbuild

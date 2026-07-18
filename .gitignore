@@ -201,3 +201,6 @@ MSBuild_Logs/
 
 # macOS
 .DS_Store
+
+# APM dependencies
+apm_modules/
