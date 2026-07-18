@@ -2,11 +2,11 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in Hookpipe, please report it responsibly.
+If you discover a security vulnerability in Runax.Messaging, please report it responsibly.
 
 **Do not open a public issue.**
 
-Instead, [open a private security advisory](https://github.com/runax-software/runax-hookpipe/security/advisories/new) on GitHub.
+Instead, [open a private security advisory](https://github.com/runax-software/runax-messaging/security/advisories/new) on GitHub.
 
 Please include:
 
@@ -27,4 +27,4 @@ We will acknowledge your report within 48 hours and aim to provide a fix or miti
 
 ## Scope
 
-This policy covers the Hookpipe application code. Third-party dependencies are managed through Dependabot and regular updates.
+This policy covers the code in the Runax.Messaging packages. Third-party dependencies are managed through Central Package Management (`Directory.Packages.props`) and updated regularly.
