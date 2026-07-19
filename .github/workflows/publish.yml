@@ -1,0 +1,34 @@
+name: Publish to NuGet
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Extract version from release tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # Packs only the shippable src/ libraries; test projects are IsPackable=false.
+      # .snupkg symbol packages are produced alongside and pushed automatically.
+      - name: Pack
+        run: dotnet pack Runax.Messaging.slnx -c Release -p:Version=${{ steps.version.outputs.version }} -o artifacts
+
+      - name: Push to NuGet
+        run: dotnet nuget push "artifacts/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
