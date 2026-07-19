@@ -24,6 +24,7 @@
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageReadmeFile Condition="Exists('README.md')">README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Authors>Runax Software</Authors>
     <Company>Runax Software</Company>
     <Product>Runax.Messaging</Product>
     <PackageTags>messaging;pubsub;publish-subscribe;events;runax</PackageTags>
