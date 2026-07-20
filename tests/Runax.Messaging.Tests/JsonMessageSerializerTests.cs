@@ -67,4 +67,35 @@ public class JsonMessageSerializerTests
     {
         Should.Throw<InvalidOperationException>(() => _serializer.Deserialize("null", "orders"));
     }
+
+    [Fact]
+    public void EnrichHeaders_merges_headers_and_preserves_the_body()
+    {
+        var envelopeJson = _serializer.Serialize(new Order(4, "boxed"), new Dictionary<string, string>
+        {
+            ["correlation-id"] = "abc",
+        });
+
+        var enriched = _serializer.EnrichHeaders(envelopeJson, new Dictionary<string, string>
+        {
+            ["x-runax-dlq-reason"] = "boom",
+            ["correlation-id"] = "overwritten",
+        });
+
+        var context = _serializer.Deserialize(enriched, "orders");
+        context.Headers["correlation-id"].ShouldBe("overwritten");
+        context.Headers["x-runax-dlq-reason"].ShouldBe("boom");
+
+        var order = context.Deserialize<Order>();
+        order.ShouldNotBeNull();
+        order!.Id.ShouldBe(4);
+        order.Name.ShouldBe("boxed");
+    }
+
+    [Fact]
+    public void EnrichHeaders_throws_for_a_malformed_envelope()
+    {
+        Should.Throw<InvalidOperationException>(
+            () => _serializer.EnrichHeaders("null", new Dictionary<string, string>()));
+    }
 }

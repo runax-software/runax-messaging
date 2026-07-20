@@ -19,11 +19,15 @@ public interface IMessagingTransport
     /// Subscribes to topics and invokes the callback for each received message. Blocks until cancellation.
     /// </summary>
     /// <param name="topics">Topics to subscribe to.</param>
-    /// <param name="onMessage">Callback invoked with (envelopeJson, topic) for each message.</param>
+    /// <param name="onMessage">
+    /// Callback invoked with (envelopeJson, topic) for each message. The returned
+    /// <see cref="MessageDisposition"/> tells the transport whether to acknowledge the message
+    /// (remove it from the broker) or requeue it for later redelivery.
+    /// </param>
     /// <param name="cancellationToken">Token that stops the subscriptions.</param>
     /// <returns>A task that runs until <paramref name="cancellationToken"/> is signaled.</returns>
     Task SubscribeAsync(
         string[] topics,
-        Func<string, string, ValueTask> onMessage,
+        Func<string, string, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken = default);
 }

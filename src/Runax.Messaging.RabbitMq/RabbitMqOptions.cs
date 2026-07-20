@@ -39,4 +39,20 @@ public sealed class RabbitMqOptions
     /// Gets or sets the exchange type. Defaults to "topic".
     /// </summary>
     public string ExchangeType { get; set; } = "topic";
+
+    /// <summary>
+    /// Gets or sets the consumer prefetch count (unacknowledged messages allowed in flight). Defaults to 10.
+    /// </summary>
+    public ushort PrefetchCount { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether publisher confirms are enabled so that
+    /// <see cref="RabbitMqTransport"/> waits for broker acknowledgement of each publish. Defaults to <see langword="true"/>.
+    /// </summary>
+    public bool PublisherConfirms { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets how long to wait for a publisher confirm before failing the publish. Defaults to 5 seconds.
+    /// </summary>
+    public TimeSpan ConfirmTimeout { get; set; } = TimeSpan.FromSeconds(5);
 }

@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Runax.Messaging.Abstractions;
+using Runax.Messaging.InMemory;
 
 namespace Runax.Messaging.Tests;
 
@@ -12,6 +12,7 @@ public class ServiceCollectionExtensionsTests
     private sealed class PingConsumer : MessageConsumer<Ping>
     {
         public override string Topic => "ping";
+
         protected override ValueTask HandleAsync(Ping message, CancellationToken cancellationToken)
             => ValueTask.CompletedTask;
     }

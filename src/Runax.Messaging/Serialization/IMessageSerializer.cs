@@ -16,4 +16,10 @@ internal interface IMessageSerializer
     /// Deserializes an envelope JSON string into a <see cref="MessageContext"/>.
     /// </summary>
     MessageContext Deserialize(string envelopeJson, string topic);
+
+    /// <summary>
+    /// Returns a copy of <paramref name="envelopeJson"/> with <paramref name="headers"/> merged into
+    /// the envelope's header collection. Existing keys are overwritten; the body and message type are preserved.
+    /// </summary>
+    string EnrichHeaders(string envelopeJson, IReadOnlyDictionary<string, string> headers);
 }

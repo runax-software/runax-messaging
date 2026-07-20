@@ -27,10 +27,11 @@ public static class ServiceCollectionExtensions
 
         configure(new MessagingConfigurator(services));
 
+        // Falls back to defaults when the caller did not configure a policy via WithRetry.
+        services.TryAddSingleton(new RetryOptions());
+
         if (services.Any(descriptor => descriptor.ServiceType == typeof(ConsumerRegistration)))
-        {
             services.AddHostedService<MessageConsumerHostedService>();
-        }
 
         return services;
     }

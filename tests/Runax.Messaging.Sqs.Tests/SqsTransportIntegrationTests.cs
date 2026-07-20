@@ -91,7 +91,7 @@ public sealed class SqsTransportIntegrationTests : IAsyncLifetime, IDisposable
         var subscription = transport.SubscribeAsync([_topic], (json, _) =>
         {
             received.TrySetResult(json);
-            return ValueTask.CompletedTask;
+            return ValueTask.FromResult(MessageDisposition.Acknowledge);
         }, cts.Token);
 
         var result = await received.Task.WaitAsync(TimeSpan.FromSeconds(15));

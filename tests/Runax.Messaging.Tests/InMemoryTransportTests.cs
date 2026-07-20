@@ -1,3 +1,4 @@
+using Runax.Messaging.Abstractions;
 using Runax.Messaging.InMemory;
 
 namespace Runax.Messaging.Tests;
@@ -16,7 +17,7 @@ public class InMemoryTransportTests
         var subscription = transport.SubscribeAsync(["orders"], (json, topic) =>
         {
             received.TrySetResult((json, topic));
-            return ValueTask.CompletedTask;
+            return ValueTask.FromResult(MessageDisposition.Acknowledge);
         }, cts.Token);
 
         var result = await received.Task;
@@ -44,7 +45,7 @@ public class InMemoryTransportTests
             received.Add(json);
             if (received.Count == 3)
                 done.TrySetResult();
-            return ValueTask.CompletedTask;
+            return ValueTask.FromResult(MessageDisposition.Acknowledge);
         }, cts.Token);
 
         await done.Task;
@@ -67,7 +68,7 @@ public class InMemoryTransportTests
         var subscription = transport.SubscribeAsync(["orders"], (json, topic) =>
         {
             received.TrySetResult((json, topic));
-            return ValueTask.CompletedTask;
+            return ValueTask.FromResult(MessageDisposition.Acknowledge);
         }, cts.Token);
 
         var result = await received.Task;
@@ -84,7 +85,7 @@ public class InMemoryTransportTests
         var transport = new InMemoryTransport();
         using var cts = new CancellationTokenSource();
 
-        var subscription = transport.SubscribeAsync(["orders"], (_, _) => ValueTask.CompletedTask, cts.Token);
+        var subscription = transport.SubscribeAsync(["orders"], (_, _) => ValueTask.FromResult(MessageDisposition.Acknowledge), cts.Token);
         await cts.CancelAsync();
 
         await Should.NotThrowAsync(subscription);

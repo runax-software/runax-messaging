@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Runax.Messaging.Abstractions;
+using Runax.Messaging.InMemory;
 
 namespace Runax.Messaging.Tests;
 

@@ -36,4 +36,25 @@ internal sealed class JsonMessageSerializer : IMessageSerializer
                 : new Dictionary<string, string>(),
         };
     }
+
+    /// <inheritdoc />
+    public string EnrichHeaders(string envelopeJson, IReadOnlyDictionary<string, string> headers)
+    {
+        var envelope = JsonSerializer.Deserialize<MessageEnvelope>(envelopeJson)
+                       ?? throw new InvalidOperationException("Failed to deserialize message envelope.");
+
+        var merged = envelope.Headers is not null
+            ? new Dictionary<string, string>(envelope.Headers)
+            : new Dictionary<string, string>();
+
+        foreach (var (key, value) in headers)
+            merged[key] = value;
+
+        return JsonSerializer.Serialize(new MessageEnvelope
+        {
+            MessageType = envelope.MessageType,
+            Body = envelope.Body,
+            Headers = merged,
+        });
+    }
 }

@@ -20,7 +20,7 @@ internal sealed class InMemoryTransport : IMessagingTransport
 
     public async Task SubscribeAsync(
         string[] topics,
-        Func<string, string, ValueTask> onMessage,
+        Func<string, string, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken = default)
     {
         var pumps = topics.Select(topic => PumpAsync(topic, onMessage, cancellationToken));
@@ -35,13 +35,19 @@ internal sealed class InMemoryTransport : IMessagingTransport
         }
     }
 
-    private async Task PumpAsync(string topic, Func<string, string, ValueTask> onMessage, CancellationToken cancellationToken)
+    private async Task PumpAsync(
+        string topic,
+        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        CancellationToken cancellationToken)
     {
-        var reader = GetChannel(topic).Reader;
+        var channel = GetChannel(topic);
 
-        await foreach (var envelopeJson in reader.ReadAllAsync(cancellationToken))
+        await foreach (var envelopeJson in channel.Reader.ReadAllAsync(cancellationToken))
         {
-            await onMessage(envelopeJson, topic);
+            var disposition = await onMessage(envelopeJson, topic);
+
+            if (disposition == MessageDisposition.Requeue)
+                await channel.Writer.WriteAsync(envelopeJson, cancellationToken);
         }
     }
 }

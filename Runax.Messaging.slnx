@@ -1,9 +1,11 @@
 <Solution>
+  <Folder Name="/Tests/">
+    <Project Path="tests\Runax.Messaging.RabbitMq.Tests\Runax.Messaging.RabbitMq.Tests.csproj" Type="Classic C#" />
+    <Project Path="tests\Runax.Messaging.Sqs.Tests\Runax.Messaging.Sqs.Tests.csproj" Type="Classic C#" />
+    <Project Path="tests\Runax.Messaging.Tests\Runax.Messaging.Tests.csproj" Type="Classic C#" />
+  </Folder>
   <Project Path="src\Runax.Messaging.Abstractions\Runax.Messaging.Abstractions.csproj" Type="Classic C#" />
   <Project Path="src\Runax.Messaging.RabbitMq\Runax.Messaging.RabbitMq.csproj" Type="Classic C#" />
   <Project Path="src\Runax.Messaging.Sqs\Runax.Messaging.Sqs.csproj" Type="Classic C#" />
   <Project Path="src\Runax.Messaging\Runax.Messaging.csproj" Type="Classic C#" />
-  <Project Path="tests\Runax.Messaging.Tests\Runax.Messaging.Tests.csproj" Type="Classic C#" />
-  <Project Path="tests\Runax.Messaging.Sqs.Tests\Runax.Messaging.Sqs.Tests.csproj" Type="Classic C#" />
-  <Project Path="tests\Runax.Messaging.RabbitMq.Tests\Runax.Messaging.RabbitMq.Tests.csproj" Type="Classic C#" />
 </Solution>

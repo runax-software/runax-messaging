@@ -54,7 +54,7 @@ internal sealed class SqsTransport : IMessagingTransport, IDisposable
 
     public async Task SubscribeAsync(
         string[] topics,
-        Func<string, string, ValueTask> onMessage,
+        Func<string, string, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken = default)
     {
         var topicQueueMap = new Dictionary<string, string>();
@@ -82,21 +82,31 @@ internal sealed class SqsTransport : IMessagingTransport, IDisposable
                         WaitTimeSeconds = _options.WaitTimeSeconds
                     }, cancellationToken);
 
-                    foreach (var message in response.Messages ?? [])
+                    foreach (var message in (response.Messages ?? []).TakeWhile(message =>
+                                 !cancellationToken.IsCancellationRequested))
                     {
+                        MessageDisposition disposition;
                         try
                         {
-                            await onMessage(message.Body, topic);
+                            disposition = await onMessage(message.Body, topic);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex,
+                                "Unexpected error dispatching SQS message from {QueueUrl}; leaving for redelivery.",
+                                queueUrl);
+                            disposition = MessageDisposition.Requeue;
+                        }
 
+                        // Requeue: leave the message so its visibility timeout expires and SQS redelivers it
+                        // (and, once maxReceiveCount is hit, routes it to any configured redrive DLQ).
+                        if (disposition == MessageDisposition.Acknowledge)
+                        {
                             await _client.Value.DeleteMessageAsync(new DeleteMessageRequest
                             {
                                 QueueUrl = queueUrl,
                                 ReceiptHandle = message.ReceiptHandle
                             }, cancellationToken);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Error processing SQS message from queue {QueueUrl}", queueUrl);
                         }
                     }
                 }

@@ -22,4 +22,20 @@ public static class MessagingConfiguratorExtensions
         configurator.Services.AddSingleton(new ConsumerRegistration { ConsumerType = typeof(TConsumer) });
         return configurator;
     }
+
+    /// <summary>
+    /// Configures the retry and dead-letter policy applied to all consumers.
+    /// </summary>
+    /// <param name="configurator">The messaging configurator.</param>
+    /// <param name="configure">Action to configure <see cref="RetryOptions"/>.</param>
+    /// <returns>The same configurator, to allow chaining.</returns>
+    public static MessagingConfigurator WithRetry(
+        this MessagingConfigurator configurator,
+        Action<RetryOptions> configure)
+    {
+        var options = new RetryOptions();
+        configure(options);
+        configurator.Services.AddSingleton(options);
+        return configurator;
+    }
 }

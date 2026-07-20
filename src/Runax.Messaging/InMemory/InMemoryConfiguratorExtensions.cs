@@ -1,8 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Runax.Messaging.Abstractions;
-using Runax.Messaging.InMemory;
 
-namespace Runax.Messaging;
+namespace Runax.Messaging.InMemory;
 
 /// <summary>
 /// Configurator extensions for the in-memory transport.
