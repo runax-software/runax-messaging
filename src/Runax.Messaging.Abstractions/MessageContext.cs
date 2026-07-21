@@ -23,9 +23,15 @@ public sealed class MessageContext
     public required IReadOnlyDictionary<string, string> Headers { get; init; }
 
     /// <summary>
-    /// Deserializes the message body to the specified type.
+    /// Gets the JSON options used to deserialize the body, threaded through from the configured serializer.
+    /// When <see langword="null"/>, default options are used.
+    /// </summary>
+    internal JsonSerializerOptions? SerializerOptions { get; init; }
+
+    /// <summary>
+    /// Deserializes the message body to the specified type using the configured serializer options.
     /// </summary>
     /// <typeparam name="T">The type to deserialize the body into.</typeparam>
     /// <returns>The deserialized message, or <see langword="null"/> if the body is JSON null.</returns>
-    public T? Deserialize<T>() => JsonSerializer.Deserialize<T>(Body);
+    public T? Deserialize<T>() => JsonSerializer.Deserialize<T>(Body, SerializerOptions);
 }

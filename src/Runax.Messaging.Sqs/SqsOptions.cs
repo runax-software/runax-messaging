@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Runax.Messaging.Sqs;
 
 /// <summary>
@@ -8,6 +10,7 @@ public sealed class SqsOptions
     /// <summary>
     /// Gets or sets the AWS region. Defaults to "us-east-1".
     /// </summary>
+    [Required]
     public string Region { get; set; } = "us-east-1";
 
     /// <summary>
@@ -26,13 +29,15 @@ public sealed class SqsOptions
     public string? ServiceUrl { get; set; }
 
     /// <summary>
-    /// Gets or sets the maximum number of messages to receive per poll. Defaults to 10.
+    /// Gets or sets the maximum number of messages to receive per poll (SQS allows 1–10). Defaults to 10.
     /// </summary>
+    [Range(1, 10)]
     public int MaxNumberOfMessages { get; set; } = 10;
 
     /// <summary>
-    /// Gets or sets the long-polling wait time in seconds. Defaults to 20.
+    /// Gets or sets the long-polling wait time in seconds (SQS allows 0–20). Defaults to 20.
     /// </summary>
+    [Range(0, 20)]
     public int WaitTimeSeconds { get; set; } = 20;
 
     /// <summary>
@@ -43,9 +48,10 @@ public sealed class SqsOptions
     public Dictionary<string, string> TopicQueueUrlMap { get; set; } = new();
 
     /// <summary>
-    /// Gets or sets the visibility timeout, in seconds, requested when receiving a message. This hides the
-    /// message from other consumers while it is being processed. Defaults to 30.
+    /// Gets or sets the visibility timeout, in seconds, requested when receiving a message (SQS allows 0–43200).
+    /// This hides the message from other consumers while it is being processed. Defaults to 30.
     /// </summary>
+    [Range(0, 43200)]
     public int VisibilityTimeoutSeconds { get; set; } = 30;
 
     /// <summary>

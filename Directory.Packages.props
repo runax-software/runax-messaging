@@ -16,6 +16,7 @@
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.10" />
   </ItemGroup>
 
   <!-- Transport implementations, each in its own Runax.Messaging.<Transport> library. -->
@@ -36,6 +37,7 @@
     <PackageVersion Include="Shouldly" Version="4.3.0" />
     <!-- Concrete DI container, logging, and Generic Host, used to exercise
          registration and the hosted consumer end-to-end in tests. -->
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.Testing" Version="10.1.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.10" />

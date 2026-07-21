@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Runax.Messaging.Abstractions;
 using Runax.Messaging.Consumers;
 
@@ -29,7 +28,7 @@ public abstract class MessageConsumer<TMessage> : IMessageConsumer
 
     ValueTask IMessageConsumer.HandleAsync(MessageContext context, CancellationToken cancellationToken)
     {
-        var message = JsonSerializer.Deserialize<TMessage>(context.Body)
+        var message = context.Deserialize<TMessage>()
                       ?? throw new InvalidOperationException(
                           $"Failed to deserialize message body to {typeof(TMessage).Name} on topic '{context.Topic}'.");
 

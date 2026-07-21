@@ -26,15 +26,33 @@ internal sealed class RabbitMqTransport : IMessagingTransport, IDisposable
         {
             var factory = new ConnectionFactory
             {
-                HostName = _options.HostName,
-                Port = _options.Port,
-                UserName = _options.UserName,
-                Password = _options.Password,
-                VirtualHost = _options.VirtualHost,
                 DispatchConsumersAsync = true,
                 AutomaticRecoveryEnabled = true,
                 TopologyRecoveryEnabled = true
             };
+
+            if (!string.IsNullOrEmpty(_options.Uri))
+            {
+                // A full amqp(s):// URI takes precedence and carries its own TLS + credentials.
+                factory.Uri = new Uri(_options.Uri);
+            }
+            else
+            {
+                factory.HostName = _options.HostName;
+                factory.Port = _options.Port;
+                factory.UserName = _options.UserName;
+                factory.Password = _options.Password;
+                factory.VirtualHost = _options.VirtualHost;
+
+                if (_options.UseTls)
+                {
+                    factory.Ssl = new SslOption
+                    {
+                        Enabled = true,
+                        ServerName = _options.SslServerName ?? _options.HostName
+                    };
+                }
+            }
 
             return factory.CreateConnection();
         });

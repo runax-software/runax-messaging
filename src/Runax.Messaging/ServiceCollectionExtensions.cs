@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Runax.Messaging.Abstractions;
 using Runax.Messaging.Consumers;
 using Runax.Messaging.Serialization;
@@ -22,13 +24,17 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         Action<MessagingConfigurator> configure)
     {
+        services.AddOptions();
+
+        // Resolve the configured JsonSerializerOptions (default when ConfigureSerialization was not called).
+        services.TryAddSingleton(sp => sp.GetRequiredService<IOptions<JsonSerializerOptions>>().Value);
         services.TryAddSingleton<IMessageSerializer, JsonMessageSerializer>();
         services.TryAddSingleton<IMessagePublisher, MessagePublisherAdapter>();
 
         configure(new MessagingConfigurator(services));
 
-        // Falls back to defaults when the caller did not configure a policy via WithRetry.
-        services.TryAddSingleton(new RetryOptions());
+        // Falls back to defaults (via IOptions) when the caller did not configure a policy via WithRetry.
+        services.TryAddSingleton(sp => sp.GetRequiredService<IOptions<RetryOptions>>().Value);
 
         if (services.Any(descriptor => descriptor.ServiceType == typeof(ConsumerRegistration)))
             services.AddHostedService<MessageConsumerHostedService>();

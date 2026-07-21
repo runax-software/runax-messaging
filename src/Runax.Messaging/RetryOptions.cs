@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Runax.Messaging;
 
 /// <summary>
@@ -10,6 +12,7 @@ public sealed class RetryOptions
     /// Gets or sets the maximum number of times a consumer is invoked for a single message
     /// (initial attempt plus retries). Defaults to 3.
     /// </summary>
+    [Range(1, int.MaxValue)]
     public int MaxAttempts { get; set; } = 3;
 
     /// <summary>
@@ -21,6 +24,7 @@ public sealed class RetryOptions
     /// <summary>
     /// Gets or sets the exponential multiplier applied to the delay between retries. Defaults to 2.0.
     /// </summary>
+    [Range(1.0, double.MaxValue)]
     public double BackoffFactor { get; set; } = 2.0;
 
     /// <summary>

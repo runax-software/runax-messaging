@@ -6,4 +6,9 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Runax.Messaging" />
+    <InternalsVisibleTo Include="Runax.Messaging.Tests" />
+  </ItemGroup>
 </Project>

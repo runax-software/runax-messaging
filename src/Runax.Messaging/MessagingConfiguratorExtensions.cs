@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Runax.Messaging.Abstractions;
 using Runax.Messaging.Consumers;
@@ -33,9 +34,28 @@ public static class MessagingConfiguratorExtensions
         this MessagingConfigurator configurator,
         Action<RetryOptions> configure)
     {
-        var options = new RetryOptions();
-        configure(options);
-        configurator.Services.AddSingleton(options);
+        configurator.Services
+            .AddOptions<RetryOptions>()
+            .Configure(configure)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        return configurator;
+    }
+
+    /// <summary>
+    /// Configures the <see cref="JsonSerializerOptions"/> used to serialize and deserialize message bodies.
+    /// Set a <see cref="System.Text.Json.Serialization.Metadata.IJsonTypeInfoResolver"/> here (e.g. a
+    /// source-generated <c>JsonSerializerContext</c>) for a trim-friendly / AOT path.
+    /// </summary>
+    /// <param name="configurator">The messaging configurator.</param>
+    /// <param name="configure">Action to configure the shared <see cref="JsonSerializerOptions"/>.</param>
+    /// <returns>The same configurator, to allow chaining.</returns>
+    public static MessagingConfigurator ConfigureSerialization(
+        this MessagingConfigurator configurator,
+        Action<JsonSerializerOptions> configure)
+    {
+        configurator.Services.Configure(configure);
         return configurator;
     }
 }

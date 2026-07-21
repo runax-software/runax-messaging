@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Runax.Messaging.RabbitMq;
 
 /// <summary>
@@ -6,29 +8,51 @@ namespace Runax.Messaging.RabbitMq;
 public sealed class RabbitMqOptions
 {
     /// <summary>
-    /// Gets or sets the RabbitMQ host name. Defaults to "localhost".
+    /// Gets or sets the RabbitMQ host name. Defaults to "localhost". Ignored when <see cref="Uri"/> is set.
     /// </summary>
+    [Required]
     public string HostName { get; set; } = "localhost";
 
     /// <summary>
-    /// Gets or sets the RabbitMQ port. Defaults to 5672.
+    /// Gets or sets the RabbitMQ port. Defaults to 5672. Ignored when <see cref="Uri"/> is set.
     /// </summary>
+    [Range(1, 65535)]
     public int Port { get; set; } = 5672;
 
     /// <summary>
-    /// Gets or sets the RabbitMQ username. Defaults to "guest".
+    /// Gets or sets the RabbitMQ username. Defaults to "guest". Ignored when <see cref="Uri"/> is set.
     /// </summary>
     public string UserName { get; set; } = "guest";
 
     /// <summary>
-    /// Gets or sets the RabbitMQ password. Defaults to "guest".
+    /// Gets or sets the RabbitMQ password. Defaults to "guest". Ignored when <see cref="Uri"/> is set.
+    /// Prefer <see cref="Uri"/> (an <c>amqps://</c> connection string) or a secret store over a plaintext value.
     /// </summary>
     public string Password { get; set; } = "guest";
 
     /// <summary>
-    /// Gets or sets the RabbitMQ virtual host. Defaults to "/".
+    /// Gets or sets the RabbitMQ virtual host. Defaults to "/". Ignored when <see cref="Uri"/> is set.
     /// </summary>
     public string VirtualHost { get; set; } = "/";
+
+    /// <summary>
+    /// Gets or sets a full AMQP connection URI (e.g. <c>amqps://user:pass@host:5671/vhost</c>). When set, it takes
+    /// precedence over <see cref="HostName"/>/<see cref="Port"/>/<see cref="UserName"/>/<see cref="Password"/>/<see cref="VirtualHost"/>
+    /// and enables TLS automatically for the <c>amqps</c> scheme. Defaults to <see langword="null"/>.
+    /// </summary>
+    public string? Uri { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether TLS is enabled for the connection when connecting via the discrete
+    /// host settings (not <see cref="Uri"/>). Defaults to <see langword="false"/>.
+    /// </summary>
+    public bool UseTls { get; set; }
+
+    /// <summary>
+    /// Gets or sets the TLS server name (SNI) used when <see cref="UseTls"/> is enabled.
+    /// Defaults to <see cref="HostName"/> when <see langword="null"/>.
+    /// </summary>
+    public string? SslServerName { get; set; }
 
     /// <summary>
     /// Gets or sets the exchange name. Defaults to "runax.messaging".
@@ -60,6 +84,7 @@ public sealed class RabbitMqOptions
     /// Gets or sets the number of channels kept in the publish channel pool. Because <c>IModel</c> is not
     /// thread-safe, publishes are serialized per channel; a larger pool allows more concurrent publishes. Defaults to 5.
     /// </summary>
+    [Range(1, int.MaxValue)]
     public int PublishChannelPoolSize { get; set; } = 5;
 
     /// <summary>
