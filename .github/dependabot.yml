@@ -1,0 +1,36 @@
+version: 2
+updates:
+  # .NET dependencies. Versions are centrally managed in Directory.Packages.props.
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+    commit-message:
+      prefix: build
+    groups:
+      microsoft-extensions:
+        patterns:
+          - "Microsoft.Extensions.*"
+      test:
+        patterns:
+          - "xunit*"
+          - "Microsoft.Testing.*"
+          - "NSubstitute"
+          - "Shouldly"
+
+  # Actions used by the workflows and the composite build action.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+    commit-message:
+      prefix: ci
+    groups:
+      github-actions:
+        patterns:
+          - "*"
