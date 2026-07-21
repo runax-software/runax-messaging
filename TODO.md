@@ -17,17 +17,6 @@ messaging library. File/line references point at where the gap lives today.
       recovery are enabled; ack/nack is driven by the disposition
       (`RabbitMqTransport.cs`).
 
-Follow-ups deferred from the Tier 1 implementation:
-
-- [ ] **Broker-native dead-lettering.** Current DLQ is framework-managed republish
-      to `{topic}.dead-letter` (uniform, testable). Optionally map `Requeue`/reject to
-      RabbitMQ DLX and SQS redrive policies for operators who prefer native DLQs.
-- [ ] **RabbitMQ publish throughput.** Publishing uses a single `Lock`-guarded channel
-      (`IModel` is not thread-safe). Consider a channel pool if publish becomes a bottleneck.
-- [ ] **SQS retry vs. visibility timeout.** In-process retry backoff runs against the
-      message's visibility timeout; keep delays small or lean on native redrive. Consider
-      extending visibility (`ChangeMessageVisibility`) during retries.
-
 ## Tier 2 — Observability
 
 - [ ] **OpenTelemetry tracing.** Add an `ActivitySource`; propagate W3C `traceparent`
@@ -73,5 +62,6 @@ Follow-ups deferred from the Tier 1 implementation:
 ---
 
 Note: Tier 1 has landed and already changed the provider SPI
-(`IMessagingTransport.SubscribeAsync` now returns `MessageDisposition`). Tier 2 also
-touches the public surface, so land it before tagging `1.0` and freezing the API.
+(`IMessagingTransport.SubscribeAsync` returns `MessageDisposition`, which now includes a
+`DeadLetter` value transports must handle). Tier 2 also touches the public surface, so land it
+before tagging `1.0` and freezing the API.

@@ -55,4 +55,23 @@ public sealed class RabbitMqOptions
     /// Gets or sets how long to wait for a publisher confirm before failing the publish. Defaults to 5 seconds.
     /// </summary>
     public TimeSpan ConfirmTimeout { get; set; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Gets or sets the number of channels kept in the publish channel pool. Because <c>IModel</c> is not
+    /// thread-safe, publishes are serialized per channel; a larger pool allows more concurrent publishes. Defaults to 5.
+    /// </summary>
+    public int PublishChannelPoolSize { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets the dead-letter exchange that consumer queues route rejected messages to when the
+    /// dispatch pipeline uses <c>DeadLetterStrategy.BrokerNative</c>. When set, subscriber queues are declared
+    /// with <c>x-dead-letter-exchange</c> and the exchange is declared as durable. When <see langword="null"/>,
+    /// rejected messages are dropped by the broker. Defaults to <see langword="null"/>.
+    /// </summary>
+    public string? DeadLetterExchange { get; set; }
+
+    /// <summary>
+    /// Gets or sets the type of the <see cref="DeadLetterExchange"/> declared for broker-native dead-lettering. Defaults to "topic".
+    /// </summary>
+    public string DeadLetterExchangeType { get; set; } = "topic";
 }

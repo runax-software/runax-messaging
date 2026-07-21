@@ -94,4 +94,27 @@ public sealed class RabbitMqTransportIntegrationTests : IAsyncLifetime, IDisposa
         result!.BasicProperties.ContentType.ShouldBe("application/json");
         result.BasicProperties.DeliveryMode.ShouldBe((byte)2);
     }
+
+    [Fact]
+    public async Task Concurrent_publishes_all_arrive()
+    {
+        var transport = _provider.GetRequiredService<IMessagingTransport>();
+        const int count = 50;
+
+        // Fan out well beyond the channel-pool size to exercise renting/returning under contention.
+        await Task.WhenAll(Enumerable.Range(0, count)
+            .Select(i => transport.PublishAsync(_topic, $$"""{"n":{{i}}}""").AsTask()));
+
+        var received = 0;
+        for (var attempt = 0; attempt < 100 && received < count; attempt++)
+        {
+            while (_channel.BasicGet(_queue, autoAck: true) is not null)
+                received++;
+
+            if (received < count)
+                await Task.Delay(50);
+        }
+
+        received.ShouldBe(count);
+    }
 }

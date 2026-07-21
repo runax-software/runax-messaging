@@ -22,7 +22,8 @@ public interface IMessagingTransport
     /// <param name="onMessage">
     /// Callback invoked with (envelopeJson, topic) for each message. The returned
     /// <see cref="MessageDisposition"/> tells the transport whether to acknowledge the message
-    /// (remove it from the broker) or requeue it for later redelivery.
+    /// (remove it from the broker), requeue it for later redelivery, or dead-letter it
+    /// (reject without redelivery so the broker's native dead-letter mechanism handles it).
     /// </param>
     /// <param name="cancellationToken">Token that stops the subscriptions.</param>
     /// <returns>A task that runs until <paramref name="cancellationToken"/> is signaled.</returns>

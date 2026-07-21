@@ -46,6 +46,8 @@ internal sealed class InMemoryTransport : IMessagingTransport
         {
             var disposition = await onMessage(envelopeJson, topic);
 
+            // No native dead-letter facility in-process: Requeue redelivers, everything else
+            // (Acknowledge / DeadLetter) drops the message from the channel.
             if (disposition == MessageDisposition.Requeue)
                 await channel.Writer.WriteAsync(envelopeJson, cancellationToken);
         }

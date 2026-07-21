@@ -72,14 +72,19 @@ internal sealed class MessageConsumerHostedService(
             return await DeadLetterAsync(envelopeJson, topic, ex, attempts: 0, cancellationToken);
         }
 
+        // Requeue wins outright (redeliver the whole message); otherwise a single dead-letter
+        // verdict escalates the message away from a plain acknowledge.
+        var result = MessageDisposition.Acknowledge;
         foreach (var consumer in consumers)
         {
             var disposition = await DispatchToConsumerAsync(consumer, context, envelopeJson, topic, cancellationToken);
             if (disposition == MessageDisposition.Requeue)
                 return MessageDisposition.Requeue;
+            if (disposition == MessageDisposition.DeadLetter)
+                result = MessageDisposition.DeadLetter;
         }
 
-        return MessageDisposition.Acknowledge;
+        return result;
     }
 
     private async ValueTask<MessageDisposition> DispatchToConsumerAsync(
@@ -147,6 +152,14 @@ internal sealed class MessageConsumerHostedService(
         {
             logger.LogWarning("Dead-lettering disabled; dropping message from '{Topic}'.", topic);
             return MessageDisposition.Acknowledge;
+        }
+
+        if (retryOptions.Strategy == DeadLetterStrategy.BrokerNative)
+        {
+            logger.LogInformation(
+                "Rejecting message from '{Topic}' for broker-native dead-lettering after {Attempts} attempt(s).",
+                topic, attempts);
+            return MessageDisposition.DeadLetter;
         }
 
         var deadLetterTopic = topic + retryOptions.DeadLetterTopicSuffix;

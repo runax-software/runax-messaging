@@ -35,7 +35,16 @@ public sealed class RetryOptions
     public bool EnableDeadLettering { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the suffix appended to the original topic to form the dead-letter topic. Defaults to ".dead-letter".
+    /// Gets or sets the suffix appended to the original topic to form the dead-letter topic when
+    /// <see cref="Strategy"/> is <see cref="DeadLetterStrategy.FrameworkManaged"/>. Defaults to ".dead-letter".
     /// </summary>
     public string DeadLetterTopicSuffix { get; set; } = ".dead-letter";
+
+    /// <summary>
+    /// Gets or sets how exhausted or poison messages are dead-lettered. Defaults to
+    /// <see cref="DeadLetterStrategy.FrameworkManaged"/>. Use <see cref="DeadLetterStrategy.BrokerNative"/>
+    /// to defer to a broker-configured dead-letter exchange or redrive policy; pair it with
+    /// <see cref="MaxAttempts"/> of 1 to rely purely on the broker for retries.
+    /// </summary>
+    public DeadLetterStrategy Strategy { get; set; } = DeadLetterStrategy.FrameworkManaged;
 }

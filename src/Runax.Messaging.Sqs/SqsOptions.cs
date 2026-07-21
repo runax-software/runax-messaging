@@ -39,5 +39,19 @@ public sealed class SqsOptions
     /// Gets or sets a mapping from topic names to SQS queue URLs.
     /// If not provided, topics are used as queue names and resolved via GetQueueUrl.
     /// </summary>
+    // ReSharper disable once CollectionNeverUpdated.Global — populated by consumers via the configure action.
     public Dictionary<string, string> TopicQueueUrlMap { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the visibility timeout, in seconds, requested when receiving a message. This hides the
+    /// message from other consumers while it is being processed. Defaults to 30.
+    /// </summary>
+    public int VisibilityTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the transport periodically extends a message's visibility timeout
+    /// while it is being processed, so in-process retry backoff does not let the message reappear on the queue.
+    /// Defaults to <see langword="true"/>.
+    /// </summary>
+    public bool ExtendVisibilityDuringProcessing { get; set; } = true;
 }
