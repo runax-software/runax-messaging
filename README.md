@@ -4,6 +4,13 @@ A lightweight publish/subscribe messaging library for .NET. A small core of
 abstractions with a pluggable transport per broker — publish and consume
 strongly-typed messages without coupling your application to a specific broker.
 
+- **Typed pub/sub** over a broker-agnostic `IMessagePublisher` / `MessageConsumer<T>`.
+- **Reliability** — retry with exponential backoff, poison-message handling, and
+  framework-managed or broker-native dead-lettering.
+- **Observability** — OpenTelemetry-ready tracing and metrics (no SDK dependency)
+  plus per-transport health checks.
+- **Transports** — RabbitMQ, Amazon SQS, and a built-in in-memory transport.
+
 ## Packages
 
 | Package | Description |
@@ -87,6 +94,24 @@ messaging.AddRabbitMq(o => o.HostName = "localhost").AddConsumer<OrderPlacedCons
 
 Each transport's options are documented on its package page linked in the table
 above.
+
+## Reliability & observability
+
+Consumers get retry-with-backoff, poison-message handling, and dead-lettering out
+of the box; tune them with `WithRetry(...)`:
+
+```csharp
+messaging
+    .AddRabbitMq(o => o.HostName = "localhost")
+    .AddConsumer<OrderPlacedConsumer>()
+    .WithRetry(o => o.MaxAttempts = 5);
+```
+
+Publish/consume are traced and metered via the in-box `System.Diagnostics` APIs —
+subscribe an OpenTelemetry pipeline with `AddSource("Runax.Messaging")` and
+`AddMeter("Runax.Messaging")`, and add broker health checks with
+`AddRabbitMqTransport()` / `AddSqsTransport()`. See
+[Architecture & message flow](docs/architecture.md) for details.
 
 ## Documentation
 

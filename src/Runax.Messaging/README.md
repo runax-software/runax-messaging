@@ -59,6 +59,53 @@ public sealed class OrderPlacedConsumer : MessageConsumer<Order>
 }
 ```
 
+## Retries & dead-lettering
+
+Failed `HandleAsync` calls are retried with exponential backoff, and messages that
+cannot be handled are dead-lettered. Tune the policy with `WithRetry`:
+
+```csharp
+builder.Services.AddRunaxMessaging(messaging => messaging
+    .AddInMemory()
+    .AddConsumer<OrderPlacedConsumer>()
+    .WithRetry(o =>
+    {
+        o.MaxAttempts = 5;                 // initial attempt + retries
+        o.InitialDelay = TimeSpan.FromMilliseconds(200);
+        o.BackoffFactor = 2.0;
+        o.MaxDelay = TimeSpan.FromSeconds(30);
+        // o.Strategy = DeadLetterStrategy.BrokerNative; // defer to broker DLX / redrive
+    }));
+```
+
+- **Retry** — up to `MaxAttempts`, growing by `BackoffFactor` up to `MaxDelay`.
+- **Poison messages** — throw `PoisonMessageException` from a consumer to skip
+  retries and dead-letter immediately.
+- **Dead-letter strategy** — `FrameworkManaged` (default) republishes to
+  `{topic}.dead-letter` with `x-runax-dlq-*` headers; `BrokerNative` rejects the
+  message so the transport's native DLQ handles it (pair with `MaxAttempts = 1` to
+  rely purely on the broker).
+
+## Observability
+
+Publish and consume are instrumented with the in-box `System.Diagnostics`
+primitives — no OpenTelemetry SDK dependency. Subscribe with the names on
+`MessagingDiagnostics` (both `"Runax.Messaging"`):
+
+```csharp
+tracerProviderBuilder.AddSource(MessagingDiagnostics.ActivitySourceName);
+meterProviderBuilder.AddMeter(MessagingDiagnostics.MeterName);
+```
+
+- **Spans** — a producer span on publish (W3C context injected into the envelope
+  headers) and a consumer span on consume, tagged per OpenTelemetry messaging
+  conventions.
+- **Metrics** — `runax.messaging.published` / `consumed` / `failed` counters and a
+  `runax.messaging.processing.duration` histogram.
+
+Transport packages add broker health checks (`AddRabbitMqTransport()`,
+`AddSqsTransport()`).
+
 ## In-memory transport
 
 `AddInMemory()` delivers messages in-process through channels, one per topic. It

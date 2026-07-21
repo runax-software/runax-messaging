@@ -36,14 +36,38 @@ builder.Services.AddRunaxMessaging(messaging => messaging
 | `ServiceUrl` | `null` | Custom endpoint, e.g. for LocalStack or testing. |
 | `MaxNumberOfMessages` | `10` | Maximum messages received per poll. |
 | `WaitTimeSeconds` | `20` | Long-polling wait time in seconds. |
+| `VisibilityTimeoutSeconds` | `30` | Visibility timeout requested per receive, hiding the message while it is processed. |
+| `ExtendVisibilityDuringProcessing` | `true` | Periodically extend visibility while a message is handled (including retry backoff) so it does not reappear and get processed twice. |
 | `TopicQueueUrlMap` | empty | Explicit topic → queue-URL map. Unmapped topics are resolved by queue name via `GetQueueUrl`. |
 
 ## Behavior
 
 - **Publish** sends the serialized envelope to the resolved queue.
-- **Subscribe** long-polls each queue, invokes your consumer, and deletes the
-  message on success. A processing failure is logged and the message is left to
-  become visible again after the queue's visibility timeout.
+- **Subscribe** long-polls each queue, invokes your consumer, and maps the dispatch
+  verdict to the queue:
+  - `Acknowledge` → `DeleteMessage`
+  - `Requeue` and `DeadLetter` → leave the message so its visibility timeout lapses
+    and SQS redelivers it, routing to a configured **redrive DLQ** once
+    `maxReceiveCount` is reached
+- While a message is being handled, the transport extends its visibility timeout
+  (`ExtendVisibilityDuringProcessing`) so in-process retry backoff does not let it
+  reappear on the queue.
+
+For native dead-lettering, configure a redrive policy on the queue and set
+`WithRetry(o => o.Strategy = DeadLetterStrategy.BrokerNative)` in the core registration.
+
+## Health check
+
+Register a reachability check on `IHealthChecksBuilder`:
+
+```csharp
+builder.Services.AddHealthChecks().AddSqsTransport();
+```
+
+## Telemetry
+
+The transport reports `messaging.system = "sqs"` on the spans and metrics emitted
+by the core package (activity source / meter `"Runax.Messaging"`).
 
 ## License
 

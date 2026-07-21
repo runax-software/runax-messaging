@@ -47,7 +47,9 @@ public sealed class FooOptions
 ## 3. Implement `IMessagingTransport`
 
 The transport works entirely in terms of the serialized envelope string — it
-never touches your message types.
+never touches your message types. `onMessage` returns a `MessageDisposition`
+telling you what to do with the message once the dispatch pipeline (deserialize,
+retry, dead-letter) has finished with it.
 
 ```csharp
 using Microsoft.Extensions.Logging;
@@ -58,6 +60,9 @@ namespace Runax.Messaging.Foo;
 internal sealed class FooTransport(FooOptions options, ILogger<FooTransport> logger)
     : IMessagingTransport
 {
+    // messaging.system tag applied to telemetry (OpenTelemetry convention).
+    public string SystemName => "foo";
+
     public ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default)
     {
         // send envelopeJson to `topic` on the broker
@@ -66,11 +71,13 @@ internal sealed class FooTransport(FooOptions options, ILogger<FooTransport> log
 
     public async Task SubscribeAsync(
         string[] topics,
-        Func<string, string, ValueTask> onMessage,
+        Func<string, string, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken = default)
     {
-        // for each received message call: await onMessage(envelopeJson, topic);
-        // then acknowledge it. Block until cancellationToken is signaled.
+        // for each received message:
+        //   var disposition = await onMessage(envelopeJson, topic);
+        //   act on `disposition` (see the table below), then move on.
+        // Block until cancellationToken is signaled.
         await Task.Delay(Timeout.Infinite, cancellationToken);
     }
 }
@@ -78,11 +85,20 @@ internal sealed class FooTransport(FooOptions options, ILogger<FooTransport> log
 
 Contract notes:
 
+- `SystemName` is a short broker identifier (`"rabbitmq"`, `"sqs"`, `"foo"`) used
+  as the `messaging.system` telemetry tag.
 - `PublishAsync` receives the already-serialized envelope. Send it as-is.
 - `SubscribeAsync` must run until cancellation and invoke `onMessage` with
-  `(envelopeJson, topic)` for each message.
-- Acknowledge only after `onMessage` completes. On failure, decide your
-  redelivery policy (requeue / visibility timeout / drop) and log it.
+  `(envelopeJson, topic)` for each message, then act on the returned
+  `MessageDisposition`:
+
+  | Disposition | Meaning | Typical broker action |
+  | --- | --- | --- |
+  | `Acknowledge` | Handled (or framework dead-lettered). | Remove the message (ack / delete). |
+  | `Requeue` | Try again later. | Return for redelivery (nack requeue / leave hidden). |
+  | `DeadLetter` | Give up; do not redeliver. | Reject to the broker's native DLQ, else drop. |
+
+- If dispatch throws unexpectedly, treat it as `Requeue` and log it.
 
 ## 4. Add a configurator extension
 
