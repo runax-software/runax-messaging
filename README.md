@@ -13,7 +13,7 @@ strongly-typed messages without coupling your application to a specific broker.
 - **Configurable** — validated options with `IConfiguration` binding and pluggable
   `JsonSerializerOptions`.
 - **Transactional outbox** — optional package for atomic database-write + publish.
-- **Transports** — RabbitMQ, Amazon SQS, and a built-in in-memory transport.
+- **Transports** — RabbitMQ, Amazon SQS, Google Cloud Pub/Sub, and a built-in in-memory transport.
 
 ## Packages
 
@@ -21,8 +21,9 @@ strongly-typed messages without coupling your application to a specific broker.
 | --- | --- |
 | [`Runax.Messaging.Abstractions`](src/Runax.Messaging.Abstractions/README.md) | Contracts only: `IMessagePublisher`, the `IMessagingTransport` SPI, `MessageContext`, and the `MessagingConfigurator` builder. Reference this from application and transport code. |
 | [`Runax.Messaging`](src/Runax.Messaging/README.md) | Default implementation: DI wiring, JSON serialization, hosted consumers, and an in-memory transport. |
-| [`Runax.Messaging.Sqs`](src/Runax.Messaging.Sqs/README.md) | Amazon SQS transport. |
-| [`Runax.Messaging.RabbitMq`](src/Runax.Messaging.RabbitMq/README.md) | RabbitMQ transport. |
+| [`Runax.Messaging.Transports.Aws.Sqs`](src/Runax.Messaging.Transports.Aws.Sqs/README.md) | Amazon SQS transport. |
+| [`Runax.Messaging.Transports.RabbitMq`](src/Runax.Messaging.Transports.RabbitMq/README.md) | RabbitMQ transport. |
+| [`Runax.Messaging.Transports.Google.PubSub`](src/Runax.Messaging.Transports.Google.PubSub/README.md) | Google Cloud Pub/Sub transport. |
 | [`Runax.Messaging.Outbox`](src/Runax.Messaging.Outbox/README.md) | Transactional outbox: persist in your DB transaction, dispatch reliably. |
 
 Application code that only publishes needs `Runax.Messaging.Abstractions`. The
@@ -33,7 +34,7 @@ plus one transport package.
 
 ```bash
 dotnet add package Runax.Messaging
-dotnet add package Runax.Messaging.Sqs        # or .RabbitMq, or use the built-in in-memory transport
+dotnet add package Runax.Messaging.Transports.Aws.Sqs        # or .Transports.RabbitMq, or use the built-in in-memory transport
 ```
 
 ## Quick start
@@ -89,11 +90,11 @@ Only the composition root changes; publishers and consumers stay the same:
 
 ```csharp
 // Amazon SQS
-using Runax.Messaging.Sqs;
+using Runax.Messaging.Transports.Aws.Sqs;
 messaging.AddSqs(o => o.Region = "us-east-1").AddConsumer<OrderPlacedConsumer>();
 
 // RabbitMQ
-using Runax.Messaging.RabbitMq;
+using Runax.Messaging.Transports.RabbitMq;
 messaging.AddRabbitMq(o => o.HostName = "localhost").AddConsumer<OrderPlacedConsumer>();
 ```
 

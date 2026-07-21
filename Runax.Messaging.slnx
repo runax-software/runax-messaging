@@ -1,13 +1,15 @@
 <Solution>
   <Folder Name="/Tests/">
     <Project Path="tests\Runax.Messaging.Outbox.Tests\Runax.Messaging.Outbox.Tests.csproj" Type="Classic C#" />
-    <Project Path="tests\Runax.Messaging.RabbitMq.Tests\Runax.Messaging.RabbitMq.Tests.csproj" Type="Classic C#" />
-    <Project Path="tests\Runax.Messaging.Sqs.Tests\Runax.Messaging.Sqs.Tests.csproj" Type="Classic C#" />
+    <Project Path="tests\Runax.Messaging.Transports.Google.PubSub.Tests\Runax.Messaging.Transports.Google.PubSub.Tests.csproj" Type="Classic C#" />
+    <Project Path="tests\Runax.Messaging.Transports.RabbitMq.Tests\Runax.Messaging.Transports.RabbitMq.Tests.csproj" Type="Classic C#" />
+    <Project Path="tests\Runax.Messaging.Transports.Aws.Sqs.Tests\Runax.Messaging.Transports.Aws.Sqs.Tests.csproj" Type="Classic C#" />
     <Project Path="tests\Runax.Messaging.Tests\Runax.Messaging.Tests.csproj" Type="Classic C#" />
   </Folder>
   <Project Path="src\Runax.Messaging.Abstractions\Runax.Messaging.Abstractions.csproj" Type="Classic C#" />
   <Project Path="src\Runax.Messaging.Outbox\Runax.Messaging.Outbox.csproj" Type="Classic C#" />
-  <Project Path="src\Runax.Messaging.RabbitMq\Runax.Messaging.RabbitMq.csproj" Type="Classic C#" />
-  <Project Path="src\Runax.Messaging.Sqs\Runax.Messaging.Sqs.csproj" Type="Classic C#" />
+  <Project Path="src\Runax.Messaging.Transports.Google.PubSub\Runax.Messaging.Transports.Google.PubSub.csproj" Type="Classic C#" />
+  <Project Path="src\Runax.Messaging.Transports.RabbitMq\Runax.Messaging.Transports.RabbitMq.csproj" Type="Classic C#" />
+  <Project Path="src\Runax.Messaging.Transports.Aws.Sqs\Runax.Messaging.Transports.Aws.Sqs.csproj" Type="Classic C#" />
   <Project Path="src\Runax.Messaging\Runax.Messaging.csproj" Type="Classic C#" />
 </Solution>

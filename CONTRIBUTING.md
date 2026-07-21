@@ -33,7 +33,7 @@ with a separate library for each transport. Here's how to get started.
 src/
   Directory.Build.props         # Shared build/packaging settings for shippable libraries
   Runax.Messaging/              # Core: publish/subscribe abstractions + in-memory provider
-  Runax.Messaging.<Transport>/  # One library per transport (e.g. Runax.Messaging.Sqs)
+  Runax.Messaging.Transports.<Name>/  # One library per transport (e.g. Runax.Messaging.Transports.Aws.Sqs)
 tests/
   Directory.Build.props         # Shared settings for test projects (xUnit v3 on MTP)
 Directory.Packages.props        # Central Package Management — all NuGet versions live here
@@ -41,7 +41,7 @@ global.json                     # Pins the .NET SDK and selects the test runner
 nuget.config                    # Package sources
 ```
 
-Each transport lives in its own `Runax.Messaging.<Transport>` library that depends only on
+Each transport lives in its own `Runax.Messaging.Transports.<Name>` library that depends only on
 the core `Runax.Messaging` package — never on another transport. Keep transport-specific SDKs
 (AWS, RabbitMQ, Google Cloud, Kafka, ...) out of the core.
 
@@ -70,10 +70,12 @@ the core `Runax.Messaging` package — never on another transport. Keep transpor
 
 ## Adding a new transport
 
-Transports follow the `Runax.Messaging.<Provider>` naming convention (e.g.
-`Runax.Messaging.Sqs`, `Runax.Messaging.Kafka`).
+Transports live under the `Runax.Messaging.Transports.*` namespace: a vendor segment for cloud
+providers (`Runax.Messaging.Transports.Aws.Sqs`, `Runax.Messaging.Transports.Google.PubSub`,
+`Runax.Messaging.Transports.Azure.ServiceBus`) and a flat name for standalone brokers
+(`Runax.Messaging.Transports.RabbitMq`, `Runax.Messaging.Transports.Kafka`).
 
-1. Create a new library under `src/` named `Runax.Messaging.<Provider>`. It inherits all
+1. Create a new library under `src/` named `Runax.Messaging.Transports.<Name>`. It inherits all
    common settings from `src/Directory.Build.props`, so the `.csproj` only needs its
    references.
 2. Reference the core project:

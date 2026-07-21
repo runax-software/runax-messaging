@@ -60,5 +60,5 @@ jobs:
           AWS_SECRET_ACCESS_KEY: test
           AWS_REGION: us-east-1
         run: |
-          dotnet test --project tests/Runax.Messaging.Sqs.Tests/Runax.Messaging.Sqs.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"
-          dotnet test --project tests/Runax.Messaging.RabbitMq.Tests/Runax.Messaging.RabbitMq.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"
+          dotnet test --project tests/Runax.Messaging.Transports.Aws.Sqs.Tests/Runax.Messaging.Transports.Aws.Sqs.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"
+          dotnet test --project tests/Runax.Messaging.Transports.RabbitMq.Tests/Runax.Messaging.Transports.RabbitMq.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"

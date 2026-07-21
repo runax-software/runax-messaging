@@ -10,7 +10,7 @@ brokers stay swappable.
 Runax.Messaging.Abstractions      (contracts: IMessagePublisher, IMessagingTransport, MessageContext, MessagingConfigurator)
         ▲                 ▲
         │                 │
-Runax.Messaging      Runax.Messaging.Sqs / .RabbitMq / <your transport>
+Runax.Messaging      Runax.Messaging.Transports.Aws.Sqs / .RabbitMq / <your transport>
 (impl + in-memory)   (implement IMessagingTransport, add a configurator extension)
 ```
 

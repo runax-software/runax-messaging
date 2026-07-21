@@ -16,3 +16,10 @@ services:
     image: floci/floci:latest
     ports:
       - "4566:4566"
+
+  # Google Cloud Pub/Sub emulator (endpoint on :8085; set PUBSUB_EMULATOR_HOST=localhost:8085).
+  pubsub:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: gcloud beta emulators pubsub start --project=runax-test --host-port=0.0.0.0:8085
+    ports:
+      - "8085:8085"
