@@ -12,6 +12,8 @@ internal sealed class InMemoryTransport : IMessagingTransport
 {
     private readonly ConcurrentDictionary<string, Channel<string>> _topics = new();
 
+    public string SystemName => "in-memory";
+
     private Channel<string> GetChannel(string topic)
         => _topics.GetOrAdd(topic, static _ => Channel.CreateUnbounded<string>());
 

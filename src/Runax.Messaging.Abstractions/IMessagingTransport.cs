@@ -7,6 +7,12 @@ namespace Runax.Messaging.Abstractions;
 public interface IMessagingTransport
 {
     /// <summary>
+    /// Gets the messaging system identifier for this transport (e.g. "rabbitmq", "sqs", "in-memory").
+    /// Used as the <c>messaging.system</c> tag on telemetry, following OpenTelemetry conventions.
+    /// </summary>
+    string SystemName { get; }
+
+    /// <summary>
     /// Publishes a serialized envelope to the specified topic.
     /// </summary>
     /// <param name="topic">The topic to publish to.</param>

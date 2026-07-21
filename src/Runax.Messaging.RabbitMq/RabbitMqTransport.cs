@@ -44,6 +44,8 @@ internal sealed class RabbitMqTransport : IMessagingTransport, IDisposable
             () => CreateChannel(publisherConfirms: _options.PublisherConfirms));
     }
 
+    public string SystemName => "rabbitmq";
+
     public async ValueTask PublishAsync(
         string topic,
         string envelopeJson,
@@ -164,6 +166,15 @@ internal sealed class RabbitMqTransport : IMessagingTransport, IDisposable
         if (publisherConfirms) channel.ConfirmSelect();
 
         return channel;
+    }
+
+    /// <summary>
+    /// Verifies broker reachability by opening (lazily) the shared connection and checking it is live.
+    /// </summary>
+    internal Task<bool> PingAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(_connection.Value.IsOpen);
     }
 
     public void Dispose()

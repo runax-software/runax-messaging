@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Runax.Messaging.Abstractions;
+using Runax.Messaging.Diagnostics;
 using Runax.Messaging.Serialization;
 
 namespace Runax.Messaging.Consumers;
@@ -61,6 +63,9 @@ internal sealed class MessageConsumerHostedService(
         if (!topicConsumers.TryGetValue(topic, out var consumers))
             return MessageDisposition.Acknowledge;
 
+        var startTimestamp = Stopwatch.GetTimestamp();
+        var tags = MessagingDiagnostics.Tags(transport.SystemName, topic);
+
         MessageContext context;
         try
         {
@@ -69,22 +74,78 @@ internal sealed class MessageConsumerHostedService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Malformed envelope on topic '{Topic}'. Dead-lettering.", topic);
-            return await DeadLetterAsync(envelopeJson, topic, ex, attempts: 0, cancellationToken);
+            using var malformedActivity = StartProcessActivity(topic, headers: null);
+            malformedActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            try
+            {
+                return await DeadLetterAsync(envelopeJson, topic, ex, attempts: 0, cancellationToken);
+            }
+            finally
+            {
+                MessagingDiagnostics.ProcessingDuration.Record(
+                    Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds, tags);
+            }
         }
 
-        // Requeue wins outright (redeliver the whole message); otherwise a single dead-letter
-        // verdict escalates the message away from a plain acknowledge.
-        var result = MessageDisposition.Acknowledge;
-        foreach (var consumer in consumers)
+        using var activity = StartProcessActivity(topic, context.Headers);
+        try
         {
-            var disposition = await DispatchToConsumerAsync(consumer, context, envelopeJson, topic, cancellationToken);
-            if (disposition == MessageDisposition.Requeue)
-                return MessageDisposition.Requeue;
-            if (disposition == MessageDisposition.DeadLetter)
-                result = MessageDisposition.DeadLetter;
+            // Requeue wins outright (redeliver the whole message); otherwise a single dead-letter
+            // verdict escalates the message away from a plain acknowledge.
+            var result = MessageDisposition.Acknowledge;
+            foreach (var consumer in consumers)
+            {
+                var disposition = await DispatchToConsumerAsync(consumer, context, envelopeJson, topic, cancellationToken);
+                if (disposition == MessageDisposition.Requeue)
+                    return MessageDisposition.Requeue;
+                if (disposition == MessageDisposition.DeadLetter)
+                    result = MessageDisposition.DeadLetter;
+            }
+
+            if (result == MessageDisposition.DeadLetter)
+                activity?.SetStatus(ActivityStatusCode.Error, "Message dead-lettered.");
+
+            return result;
+        }
+        finally
+        {
+            MessagingDiagnostics.ProcessingDuration.Record(
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds, tags);
+        }
+    }
+
+    private Activity? StartProcessActivity(string topic, IReadOnlyDictionary<string, string>? headers)
+    {
+        string? traceParent = null;
+        string? traceState = null;
+
+        if (headers is not null)
+            DistributedContextPropagator.Current.ExtractTraceIdAndState(headers, HeaderGetter, out traceParent, out traceState);
+
+        var activity = MessagingDiagnostics.ActivitySource.StartActivity(
+            $"{topic} process", ActivityKind.Consumer, traceParent);
+
+        if (activity is not null)
+        {
+            activity.TraceStateString = traceState;
+            activity.SetTag("messaging.system", transport.SystemName);
+            activity.SetTag("messaging.destination.name", topic);
+            activity.SetTag("messaging.operation", "process");
         }
 
-        return result;
+        return activity;
+    }
+
+    private static void HeaderGetter(
+        object? carrier,
+        string fieldName,
+        out string? fieldValue,
+        out IEnumerable<string>? fieldValues)
+    {
+        fieldValues = null;
+        fieldValue = carrier is IReadOnlyDictionary<string, string> headers && headers.TryGetValue(fieldName, out var value)
+            ? value
+            : null;
     }
 
     private async ValueTask<MessageDisposition> DispatchToConsumerAsync(
@@ -99,6 +160,7 @@ internal sealed class MessageConsumerHostedService(
             try
             {
                 await consumer.HandleAsync(context, cancellationToken);
+                MessagingDiagnostics.Consumed.Add(1, MessagingDiagnostics.Tags(transport.SystemName, topic));
                 return MessageDisposition.Acknowledge;
             }
             catch (PoisonMessageException ex)
@@ -148,6 +210,8 @@ internal sealed class MessageConsumerHostedService(
         int attempts,
         CancellationToken cancellationToken)
     {
+        MessagingDiagnostics.Failed.Add(1, MessagingDiagnostics.Tags(transport.SystemName, topic));
+
         if (!retryOptions.EnableDeadLettering)
         {
             logger.LogWarning("Dead-lettering disabled; dropping message from '{Topic}'.", topic);

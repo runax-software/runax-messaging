@@ -38,6 +38,8 @@ internal sealed class SqsTransport : IMessagingTransport, IDisposable
         });
     }
 
+    public string SystemName => "sqs";
+
     public async ValueTask PublishAsync(
         string topic,
         string envelopeJson,
@@ -196,6 +198,15 @@ internal sealed class SqsTransport : IMessagingTransport, IDisposable
         _resolvedQueueUrls[topic] = response.QueueUrl;
 
         return response.QueueUrl;
+    }
+
+    /// <summary>
+    /// Verifies broker reachability with a lightweight <c>ListQueues</c> call against the configured endpoint.
+    /// </summary>
+    internal async Task<bool> PingAsync(CancellationToken cancellationToken = default)
+    {
+        await _client.Value.ListQueuesAsync(new ListQueuesRequest { MaxResults = 1 }, cancellationToken);
+        return true;
     }
 
     public void Dispose()

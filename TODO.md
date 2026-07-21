@@ -17,15 +17,16 @@ messaging library. File/line references point at where the gap lives today.
       recovery are enabled; ack/nack is driven by the disposition
       (`RabbitMqTransport.cs`).
 
-## Tier 2 — Observability
+## Tier 2 — Observability  ✅ done
 
-- [ ] **OpenTelemetry tracing.** Add an `ActivitySource`; propagate W3C `traceparent`
-      through the envelope headers (`MessageEnvelope.Headers`) across publish→consume.
-      Follow OTel messaging semantic conventions for producer/consumer spans.
-- [ ] **Metrics** via `System.Diagnostics.Metrics.Meter`: published/consumed/failed
-      counters + processing-duration histogram.
-- [ ] **Health checks.** `Microsoft.Extensions.Diagnostics.HealthChecks` integration
-      per transport (broker reachability).
+- [x] **OpenTelemetry tracing.** `MessagingDiagnostics` exposes an `ActivitySource`
+      ("Runax.Messaging"); publish emits a producer span and injects W3C context into the
+      envelope headers via `DistributedContextPropagator`, and consume extracts it into a
+      consumer span. Spans carry `messaging.system`/`messaging.destination.name`/`messaging.operation`.
+- [x] **Metrics** via a `Meter` ("Runax.Messaging"): `runax.messaging.published`/`consumed`/`failed`
+      counters and a `runax.messaging.processing.duration` histogram, tagged by system and destination.
+- [x] **Health checks.** `AddRabbitMqTransport()` / `AddSqsTransport()` extend
+      `IHealthChecksBuilder` with broker-reachability checks that probe the live transport connection.
 
 ## Tier 3 — Configuration & DX
 
@@ -61,7 +62,8 @@ messaging library. File/line references point at where the gap lives today.
 
 ---
 
-Note: Tier 1 has landed and already changed the provider SPI
-(`IMessagingTransport.SubscribeAsync` returns `MessageDisposition`, which now includes a
-`DeadLetter` value transports must handle). Tier 2 also touches the public surface, so land it
-before tagging `1.0` and freezing the API.
+Note: Tiers 1 and 2 have landed and expanded the public/provider surface —
+`IMessagingTransport` now exposes `SystemName` and `SubscribeAsync` returns a `MessageDisposition`
+that includes `DeadLetter`; `MessagingDiagnostics` (activity source + meter names) and the
+per-transport health-check builder extensions are also public. Review this surface before tagging
+`1.0` and freezing the API.

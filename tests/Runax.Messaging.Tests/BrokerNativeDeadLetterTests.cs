@@ -33,6 +33,8 @@ public class BrokerNativeDeadLetterTests
         private Func<string, string, ValueTask<MessageDisposition>>? _onMessage;
         private readonly TaskCompletionSource _subscribed = new();
 
+        public string SystemName => "capturing";
+
         public List<(string Topic, string Envelope)> Published { get; } = [];
 
         public ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default)
