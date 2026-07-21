@@ -117,4 +117,26 @@ public sealed class RabbitMqTransportIntegrationTests : IAsyncLifetime, IDisposa
 
         received.ShouldBe(count);
     }
+
+    [Fact]
+    public async Task Batch_publish_delivers_every_message()
+    {
+        var transport = _provider.GetRequiredService<IMessagingTransport>();
+        const int count = 20;
+
+        await transport.PublishBatchAsync(_topic,
+            Enumerable.Range(0, count).Select(i => $$"""{"n":{{i}}}""").ToList());
+
+        var received = 0;
+        for (var attempt = 0; attempt < 100 && received < count; attempt++)
+        {
+            while (_channel.BasicGet(_queue, autoAck: true) is not null)
+                received++;
+
+            if (received < count)
+                await Task.Delay(50);
+        }
+
+        received.ShouldBe(count);
+    }
 }

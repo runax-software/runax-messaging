@@ -41,6 +41,13 @@ public sealed class SqsOptions
     public int WaitTimeSeconds { get; set; } = 20;
 
     /// <summary>
+    /// Gets or sets the maximum number of messages processed concurrently across all polled queues.
+    /// Each queue is polled by its own pump; this bounds the total in-flight handlers. Defaults to 10.
+    /// </summary>
+    [Range(1, int.MaxValue)]
+    public int MaxConcurrentMessages { get; set; } = 10;
+
+    /// <summary>
     /// Gets or sets a mapping from topic names to SQS queue URLs.
     /// If not provided, topics are used as queue names and resolved via GetQueueUrl.
     /// </summary>

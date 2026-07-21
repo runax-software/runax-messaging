@@ -99,6 +99,43 @@ internal sealed class RabbitMqTransport : IMessagingTransport, IDisposable
         }
     }
 
+    public async ValueTask PublishBatchAsync(
+        string topic,
+        IReadOnlyList<string> envelopeJsons,
+        CancellationToken cancellationToken = default)
+    {
+        if (envelopeJsons.Count == 0)
+            return;
+
+        var channel = await _publishPool.RentAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var properties = channel.CreateBasicProperties();
+            properties.ContentType = "application/json";
+            properties.DeliveryMode = 2; // persistent
+
+            foreach (var envelopeJson in envelopeJsons)
+            {
+                channel.BasicPublish(
+                    exchange: _options.ExchangeName,
+                    routingKey: topic,
+                    basicProperties: properties,
+                    body: Encoding.UTF8.GetBytes(envelopeJson));
+            }
+
+            // One confirm round-trip for the whole batch rather than one per message.
+            if (_options.PublisherConfirms)
+                channel.WaitForConfirmsOrDie(_options.ConfirmTimeout);
+
+            _publishPool.Return(channel);
+        }
+        catch
+        {
+            _publishPool.Discard(channel);
+            throw;
+        }
+    }
+
     public async Task SubscribeAsync(
         string[] topics,
         Func<string, string, ValueTask<MessageDisposition>> onMessage,

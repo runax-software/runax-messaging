@@ -30,4 +30,17 @@ public interface IMessagePublisher
         TMessage message,
         IDictionary<string, string> headers,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Publishes several messages to the same topic, using the transport's batch API where available.
+    /// </summary>
+    /// <typeparam name="TMessage">The message payload type.</typeparam>
+    /// <param name="topic">The topic to publish to.</param>
+    /// <param name="messages">The message payloads.</param>
+    /// <param name="cancellationToken">Token to cancel the publish operation.</param>
+    /// <returns>A task that completes once the messages have been handed to the transport.</returns>
+    ValueTask PublishBatchAsync<TMessage>(
+        string topic,
+        IReadOnlyList<TMessage> messages,
+        CancellationToken cancellationToken = default);
 }

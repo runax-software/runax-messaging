@@ -22,6 +22,23 @@ public interface IMessagingTransport
     ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Publishes several serialized envelopes to the same topic. The default implementation publishes
+    /// them one at a time; transports override it to use a broker-native batch API.
+    /// </summary>
+    /// <param name="topic">The topic to publish to.</param>
+    /// <param name="envelopeJsons">The serialized message envelopes.</param>
+    /// <param name="cancellationToken">Token to cancel the publish operation.</param>
+    /// <returns>A task that completes once every envelope has been sent to the broker.</returns>
+    async ValueTask PublishBatchAsync(
+        string topic,
+        IReadOnlyList<string> envelopeJsons,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var envelopeJson in envelopeJsons)
+            await PublishAsync(topic, envelopeJson, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Subscribes to topics and invokes the callback for each received message. Blocks until cancellation.
     /// </summary>
     /// <param name="topics">Topics to subscribe to.</param>

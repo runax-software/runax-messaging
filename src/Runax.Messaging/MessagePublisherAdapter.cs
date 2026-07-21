@@ -27,6 +27,48 @@ internal sealed class MessagePublisherAdapter(IMessagingTransport transport, IMe
         CancellationToken cancellationToken = default) =>
         PublishInternalAsync(topic, message, headers, cancellationToken);
 
+    /// <inheritdoc />
+    public async ValueTask PublishBatchAsync<TMessage>(
+        string topic,
+        IReadOnlyList<TMessage> messages,
+        CancellationToken cancellationToken = default)
+    {
+        if (messages.Count == 0)
+            return;
+
+        var carrier = new Dictionary<string, string>();
+
+        using var activity = MessagingDiagnostics.ActivitySource.StartActivity(
+            $"{topic} publish", ActivityKind.Producer);
+
+        if (activity is not null)
+        {
+            activity.SetTag("messaging.system", transport.SystemName);
+            activity.SetTag("messaging.destination.name", topic);
+            activity.SetTag("messaging.operation", "publish");
+            activity.SetTag("messaging.batch.message_count", messages.Count);
+
+            DistributedContextPropagator.Current.Inject(activity, carrier, static (c, key, value) =>
+                ((Dictionary<string, string>)c!)[key] = value);
+        }
+
+        var headers = carrier.Count > 0 ? carrier : null;
+        var envelopes = new List<string>(messages.Count);
+        foreach (var message in messages)
+            envelopes.Add(serializer.Serialize(message, headers));
+
+        try
+        {
+            await transport.PublishBatchAsync(topic, envelopes, cancellationToken).ConfigureAwait(false);
+            MessagingDiagnostics.Published.Add(messages.Count, MessagingDiagnostics.Tags(transport.SystemName, topic));
+        }
+        catch (Exception ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            throw;
+        }
+    }
+
     private async ValueTask PublishInternalAsync<TMessage>(
         string topic,
         TMessage message,

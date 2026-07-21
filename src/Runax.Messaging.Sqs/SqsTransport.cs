@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Globalization;
 using Amazon;
 using Amazon.Runtime;
 using Amazon.SQS;
@@ -15,7 +17,7 @@ internal sealed class SqsTransport : IMessagingTransport, IDisposable
     private readonly SqsOptions _options;
     private readonly ILogger<SqsTransport> _logger;
     private readonly Lazy<AmazonSQSClient> _client;
-    private readonly Dictionary<string, string> _resolvedQueueUrls = new();
+    private readonly ConcurrentDictionary<string, string> _resolvedQueueUrls = new();
 
     public SqsTransport(SqsOptions options, ILogger<SqsTransport> logger)
     {
@@ -54,6 +56,44 @@ internal sealed class SqsTransport : IMessagingTransport, IDisposable
         }, cancellationToken);
     }
 
+    public async ValueTask PublishBatchAsync(
+        string topic,
+        IReadOnlyList<string> envelopeJsons,
+        CancellationToken cancellationToken = default)
+    {
+        if (envelopeJsons.Count == 0)
+            return;
+
+        var queueUrl = await ResolveQueueUrlAsync(topic, cancellationToken);
+
+        // SendMessageBatch accepts at most 10 entries per call.
+        for (var offset = 0; offset < envelopeJsons.Count; offset += 10)
+        {
+            var entries = new List<SendMessageBatchRequestEntry>(Math.Min(10, envelopeJsons.Count - offset));
+            for (var i = offset; i < offset + 10 && i < envelopeJsons.Count; i++)
+            {
+                entries.Add(new SendMessageBatchRequestEntry
+                {
+                    Id = (i - offset).ToString(CultureInfo.InvariantCulture),
+                    MessageBody = envelopeJsons[i]
+                });
+            }
+
+            var response = await _client.Value.SendMessageBatchAsync(new SendMessageBatchRequest
+            {
+                QueueUrl = queueUrl,
+                Entries = entries
+            }, cancellationToken);
+
+            if (response.Failed is { Count: > 0 })
+            {
+                throw new InvalidOperationException(
+                    $"SQS batch publish to '{topic}' failed for {response.Failed.Count} message(s): " +
+                    string.Join("; ", response.Failed.Select(f => $"{f.Id}:{f.Code}")));
+            }
+        }
+    }
+
     public async Task SubscribeAsync(
         string[] topics,
         Func<string, string, ValueTask<MessageDisposition>> onMessage,
@@ -66,57 +106,108 @@ internal sealed class SqsTransport : IMessagingTransport, IDisposable
             topicQueueMap[topic] = await ResolveQueueUrlAsync(topic, cancellationToken);
         }
 
-        _logger.LogInformation("SQS consumer started, polling {Count} queue(s)", topicQueueMap.Count);
+        // One permit per allowed in-flight handler, shared across every queue pump.
+        using var concurrencyLimiter = new SemaphoreSlim(Math.Max(1, _options.MaxConcurrentMessages));
 
-        while (!cancellationToken.IsCancellationRequested)
+        _logger.LogInformation("SQS consumer started, polling {Count} queue(s) with up to {Concurrency} concurrent message(s)",
+            topicQueueMap.Count, _options.MaxConcurrentMessages);
+
+        var pumps = topicQueueMap.Select(entry =>
+            PumpQueueAsync(entry.Key, entry.Value, onMessage, concurrencyLimiter, cancellationToken));
+
+        try
         {
-            foreach (var (topic, queueUrl) in topicQueueMap)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                    break;
-
-                try
-                {
-                    var response = await _client.Value.ReceiveMessageAsync(new ReceiveMessageRequest
-                    {
-                        QueueUrl = queueUrl,
-                        MaxNumberOfMessages = _options.MaxNumberOfMessages,
-                        WaitTimeSeconds = _options.WaitTimeSeconds,
-                        VisibilityTimeout = _options.VisibilityTimeoutSeconds
-                    }, cancellationToken);
-
-                    foreach (var message in (response.Messages ?? []).TakeWhile(_ =>
-                                 !cancellationToken.IsCancellationRequested))
-                    {
-                        var disposition =
-                            await ProcessMessageAsync(message, topic, queueUrl, onMessage, cancellationToken);
-
-                        // Acknowledge deletes the message. Requeue and DeadLetter both leave it so the
-                        // visibility timeout lapses and SQS redelivers it — and, once maxReceiveCount is hit,
-                        // routes it to any configured redrive DLQ.
-                        if (disposition == MessageDisposition.Acknowledge)
-                        {
-                            await _client.Value.DeleteMessageAsync(new DeleteMessageRequest
-                            {
-                                QueueUrl = queueUrl,
-                                ReceiptHandle = message.ReceiptHandle
-                            }, cancellationToken);
-                        }
-                    }
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error polling SQS queue {QueueUrl}", queueUrl);
-                    await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
-                }
-            }
+            await Task.WhenAll(pumps);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Graceful shutdown.
         }
 
         _logger.LogInformation("SQS consumer shutting down");
+    }
+
+    private async Task PumpQueueAsync(
+        string topic,
+        string queueUrl,
+        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        SemaphoreSlim concurrencyLimiter,
+        CancellationToken cancellationToken)
+    {
+        var inFlight = new List<Task>();
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                var response = await _client.Value.ReceiveMessageAsync(new ReceiveMessageRequest
+                {
+                    QueueUrl = queueUrl,
+                    MaxNumberOfMessages = _options.MaxNumberOfMessages,
+                    WaitTimeSeconds = _options.WaitTimeSeconds,
+                    VisibilityTimeout = _options.VisibilityTimeoutSeconds
+                }, cancellationToken);
+
+                foreach (var message in response.Messages ?? [])
+                {
+                    // Acquire a slot before starting the handler; this backpressures polling so no more
+                    // than MaxConcurrentMessages are handled at once, and lets successive polls overlap.
+                    await concurrencyLimiter.WaitAsync(cancellationToken);
+                    inFlight.Add(RunHandlerAsync(message, topic, queueUrl, onMessage, concurrencyLimiter, cancellationToken));
+                }
+
+                inFlight.RemoveAll(task => task.IsCompleted);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error polling SQS queue {QueueUrl}", queueUrl);
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+            }
+        }
+
+        await Task.WhenAll(inFlight);
+    }
+
+    private async Task RunHandlerAsync(
+        Message message,
+        string topic,
+        string queueUrl,
+        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        SemaphoreSlim concurrencyLimiter,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var disposition = await ProcessMessageAsync(message, topic, queueUrl, onMessage, cancellationToken);
+
+            // Acknowledge deletes the message. Requeue and DeadLetter both leave it so the
+            // visibility timeout lapses and SQS redelivers it — and, once maxReceiveCount is hit,
+            // routes it to any configured redrive DLQ.
+            if (disposition == MessageDisposition.Acknowledge)
+            {
+                await _client.Value.DeleteMessageAsync(new DeleteMessageRequest
+                {
+                    QueueUrl = queueUrl,
+                    ReceiptHandle = message.ReceiptHandle
+                }, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Shutdown; the message stays on the queue for redelivery.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error handling SQS message from {QueueUrl}", queueUrl);
+        }
+        finally
+        {
+            concurrencyLimiter.Release();
+        }
     }
 
     private async ValueTask<MessageDisposition> ProcessMessageAsync(
