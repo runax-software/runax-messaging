@@ -9,6 +9,10 @@ strongly-typed messages without coupling your application to a specific broker.
   framework-managed or broker-native dead-lettering.
 - **Observability** — OpenTelemetry-ready tracing and metrics (no SDK dependency)
   plus per-transport health checks.
+- **Throughput** — batch publish and concurrent SQS consumption.
+- **Configurable** — validated options with `IConfiguration` binding and pluggable
+  `JsonSerializerOptions`.
+- **Transactional outbox** — optional package for atomic database-write + publish.
 - **Transports** — RabbitMQ, Amazon SQS, and a built-in in-memory transport.
 
 ## Packages
@@ -19,6 +23,7 @@ strongly-typed messages without coupling your application to a specific broker.
 | [`Runax.Messaging`](src/Runax.Messaging/README.md) | Default implementation: DI wiring, JSON serialization, hosted consumers, and an in-memory transport. |
 | [`Runax.Messaging.Sqs`](src/Runax.Messaging.Sqs/README.md) | Amazon SQS transport. |
 | [`Runax.Messaging.RabbitMq`](src/Runax.Messaging.RabbitMq/README.md) | RabbitMQ transport. |
+| [`Runax.Messaging.Outbox`](src/Runax.Messaging.Outbox/README.md) | Transactional outbox: persist in your DB transaction, dispatch reliably. |
 
 Application code that only publishes needs `Runax.Messaging.Abstractions`. The
 composition root (where you call `AddRunaxMessaging`) needs `Runax.Messaging`
@@ -112,6 +117,14 @@ subscribe an OpenTelemetry pipeline with `AddSource("Runax.Messaging")` and
 `AddMeter("Runax.Messaging")`, and add broker health checks with
 `AddRabbitMqTransport()` / `AddSqsTransport()`. See
 [Architecture & message flow](docs/architecture.md) for details.
+
+## Throughput & the outbox
+
+Publish many messages at once with `publisher.PublishBatchAsync(topic, messages)` (SQS
+`SendMessageBatch`; a single RabbitMQ confirm per batch), and tune SQS concurrency with
+`MaxConcurrentMessages`. For atomic "save + publish", add the
+[`Runax.Messaging.Outbox`](src/Runax.Messaging.Outbox/README.md) package so publishes are
+written to your database in the same transaction and dispatched by a background service.
 
 ## Documentation
 

@@ -14,8 +14,8 @@ dotnet add package Runax.Messaging.Abstractions
 
 | Type | Role |
 | --- | --- |
-| `IMessagePublisher` | Publishes a strongly-typed message to a topic, optionally with headers. |
-| `IMessagingTransport` | Provider SPI. Each transport implements broker-specific publish/subscribe and exposes a `SystemName` telemetry tag. |
+| `IMessagePublisher` | Publishes a strongly-typed message (or a batch via `PublishBatchAsync`) to a topic, optionally with headers. |
+| `IMessagingTransport` | Provider SPI. Each transport implements broker-specific publish (single and batch) / subscribe and exposes a `SystemName` telemetry tag. |
 | `MessageContext` | A received message: topic, raw JSON body, headers, and a `Deserialize<T>()` helper. |
 | `MessageDisposition` | The verdict a transport applies after dispatch: `Acknowledge`, `Requeue`, or `DeadLetter`. |
 | `PoisonMessageException` | Thrown by a consumer to skip retries and dead-letter the message immediately. |

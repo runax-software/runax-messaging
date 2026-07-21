@@ -39,6 +39,9 @@ public sealed class Checkout(IMessagePublisher publisher)
 }
 ```
 
+Publish many at once with `PublishBatchAsync(topic, messages)`, which uses the transport's
+batch API where available (SQS `SendMessageBatch`, a single RabbitMQ confirm per batch).
+
 ## Consume
 
 Derive from `MessageConsumer<TMessage>`; the framework deserializes the body
@@ -85,6 +88,20 @@ builder.Services.AddRunaxMessaging(messaging => messaging
   `{topic}.dead-letter` with `x-runax-dlq-*` headers; `BrokerNative` rejects the
   message so the transport's native DLQ handles it (pair with `MaxAttempts = 1` to
   rely purely on the broker).
+
+## Serialization
+
+Message bodies are serialized with `System.Text.Json`. Configure the options — naming policy,
+converters, or a source-generated `JsonSerializerContext` (via `TypeInfoResolver`) for a
+trim-friendly / AOT path — with `ConfigureSerialization`:
+
+```csharp
+builder.Services.AddRunaxMessaging(messaging => messaging
+    .AddInMemory()
+    .ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase));
+```
+
+The same options are applied on both publish and consume.
 
 ## Observability
 

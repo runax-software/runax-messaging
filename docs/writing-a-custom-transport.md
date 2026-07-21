@@ -99,6 +99,8 @@ Contract notes:
   | `DeadLetter` | Give up; do not redeliver. | Reject to the broker's native DLQ, else drop. |
 
 - If dispatch throws unexpectedly, treat it as `Requeue` and log it.
+- `PublishBatchAsync` is a **default interface method** that publishes one at a time, so you get
+  it for free. Override it only if your broker has a native batch API (as SQS and RabbitMQ do).
 
 ## 4. Add a configurator extension
 

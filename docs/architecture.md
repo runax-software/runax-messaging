@@ -19,13 +19,15 @@ Runax.Messaging      Runax.Messaging.Sqs / .RabbitMq / <your transport>
   adapter, the hosted consumer dispatcher, and the in-memory transport.
 - **Transports** reference Abstractions only — never each other, and never the
   core implementation.
+- **Higher-level packages** may reference Core — e.g. `Runax.Messaging.Outbox`
+  reuses the serializer and decorates `IMessagePublisher`.
 
 ## Key types
 
 | Type | Package | Responsibility |
 | --- | --- | --- |
-| `IMessagePublisher` | Abstractions | The publish API applications call. |
-| `IMessagingTransport` | Abstractions | Provider SPI: broker-specific publish/subscribe over serialized envelopes, plus a `SystemName` telemetry tag. |
+| `IMessagePublisher` | Abstractions | The publish API applications call (`PublishAsync`, `PublishBatchAsync`). |
+| `IMessagingTransport` | Abstractions | Provider SPI: broker-specific publish (single + `PublishBatchAsync`) / subscribe over serialized envelopes, plus a `SystemName` telemetry tag. |
 | `MessageContext` | Abstractions | A received message (topic, body, headers) with `Deserialize<T>()`. |
 | `MessageDisposition` | Abstractions | The verdict a transport applies after dispatch: `Acknowledge`, `Requeue`, or `DeadLetter`. |
 | `PoisonMessageException` | Abstractions | Thrown by a consumer to skip retries and dead-letter the message immediately. |
@@ -121,6 +123,25 @@ SDK dependency. Consumers subscribe by name (`MessagingDiagnostics.ActivitySourc
 
 Wire them into OpenTelemetry with `AddSource("Runax.Messaging")` and
 `AddMeter("Runax.Messaging")`.
+
+## Throughput
+
+- **Batch publish.** `IMessagePublisher.PublishBatchAsync(topic, messages)` serializes each
+  message under one producer span and calls `IMessagingTransport.PublishBatchAsync`. The SPI
+  method has a default (sequential) implementation; SQS overrides it with `SendMessageBatch`
+  (chunks of 10) and RabbitMQ publishes the whole batch on one channel with a single confirm.
+- **Concurrent consumption.** The SQS transport runs one pump per queue and dispatches messages
+  continuously up to `MaxConcurrentMessages` (a shared `SemaphoreSlim`), so successive polls
+  overlap. The dispatch pipeline itself is unchanged — each message still returns a `MessageDisposition`.
+
+## Transactional outbox
+
+The optional `Runax.Messaging.Outbox` package makes "save data + publish" atomic. `AddOutbox()`
+replaces `IMessagePublisher` with one that serializes and writes to an `IOutboxStore` instead of
+publishing directly; a background `OutboxDispatcher` later drains pending rows to the transport and
+marks them dispatched. A durable store's `AddAsync` enlists in the caller's database transaction, so
+the message row commits together with the business data (at-least-once delivery — keep consumers
+idempotent). See the [package README](../src/Runax.Messaging.Outbox/README.md).
 
 ## Design rules
 
