@@ -39,7 +39,7 @@
          registration and the hosted consumer end-to-end in tests. -->
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Diagnostics.Testing" Version="10.1.0" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.Testing" Version="10.8.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
   </ItemGroup>
