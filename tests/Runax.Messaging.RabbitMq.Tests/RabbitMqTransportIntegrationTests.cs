@@ -20,19 +20,22 @@ public sealed class RabbitMqTransportIntegrationTests : IAsyncLifetime, IDisposa
 
     private ServiceProvider _provider = null!;
     private IConnection _connection = null!;
-    private IModel _channel = null!;
+    private IChannel _channel = null!;
     private string _queue = null!;
 
-    public ValueTask InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        var factory = new ConnectionFactory { HostName = HostName, DispatchConsumersAsync = true };
-        _connection = factory.CreateConnection();
-        _channel = _connection.CreateModel();
+        var factory = new ConnectionFactory { HostName = HostName };
+        _connection = await factory.CreateConnectionAsync();
+        _channel = await _connection.CreateChannelAsync();
 
         // Bind a queue before publishing — a topic exchange drops messages with no matching binding.
-        _channel.ExchangeDeclare(_exchange, ExchangeType.Topic, durable: true);
-        _queue = _channel.QueueDeclare(queue: string.Empty, durable: false, exclusive: true, autoDelete: true).QueueName;
-        _channel.QueueBind(_queue, _exchange, _topic);
+        await _channel.ExchangeDeclareAsync(_exchange, ExchangeType.Topic,
+            durable: true, autoDelete: false, arguments: null, passive: false, noWait: false, CancellationToken.None);
+        var declareOk = await _channel.QueueDeclareAsync(queue: string.Empty,
+            durable: false, exclusive: true, autoDelete: true, arguments: null, passive: false, noWait: false, CancellationToken.None);
+        _queue = declareOk.QueueName;
+        await _channel.QueueBindAsync(_queue, _exchange, _topic, arguments: null, noWait: false, CancellationToken.None);
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -42,8 +45,6 @@ public sealed class RabbitMqTransportIntegrationTests : IAsyncLifetime, IDisposa
             o.ExchangeName = _exchange;
         }));
         _provider = services.BuildServiceProvider();
-
-        return ValueTask.CompletedTask;
     }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
@@ -66,7 +67,7 @@ public sealed class RabbitMqTransportIntegrationTests : IAsyncLifetime, IDisposa
         BasicGetResult? result = null;
         for (var attempt = 0; attempt < 20 && result is null; attempt++)
         {
-            result = _channel.BasicGet(_queue, autoAck: true);
+            result = await _channel.BasicGetAsync(_queue, autoAck: true, CancellationToken.None);
             if (result is null)
                 await Task.Delay(100);
         }
@@ -85,14 +86,14 @@ public sealed class RabbitMqTransportIntegrationTests : IAsyncLifetime, IDisposa
         BasicGetResult? result = null;
         for (var attempt = 0; attempt < 20 && result is null; attempt++)
         {
-            result = _channel.BasicGet(_queue, autoAck: true);
+            result = await _channel.BasicGetAsync(_queue, autoAck: true, CancellationToken.None);
             if (result is null)
                 await Task.Delay(100);
         }
 
         result.ShouldNotBeNull();
         result!.BasicProperties.ContentType.ShouldBe("application/json");
-        result.BasicProperties.DeliveryMode.ShouldBe((byte)2);
+        result.BasicProperties.DeliveryMode.ShouldBe(DeliveryModes.Persistent);
     }
 
     [Fact]
@@ -108,7 +109,7 @@ public sealed class RabbitMqTransportIntegrationTests : IAsyncLifetime, IDisposa
         var received = 0;
         for (var attempt = 0; attempt < 100 && received < count; attempt++)
         {
-            while (_channel.BasicGet(_queue, autoAck: true) is not null)
+            while (await _channel.BasicGetAsync(_queue, autoAck: true, CancellationToken.None) is not null)
                 received++;
 
             if (received < count)
@@ -130,7 +131,7 @@ public sealed class RabbitMqTransportIntegrationTests : IAsyncLifetime, IDisposa
         var received = 0;
         for (var attempt = 0; attempt < 100 && received < count; attempt++)
         {
-            while (_channel.BasicGet(_queue, autoAck: true) is not null)
+            while (await _channel.BasicGetAsync(_queue, autoAck: true, CancellationToken.None) is not null)
                 received++;
 
             if (received < count)

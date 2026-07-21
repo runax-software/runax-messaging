@@ -21,20 +21,24 @@ public sealed class RabbitMqDeadLetterIntegrationTests : IAsyncLifetime, IDispos
 
     private ServiceProvider _provider = null!;
     private IConnection _connection = null!;
-    private IModel _channel = null!;
+    private IChannel _channel = null!;
     private string _deadLetterQueue = null!;
 
-    public ValueTask InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        var factory = new ConnectionFactory { HostName = HostName, DispatchConsumersAsync = true };
-        _connection = factory.CreateConnection();
-        _channel = _connection.CreateModel();
+        var factory = new ConnectionFactory { HostName = HostName };
+        _connection = await factory.CreateConnectionAsync();
+        _channel = await _connection.CreateChannelAsync();
 
         // Stand up the dead-letter exchange and a queue bound to it so rejected messages have somewhere to land.
-        _channel.ExchangeDeclare(_exchange, ExchangeType.Topic, durable: true);
-        _channel.ExchangeDeclare(_deadLetterExchange, ExchangeType.Topic, durable: true);
-        _deadLetterQueue = _channel.QueueDeclare(queue: string.Empty, durable: false, exclusive: true, autoDelete: true).QueueName;
-        _channel.QueueBind(_deadLetterQueue, _deadLetterExchange, _topic);
+        await _channel.ExchangeDeclareAsync(_exchange, ExchangeType.Topic,
+            durable: true, autoDelete: false, arguments: null, passive: false, noWait: false, CancellationToken.None);
+        await _channel.ExchangeDeclareAsync(_deadLetterExchange, ExchangeType.Topic,
+            durable: true, autoDelete: false, arguments: null, passive: false, noWait: false, CancellationToken.None);
+        var declareOk = await _channel.QueueDeclareAsync(queue: string.Empty,
+            durable: false, exclusive: true, autoDelete: true, arguments: null, passive: false, noWait: false, CancellationToken.None);
+        _deadLetterQueue = declareOk.QueueName;
+        await _channel.QueueBindAsync(_deadLetterQueue, _deadLetterExchange, _topic, arguments: null, noWait: false, CancellationToken.None);
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -45,8 +49,6 @@ public sealed class RabbitMqDeadLetterIntegrationTests : IAsyncLifetime, IDispos
             o.DeadLetterExchange = _deadLetterExchange;
         }));
         _provider = services.BuildServiceProvider();
-
-        return ValueTask.CompletedTask;
     }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
@@ -78,7 +80,7 @@ public sealed class RabbitMqDeadLetterIntegrationTests : IAsyncLifetime, IDispos
         BasicGetResult? result = null;
         for (var attempt = 0; attempt < 40 && result is null; attempt++)
         {
-            result = _channel.BasicGet(_deadLetterQueue, autoAck: true);
+            result = await _channel.BasicGetAsync(_deadLetterQueue, autoAck: true, CancellationToken.None);
             if (result is null)
                 await Task.Delay(100);
         }

@@ -3,7 +3,7 @@
 RabbitMQ transport for [Runax.Messaging](https://github.com/runax-software/runax-messaging).
 Topics map to routing keys on a topic exchange.
 
-> Built against `RabbitMQ.Client` 6.x.
+> Built against `RabbitMQ.Client` 7.x (the asynchronous `IChannel` API).
 
 ## Install
 
