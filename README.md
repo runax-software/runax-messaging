@@ -13,7 +13,8 @@ strongly-typed messages without coupling your application to a specific broker.
 - **Configurable** — validated options with `IConfiguration` binding and pluggable
   `JsonSerializerOptions`.
 - **Transactional outbox** — optional package for atomic database-write + publish.
-- **Transports** — RabbitMQ, Amazon SQS, Google Cloud Pub/Sub, and a built-in in-memory transport.
+- **Transports** — RabbitMQ, Amazon SQS, Google Cloud Pub/Sub, Redis Streams (Redis/Valkey), and a
+  built-in in-memory transport.
 
 ## Packages
 
@@ -24,6 +25,7 @@ strongly-typed messages without coupling your application to a specific broker.
 | [`Runax.Messaging.Transports.Aws.Sqs`](src/Runax.Messaging.Transports.Aws.Sqs/README.md) | Amazon SQS transport. |
 | [`Runax.Messaging.Transports.RabbitMq`](src/Runax.Messaging.Transports.RabbitMq/README.md) | RabbitMQ transport. |
 | [`Runax.Messaging.Transports.Google.PubSub`](src/Runax.Messaging.Transports.Google.PubSub/README.md) | Google Cloud Pub/Sub transport. |
+| [`Runax.Messaging.Transports.Redis`](src/Runax.Messaging.Transports.Redis/README.md) | Redis Streams transport (Redis and Valkey). |
 | [`Runax.Messaging.Outbox`](src/Runax.Messaging.Outbox/README.md) | Transactional outbox: persist in your DB transaction, dispatch reliably. |
 
 Application code that only publishes needs `Runax.Messaging.Abstractions`. The

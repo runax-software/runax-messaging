@@ -44,11 +44,31 @@ jobs:
         ports:
           - 4566:4566
 
+      # Redis Streams transport is exercised against both engines.
+      valkey:
+        image: valkey/valkey:8-alpine
+        ports:
+          - 6379:6379
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+
     steps:
       - uses: actions/checkout@v6
 
       - name: Setup and build
         uses: ./.github/actions/setup-dotnet-build
+
+      # The Pub/Sub emulator needs a start command, which GitHub service containers cannot set,
+      # so run it as a container (same image and port as compose.yml).
+      - name: Start Pub/Sub emulator
+        run: |
+          docker run -d --name pubsub -p 8085:8085 \
+            gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators \
+            gcloud beta emulators pubsub start --project=runax-test --host-port=0.0.0.0:8085
+          for _ in $(seq 1 30); do curl -sf http://localhost:8085 >/dev/null && break || sleep 2; done
 
       # Run per transport project: a solution-wide run would report "zero tests ran"
       # (exit 8) for projects that have no integration tests. Add new transports here.
@@ -59,6 +79,9 @@ jobs:
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
           AWS_REGION: us-east-1
+          PUBSUB_EMULATOR_HOST: localhost:8085
         run: |
           dotnet test --project tests/Runax.Messaging.Transports.Aws.Sqs.Tests/Runax.Messaging.Transports.Aws.Sqs.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"
           dotnet test --project tests/Runax.Messaging.Transports.RabbitMq.Tests/Runax.Messaging.Transports.RabbitMq.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"
+          dotnet test --project tests/Runax.Messaging.Transports.Google.PubSub.Tests/Runax.Messaging.Transports.Google.PubSub.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"
+          dotnet test --project tests/Runax.Messaging.Transports.Redis.Tests/Runax.Messaging.Transports.Redis.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"
