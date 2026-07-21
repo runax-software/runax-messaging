@@ -21,7 +21,7 @@ public class RabbitMqHealthCheckTests
         var report = await provider.GetRequiredService<HealthCheckService>().CheckHealthAsync();
 
         report.Status.ShouldBe(HealthStatus.Unhealthy);
-        report.Entries["rabbitmq"].Description.ShouldContain("not RabbitMQ");
+        report.Entries["rabbitmq"].Description.ShouldNotBeNull().ShouldContain("not RabbitMQ");
     }
 
     [Fact]

@@ -22,7 +22,7 @@ public class SqsHealthCheckTests
         var report = await provider.GetRequiredService<HealthCheckService>().CheckHealthAsync();
 
         report.Status.ShouldBe(HealthStatus.Unhealthy);
-        report.Entries["sqs"].Description.ShouldContain("not SQS");
+        report.Entries["sqs"].Description.ShouldNotBeNull().ShouldContain("not SQS");
     }
 
     [Fact]
