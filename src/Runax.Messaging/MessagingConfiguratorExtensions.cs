@@ -15,12 +15,37 @@ public static class MessagingConfiguratorExtensions
     /// </summary>
     /// <typeparam name="TConsumer">The consumer type to register.</typeparam>
     /// <param name="configurator">The messaging configurator.</param>
+    /// <param name="transports">
+    /// The system names of the transports to subscribe this consumer on (matched against
+    /// <see cref="IMessagingTransport.SystemName"/>, e.g. <c>"rabbitmq"</c>, <c>"sqs"</c>). When none are
+    /// given the consumer subscribes on every registered transport, letting a single consumer receive
+    /// its topic from several — possibly different — brokers at once.
+    /// </param>
     /// <returns>The same configurator, to allow chaining.</returns>
-    public static MessagingConfigurator AddConsumer<TConsumer>(this MessagingConfigurator configurator)
+    public static MessagingConfigurator AddConsumer<TConsumer>(
+        this MessagingConfigurator configurator,
+        params string[] transports)
         where TConsumer : class
     {
         configurator.Services.AddSingleton<TConsumer>();
-        configurator.Services.AddSingleton(new ConsumerRegistration { ConsumerType = typeof(TConsumer) });
+        configurator.Services.AddSingleton(new ConsumerRegistration
+        {
+            ConsumerType = typeof(TConsumer),
+            Transports = transports.Length > 0 ? transports : null,
+        });
+        return configurator;
+    }
+
+    /// <summary>
+    /// Selects which registered transport <see cref="IMessagePublisher"/> publishes to when more than one
+    /// transport is configured. Not needed when a single transport is registered.
+    /// </summary>
+    /// <param name="configurator">The messaging configurator.</param>
+    /// <param name="transport">The target transport's <see cref="IMessagingTransport.SystemName"/>.</param>
+    /// <returns>The same configurator, to allow chaining.</returns>
+    public static MessagingConfigurator PublishTo(this MessagingConfigurator configurator, string transport)
+    {
+        configurator.Services.AddSingleton(new MessagingPublishOptions { DefaultTransport = transport });
         return configurator;
     }
 

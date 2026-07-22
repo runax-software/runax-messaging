@@ -6,13 +6,13 @@ namespace Runax.Messaging.Transports.Google.PubSub;
 /// <summary>
 /// Health check that reports whether the Google Pub/Sub transport can reach the service.
 /// </summary>
-internal sealed class GooglePubSubHealthCheck(IMessagingTransport transport) : IHealthCheck
+internal sealed class GooglePubSubHealthCheck(IEnumerable<IMessagingTransport> transports) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (transport is not GooglePubSubTransport pubSub)
+        if (transports.OfType<GooglePubSubTransport>().FirstOrDefault() is not { } pubSub)
             return HealthCheckResult.Unhealthy("The registered messaging transport is not Google Pub/Sub.");
 
         try

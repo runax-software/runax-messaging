@@ -6,13 +6,13 @@ namespace Runax.Messaging.Transports.Redis;
 /// <summary>
 /// Health check that reports whether the Redis transport can reach the server.
 /// </summary>
-internal sealed class RedisHealthCheck(IMessagingTransport transport) : IHealthCheck
+internal sealed class RedisHealthCheck(IEnumerable<IMessagingTransport> transports) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (transport is not RedisTransport redis)
+        if (transports.OfType<RedisTransport>().FirstOrDefault() is not { } redis)
             return HealthCheckResult.Unhealthy("The registered messaging transport is not Redis.");
 
         try

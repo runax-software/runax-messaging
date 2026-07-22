@@ -8,10 +8,28 @@ namespace Runax.Messaging;
 /// <summary>
 /// Bridges <see cref="IMessagePublisher"/> to the underlying <see cref="IMessagingTransport"/>,
 /// handling serialization of the message into an envelope and emitting publish telemetry.
+/// When several transports are registered, the target is chosen with <c>PublishTo</c>.
 /// </summary>
-internal sealed class MessagePublisherAdapter(IMessagingTransport transport, IMessageSerializer serializer)
-    : IMessagePublisher
+internal sealed class MessagePublisherAdapter : IMessagePublisher
 {
+    private readonly IReadOnlyList<IMessagingTransport> _transports;
+    private readonly IMessageSerializer _serializer;
+    private readonly string? _defaultTransportName;
+    private IMessagingTransport? _resolvedTransport;
+
+    public MessagePublisherAdapter(
+        IEnumerable<IMessagingTransport> transports,
+        IMessageSerializer serializer,
+        MessagingPublishOptions publishOptions)
+    {
+        _transports = transports as IReadOnlyList<IMessagingTransport> ?? transports.ToArray();
+        _serializer = serializer;
+        _defaultTransportName = publishOptions.DefaultTransport;
+    }
+
+    private IMessagingTransport Transport =>
+        _resolvedTransport ??= PublishTargetSelector.Select(_transports, _defaultTransportName);
+
     /// <inheritdoc />
     public ValueTask PublishAsync<TMessage>(
         string topic,
@@ -43,7 +61,7 @@ internal sealed class MessagePublisherAdapter(IMessagingTransport transport, IMe
 
         if (activity is not null)
         {
-            activity.SetTag("messaging.system", transport.SystemName);
+            activity.SetTag("messaging.system", Transport.SystemName);
             activity.SetTag("messaging.destination.name", topic);
             activity.SetTag("messaging.operation", "publish");
             activity.SetTag("messaging.batch.message_count", messages.Count);
@@ -55,12 +73,12 @@ internal sealed class MessagePublisherAdapter(IMessagingTransport transport, IMe
         var headers = carrier.Count > 0 ? carrier : null;
         var envelopes = new List<string>(messages.Count);
         foreach (var message in messages)
-            envelopes.Add(serializer.Serialize(message, headers));
+            envelopes.Add(_serializer.Serialize(message, headers));
 
         try
         {
-            await transport.PublishBatchAsync(topic, envelopes, cancellationToken).ConfigureAwait(false);
-            MessagingDiagnostics.Published.Add(messages.Count, MessagingDiagnostics.Tags(transport.SystemName, topic));
+            await Transport.PublishBatchAsync(topic, envelopes, cancellationToken).ConfigureAwait(false);
+            MessagingDiagnostics.Published.Add(messages.Count, MessagingDiagnostics.Tags(Transport.SystemName, topic));
         }
         catch (Exception ex)
         {
@@ -84,7 +102,7 @@ internal sealed class MessagePublisherAdapter(IMessagingTransport transport, IMe
 
         if (activity is not null)
         {
-            activity.SetTag("messaging.system", transport.SystemName);
+            activity.SetTag("messaging.system", Transport.SystemName);
             activity.SetTag("messaging.destination.name", topic);
             activity.SetTag("messaging.operation", "publish");
 
@@ -95,9 +113,9 @@ internal sealed class MessagePublisherAdapter(IMessagingTransport transport, IMe
 
         try
         {
-            var envelope = serializer.Serialize(message, carrier);
-            await transport.PublishAsync(topic, envelope, cancellationToken).ConfigureAwait(false);
-            MessagingDiagnostics.Published.Add(1, MessagingDiagnostics.Tags(transport.SystemName, topic));
+            var envelope = _serializer.Serialize(message, carrier);
+            await Transport.PublishAsync(topic, envelope, cancellationToken).ConfigureAwait(false);
+            MessagingDiagnostics.Published.Add(1, MessagingDiagnostics.Tags(Transport.SystemName, topic));
         }
         catch (Exception ex)
         {

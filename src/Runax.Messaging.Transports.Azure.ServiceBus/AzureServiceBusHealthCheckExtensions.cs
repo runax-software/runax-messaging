@@ -24,7 +24,7 @@ public static class AzureServiceBusHealthCheckExtensions
         IEnumerable<string>? tags = null)
         => builder.Add(new HealthCheckRegistration(
             name,
-            sp => new AzureServiceBusHealthCheck(sp.GetRequiredService<IMessagingTransport>()),
+            sp => new AzureServiceBusHealthCheck(sp.GetServices<IMessagingTransport>()),
             failureStatus,
             tags));
 }

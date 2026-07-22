@@ -6,13 +6,13 @@ namespace Runax.Messaging.Transports.RabbitMq;
 /// <summary>
 /// Health check that reports whether the RabbitMQ transport can reach the broker.
 /// </summary>
-internal sealed class RabbitMqHealthCheck(IMessagingTransport transport) : IHealthCheck
+internal sealed class RabbitMqHealthCheck(IEnumerable<IMessagingTransport> transports) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (transport is not RabbitMqTransport rabbitMq)
+        if (transports.OfType<RabbitMqTransport>().FirstOrDefault() is not { } rabbitMq)
             return HealthCheckResult.Unhealthy("The registered messaging transport is not RabbitMQ.");
 
         try

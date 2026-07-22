@@ -11,7 +11,8 @@ public class MessagePublisherAdapterTests
     public async Task PublishAsync_serializes_the_message_and_forwards_it_to_the_transport()
     {
         var transport = Substitute.For<IMessagingTransport>();
-        var adapter = new MessagePublisherAdapter(transport, new JsonMessageSerializer());
+        var adapter = new MessagePublisherAdapter(
+            [transport], new JsonMessageSerializer(), new MessagingPublishOptions());
 
         await adapter.PublishAsync("orders", new Order(1));
 

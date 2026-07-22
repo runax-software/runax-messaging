@@ -24,7 +24,7 @@ public static class RabbitMqHealthCheckExtensions
         IEnumerable<string>? tags = null)
         => builder.Add(new HealthCheckRegistration(
             name,
-            sp => new RabbitMqHealthCheck(sp.GetRequiredService<IMessagingTransport>()),
+            sp => new RabbitMqHealthCheck(sp.GetServices<IMessagingTransport>()),
             failureStatus,
             tags));
 }

@@ -24,7 +24,7 @@ public static class SqsHealthCheckExtensions
         IEnumerable<string>? tags = null)
         => builder.Add(new HealthCheckRegistration(
             name,
-            sp => new SqsHealthCheck(sp.GetRequiredService<IMessagingTransport>()),
+            sp => new SqsHealthCheck(sp.GetServices<IMessagingTransport>()),
             failureStatus,
             tags));
 }

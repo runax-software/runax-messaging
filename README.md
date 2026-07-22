@@ -105,6 +105,27 @@ messaging.AddRabbitMq(o => o.HostName = "localhost").AddConsumer<OrderPlacedCons
 Each transport's options are documented on its package page linked in the table
 above.
 
+## Multiple transports at once
+
+Register more than one transport and a single consumer can receive its topic from several brokers —
+even different ones (e.g. RabbitMQ and SQS during a migration). Transports are identified by their
+`SystemName` (`"rabbitmq"`, `"sqs"`, `"in-memory"`, ...):
+
+```csharp
+builder.Services.AddRunaxMessaging(messaging => messaging
+    .AddRabbitMq(o => o.HostName = "localhost")
+    .AddSqs(o => o.Region = "us-east-1")
+    .AddConsumer<OrderPlacedConsumer>()            // subscribes on every registered transport
+    .AddConsumer<AuditConsumer>("rabbitmq")        // only from RabbitMQ
+    .PublishTo("sqs"));                            // IMessagePublisher publishes here
+```
+
+`AddConsumer<T>()` subscribes the consumer on all registered transports; pass one or more system names
+to target specific brokers. Each transport is subscribed and dispatched independently, so a message is
+only handled by consumers targeting the broker it arrived on. When several transports are registered,
+`PublishTo("<system-name>")` selects which one `IMessagePublisher` publishes to (a single registered
+transport is used automatically). Each transport must report a distinct `SystemName`.
+
 ## Reliability & observability
 
 Consumers get retry-with-backoff, poison-message handling, and dead-lettering out

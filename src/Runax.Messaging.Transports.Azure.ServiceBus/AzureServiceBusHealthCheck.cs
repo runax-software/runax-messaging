@@ -6,13 +6,13 @@ namespace Runax.Messaging.Transports.Azure.ServiceBus;
 /// <summary>
 /// Health check that reports whether the Service Bus transport can reach the namespace.
 /// </summary>
-internal sealed class AzureServiceBusHealthCheck(IMessagingTransport transport) : IHealthCheck
+internal sealed class AzureServiceBusHealthCheck(IEnumerable<IMessagingTransport> transports) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (transport is not AzureServiceBusTransport serviceBus)
+        if (transports.OfType<AzureServiceBusTransport>().FirstOrDefault() is not { } serviceBus)
             return HealthCheckResult.Unhealthy("The registered messaging transport is not Azure Service Bus.");
 
         try

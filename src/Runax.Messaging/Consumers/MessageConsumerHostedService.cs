@@ -12,11 +12,13 @@ namespace Runax.Messaging.Consumers;
 /// <summary>
 /// Background service that subscribes registered message consumers to their topics
 /// and dispatches incoming messages, applying the configured retry and dead-letter policy.
+/// Consumers may subscribe on several transports at once; each transport is subscribed and
+/// dispatched independently so a message is only ever handled by consumers targeting it.
 /// </summary>
 internal sealed class MessageConsumerHostedService(
     IServiceProvider serviceProvider,
     IEnumerable<ConsumerRegistration> registrations,
-    IMessagingTransport transport,
+    IEnumerable<IMessagingTransport> transports,
     IMessageSerializer serializer,
     RetryOptions retryOptions,
     ILogger<MessageConsumerHostedService> logger)
@@ -24,37 +26,90 @@ internal sealed class MessageConsumerHostedService(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var topicConsumers = new Dictionary<string, List<IMessageConsumer>>();
+        var transportsByName = BuildTransportMap();
+
+        // transport system name -> (topic -> consumers subscribed on that transport).
+        var plan = new Dictionary<string, Dictionary<string, List<IMessageConsumer>>>(StringComparer.Ordinal);
+
         foreach (var registration in registrations)
         {
             var consumer = (IMessageConsumer)serviceProvider.GetRequiredService(registration.ConsumerType);
+            var targets = registration.Transports ?? transportsByName.Keys.ToArray();
 
-            if (!topicConsumers.TryGetValue(consumer.Topic, out var list))
+            foreach (var target in targets)
             {
-                list = [];
-                topicConsumers[consumer.Topic] = list;
-            }
+                if (!transportsByName.ContainsKey(target))
+                {
+                    throw new InvalidOperationException(
+                        $"Consumer '{consumer.GetType().Name}' targets transport '{target}', but no registered transport " +
+                        $"reports that system name. Registered transports: {DescribeTransports(transportsByName.Keys)}.");
+                }
 
-            list.Add(consumer);
+                if (!plan.TryGetValue(target, out var topicConsumers))
+                {
+                    topicConsumers = [];
+                    plan[target] = topicConsumers;
+                }
+
+                if (!topicConsumers.TryGetValue(consumer.Topic, out var list))
+                {
+                    list = [];
+                    topicConsumers[consumer.Topic] = list;
+                }
+
+                list.Add(consumer);
+            }
         }
 
-        var allTopics = topicConsumers.Keys.ToArray();
-        if (allTopics.Length == 0)
+        if (plan.Count == 0)
         {
             logger.LogInformation("No topics to subscribe to. No consumers registered any topics.");
             return;
         }
 
-        logger.LogInformation("Subscribing to {TopicCount} topic(s): {Topics}", allTopics.Length,
-            string.Join(", ", allTopics));
+        var subscriptions = new List<Task>(plan.Count);
+        foreach (var (transportName, topicConsumers) in plan)
+        {
+            var transport = transportsByName[transportName];
+            var topics = topicConsumers.Keys.ToArray();
 
-        await transport.SubscribeAsync(
-            allTopics,
-            (envelopeJson, topic) => DispatchAsync(envelopeJson, topic, topicConsumers, stoppingToken),
-            stoppingToken);
+            logger.LogInformation(
+                "Subscribing to {TopicCount} topic(s) on transport '{Transport}': {Topics}",
+                topics.Length, transportName, string.Join(", ", topics));
+
+            subscriptions.Add(transport.SubscribeAsync(
+                topics,
+                (envelopeJson, topic) => DispatchAsync(transport, envelopeJson, topic, topicConsumers, stoppingToken),
+                stoppingToken));
+        }
+
+        await Task.WhenAll(subscriptions);
+    }
+
+    private Dictionary<string, IMessagingTransport> BuildTransportMap()
+    {
+        var map = new Dictionary<string, IMessagingTransport>(StringComparer.Ordinal);
+        foreach (var transport in transports)
+        {
+            if (!map.TryAdd(transport.SystemName, transport))
+            {
+                throw new InvalidOperationException(
+                    $"Two registered transports report the same system name '{transport.SystemName}'. Multi-transport " +
+                    "consumers identify transports by their system name, so each registered transport must be unique.");
+            }
+        }
+
+        return map;
+    }
+
+    private static string DescribeTransports(IEnumerable<string> names)
+    {
+        var joined = string.Join(", ", names);
+        return joined.Length == 0 ? "(none)" : joined;
     }
 
     private async ValueTask<MessageDisposition> DispatchAsync(
+        IMessagingTransport transport,
         string envelopeJson,
         string topic,
         Dictionary<string, List<IMessageConsumer>> topicConsumers,
@@ -74,11 +129,11 @@ internal sealed class MessageConsumerHostedService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Malformed envelope on topic '{Topic}'. Dead-lettering.", topic);
-            using var malformedActivity = StartProcessActivity(topic, headers: null);
+            using var malformedActivity = StartProcessActivity(transport, topic, headers: null);
             malformedActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             try
             {
-                return await DeadLetterAsync(envelopeJson, topic, ex, attempts: 0, cancellationToken);
+                return await DeadLetterAsync(transport, envelopeJson, topic, ex, attempts: 0, cancellationToken);
             }
             finally
             {
@@ -87,7 +142,7 @@ internal sealed class MessageConsumerHostedService(
             }
         }
 
-        using var activity = StartProcessActivity(topic, context.Headers);
+        using var activity = StartProcessActivity(transport, topic, context.Headers);
         try
         {
             // Requeue wins outright (redeliver the whole message); otherwise a single dead-letter
@@ -95,7 +150,7 @@ internal sealed class MessageConsumerHostedService(
             var result = MessageDisposition.Acknowledge;
             foreach (var consumer in consumers)
             {
-                var disposition = await DispatchToConsumerAsync(consumer, context, envelopeJson, topic, cancellationToken);
+                var disposition = await DispatchToConsumerAsync(transport, consumer, context, envelopeJson, topic, cancellationToken);
                 if (disposition == MessageDisposition.Requeue)
                     return MessageDisposition.Requeue;
                 if (disposition == MessageDisposition.DeadLetter)
@@ -114,7 +169,7 @@ internal sealed class MessageConsumerHostedService(
         }
     }
 
-    private Activity? StartProcessActivity(string topic, IReadOnlyDictionary<string, string>? headers)
+    private static Activity? StartProcessActivity(IMessagingTransport transport, string topic, IReadOnlyDictionary<string, string>? headers)
     {
         string? traceParent = null;
         string? traceState = null;
@@ -149,6 +204,7 @@ internal sealed class MessageConsumerHostedService(
     }
 
     private async ValueTask<MessageDisposition> DispatchToConsumerAsync(
+        IMessagingTransport transport,
         IMessageConsumer consumer,
         MessageContext context,
         string envelopeJson,
@@ -168,7 +224,7 @@ internal sealed class MessageConsumerHostedService(
                 logger.LogWarning(ex,
                     "Consumer {Consumer} rejected message on '{Topic}' as poison. Dead-lettering.",
                     consumer.GetType().Name, topic);
-                return await DeadLetterAsync(envelopeJson, topic, ex, attempt, cancellationToken);
+                return await DeadLetterAsync(transport, envelopeJson, topic, ex, attempt, cancellationToken);
             }
             catch (Exception ex) when (attempt < retryOptions.MaxAttempts && !cancellationToken.IsCancellationRequested)
             {
@@ -191,7 +247,7 @@ internal sealed class MessageConsumerHostedService(
                 logger.LogError(ex,
                     "Consumer {Consumer} failed on '{Topic}' after {Attempt} attempt(s). Dead-lettering.",
                     consumer.GetType().Name, topic, attempt);
-                return await DeadLetterAsync(envelopeJson, topic, ex, attempt, cancellationToken);
+                return await DeadLetterAsync(transport, envelopeJson, topic, ex, attempt, cancellationToken);
             }
         }
     }
@@ -204,6 +260,7 @@ internal sealed class MessageConsumerHostedService(
     }
 
     private async ValueTask<MessageDisposition> DeadLetterAsync(
+        IMessagingTransport transport,
         string envelopeJson,
         string topic,
         Exception exception,

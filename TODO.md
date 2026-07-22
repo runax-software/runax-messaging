@@ -28,8 +28,3 @@ are flat). Sibling brokers to those already shipped by `runax-hookpipe`:
       them safely: carry a contract/version tag in the envelope, add resolver/upcaster hooks that
       migrate an older payload to the current type, and make (de)serialization backward/forward
       compatible so a consumer can accept more than one contract version.
-- [ ] **Multi-transport consumers.** Allow registering a single consumer against several brokers at
-      once — which may be *different* transports (e.g. RabbitMQ + SQS). Requires lifting the current
-      "exactly one `IMessagingTransport`" assumption to a keyed/named set of transports and letting a
-      consumer (or the hosted dispatcher) subscribe across more than one.
-

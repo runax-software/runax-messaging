@@ -24,7 +24,7 @@ public static class RedisHealthCheckExtensions
         IEnumerable<string>? tags = null)
         => builder.Add(new HealthCheckRegistration(
             name,
-            sp => new RedisHealthCheck(sp.GetRequiredService<IMessagingTransport>()),
+            sp => new RedisHealthCheck(sp.GetServices<IMessagingTransport>()),
             failureStatus,
             tags));
 }

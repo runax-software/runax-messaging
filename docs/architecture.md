@@ -146,6 +146,9 @@ idempotent). See the [package README](../src/Runax.Messaging.Outbox/README.md).
 ## Design rules
 
 - Transports depend on **Abstractions only**. Keep broker SDKs out of the core.
-- Exactly one transport is registered per configuration.
+- One or more transports may be registered, each identified by a distinct `SystemName`. A consumer
+  subscribes on every registered transport by default, or on a named subset; the hosted dispatcher
+  subscribes and dispatches each transport independently. `IMessagePublisher` targets the sole
+  transport, or the one chosen with `PublishTo("<system-name>")`.
 - Applications depend on `IMessagePublisher` (from Abstractions), not on any
   concrete transport.

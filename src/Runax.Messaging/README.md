@@ -23,7 +23,7 @@ builder.Services.AddRunaxMessaging(messaging => messaging
 ```
 
 `AddRunaxMessaging` registers the JSON serializer and `IMessagePublisher`, then
-invokes your configuration. Register exactly one transport. If any consumers are
+invokes your configuration. Register one or more transports. If any consumers are
 added, a hosted background service is registered to dispatch them — so consuming
 requires a .NET Generic Host.
 
@@ -61,6 +61,25 @@ public sealed class OrderPlacedConsumer : MessageConsumer<Order>
     }
 }
 ```
+
+## Multiple transports
+
+Register several transports (each identified by its `SystemName`) and a single consumer can receive its
+topic from more than one broker — even different ones:
+
+```csharp
+builder.Services.AddRunaxMessaging(messaging => messaging
+    .AddRabbitMq(o => o.HostName = "localhost")
+    .AddSqs(o => o.Region = "us-east-1")
+    .AddConsumer<OrderPlacedConsumer>()            // every registered transport
+    .AddConsumer<AuditConsumer>("rabbitmq")        // only RabbitMQ
+    .PublishTo("sqs"));                            // IMessagePublisher target
+```
+
+`AddConsumer<T>()` subscribes on all registered transports; pass one or more `SystemName`s to target
+specific brokers. Each transport is subscribed and dispatched independently. With more than one transport
+registered, `PublishTo("<system-name>")` selects the publish target (a single transport is used
+automatically). Each transport must report a distinct `SystemName`.
 
 ## Retries & dead-lettering
 

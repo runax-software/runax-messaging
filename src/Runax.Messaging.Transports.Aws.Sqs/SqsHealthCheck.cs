@@ -6,13 +6,13 @@ namespace Runax.Messaging.Transports.Aws.Sqs;
 /// <summary>
 /// Health check that reports whether the SQS transport can reach the queue service.
 /// </summary>
-internal sealed class SqsHealthCheck(IMessagingTransport transport) : IHealthCheck
+internal sealed class SqsHealthCheck(IEnumerable<IMessagingTransport> transports) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (transport is not SqsTransport sqs)
+        if (transports.OfType<SqsTransport>().FirstOrDefault() is not { } sqs)
             return HealthCheckResult.Unhealthy("The registered messaging transport is not SQS.");
 
         try

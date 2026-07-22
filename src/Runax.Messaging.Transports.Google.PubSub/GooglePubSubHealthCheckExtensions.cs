@@ -24,7 +24,7 @@ public static class GooglePubSubHealthCheckExtensions
         IEnumerable<string>? tags = null)
         => builder.Add(new HealthCheckRegistration(
             name,
-            sp => new GooglePubSubHealthCheck(sp.GetRequiredService<IMessagingTransport>()),
+            sp => new GooglePubSubHealthCheck(sp.GetServices<IMessagingTransport>()),
             failureStatus,
             tags));
 }

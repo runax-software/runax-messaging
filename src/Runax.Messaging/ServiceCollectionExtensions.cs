@@ -29,6 +29,7 @@ public static class ServiceCollectionExtensions
         // Resolve the configured JsonSerializerOptions (default when ConfigureSerialization was not called).
         services.TryAddSingleton(sp => sp.GetRequiredService<IOptions<JsonSerializerOptions>>().Value);
         services.TryAddSingleton<IMessageSerializer, JsonMessageSerializer>();
+        services.TryAddSingleton<MessagingPublishOptions>();
         services.TryAddSingleton<IMessagePublisher, MessagePublisherAdapter>();
 
         configure(new MessagingConfigurator(services));
