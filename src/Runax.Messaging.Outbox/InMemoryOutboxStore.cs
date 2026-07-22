@@ -19,7 +19,8 @@ public sealed class InMemoryOutboxStore : IOutboxStore
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<OutboxMessage>> GetPendingAsync(int maxCount, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<OutboxMessage>> GetPendingAsync(int maxCount,
+        CancellationToken cancellationToken = default)
     {
         IReadOnlyList<OutboxMessage> pending = _messages.Values
             .Where(m => m.DispatchedAt is null)
@@ -33,9 +34,7 @@ public sealed class InMemoryOutboxStore : IOutboxStore
     /// <inheritdoc />
     public Task MarkDispatchedAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        if (_messages.TryGetValue(id, out var message))
-            message.DispatchedAt = DateTimeOffset.UtcNow;
-
+        if (_messages.TryGetValue(id, out var message)) message.DispatchedAt = DateTimeOffset.UtcNow;
         return Task.CompletedTask;
     }
 }

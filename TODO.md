@@ -10,27 +10,26 @@ Full publish + subscribe transports (implement `IMessagingTransport`), under the
 are flat). Sibling brokers to those already shipped by `runax-hookpipe`:
 
 - [ ] **Kafka transport** (`Runax.Messaging.Transports.Kafka`). `Confluent.Kafka` is pinned in
-      `Directory.Packages.props` but has no project yet.
-- [ ] **Azure Service Bus transport** (`Runax.Messaging.Transports.Azure.ServiceBus`).
-      `Azure.Messaging.ServiceBus` is pinned in `Directory.Packages.props` but has no project yet.
+  ```
+  `Directory.Packages.props` but has no project yet.
+  ```
 - [ ] **Azure Event Hubs transport** (`Runax.Messaging.Transports.Azure.EventHubs`). Needs
-      `Azure.Messaging.EventHubs` pinned; consume via a consumer group + checkpoint store.
+  ```
+  `Azure.Messaging.EventHubs` pinned; consume via a consumer group + checkpoint store.
+  ```
+- [ ] `**Runax.Messaging.TestKit`.** The in-memory transport exists but is `internal`;
+  ```
+  expose a public test harness for asserting consumer behavior.
+  ```
 
-Publish-only / relay sinks that `runax-hookpipe` exposes but do **not** fit the bidirectional
-`IMessagingTransport` SPI (no poll/subscribe model). Revisit only if a publish-only transport
-abstraction is introduced: AWS EventBridge, HTTP relay, stdout.
+## Tier 6 — Contracts & advanced routing
 
-- [ ] **`Runax.Messaging.TestKit`.** The in-memory transport exists but is `internal`;
-      expose a public test harness for asserting consumer behavior.
+- [ ] **Message contracts + versioning.** Support declaring versioned message contracts and evolving
+      them safely: carry a contract/version tag in the envelope, add resolver/upcaster hooks that
+      migrate an older payload to the current type, and make (de)serialization backward/forward
+      compatible so a consumer can accept more than one contract version.
+- [ ] **Multi-transport consumers.** Allow registering a single consumer against several brokers at
+      once — which may be *different* transports (e.g. RabbitMQ + SQS). Requires lifting the current
+      "exactly one `IMessagingTransport`" assumption to a keyed/named set of transports and letting a
+      consumer (or the hosted dispatcher) subscribe across more than one.
 
----
-
-Note: Tiers 1–4 have landed and expanded the public/provider surface —
-`IMessagingTransport` now exposes `SystemName`, `PublishBatchAsync`, and a `SubscribeAsync` that
-returns a `MessageDisposition` including `DeadLetter`; `IMessagePublisher.PublishBatchAsync<T>`,
-`MessagingDiagnostics`, the per-transport health-check builder extensions, the `IConfiguration`-binding
-transport overloads, `ConfigureSerialization`, and the whole `Runax.Messaging.Outbox` package are also
-public. Review this surface before tagging `1.0` and freezing the API.
-
-Naming: transport packages now live under `Runax.Messaging.Transports.*` — the RabbitMQ and SQS
-packages were renamed to `Runax.Messaging.Transports.RabbitMq` and `Runax.Messaging.Transports.Aws.Sqs`.

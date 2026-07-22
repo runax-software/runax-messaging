@@ -35,3 +35,23 @@ services:
     image: redis:7-alpine
     ports:
       - "6380:6379"
+
+  # Azure Service Bus emulator (needs a SQL backend). AMQP mapped to :5673 to avoid the RabbitMQ 5672 clash.
+  servicebus:
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:latest
+    depends_on:
+      - sqledge
+    environment:
+      ACCEPT_EULA: "Y"
+      SQL_SERVER: sqledge
+      MSSQL_SA_PASSWORD: "Runax_Str0ng_P@ss!"
+    ports:
+      - "5673:5672"
+    volumes:
+      - ./docker/servicebus-config.json:/ServiceBus_Emulator/ConfigFiles/Config.json:ro
+
+  sqledge:
+    image: mcr.microsoft.com/azure-sql-edge:latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Runax_Str0ng_P@ss!"

@@ -39,6 +39,7 @@ internal sealed class OutboxPublisher(IMessageSerializer serializer, IOutboxStor
         CancellationToken cancellationToken)
     {
         var payload = serializer.Serialize(message, headers);
-        await store.AddAsync(new OutboxMessage { Topic = topic, Payload = payload }, cancellationToken).ConfigureAwait(false);
+        await store.AddAsync(new OutboxMessage { Topic = topic, Payload = payload }, cancellationToken)
+            .ConfigureAwait(false);
     }
 }

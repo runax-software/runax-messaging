@@ -28,6 +28,20 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-test
 
+    # One job per transport. Heavy emulators (Pub/Sub, Service Bus) start only for the job that needs them.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - transport: Aws.Sqs
+          - transport: Aws.Sns
+          - transport: RabbitMq
+          - transport: Redis
+          - transport: Google.PubSub
+            pubsub: true
+          - transport: Azure.ServiceBus
+            servicebus: true
+
     services:
       rabbitmq:
         image: rabbitmq:3-management-alpine
@@ -65,15 +79,21 @@ jobs:
       # The Pub/Sub emulator needs a start command, which GitHub service containers cannot set,
       # so run it as a container (same image and port as compose.yml).
       - name: Start Pub/Sub emulator
+        if: matrix.pubsub
         run: |
           docker run -d --name pubsub -p 8085:8085 \
             gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators \
             gcloud beta emulators pubsub start --project=runax-test --host-port=0.0.0.0:8085
           for _ in $(seq 1 30); do curl -sf http://localhost:8085 >/dev/null && break || sleep 2; done
 
-      # Run per transport project: a solution-wide run would report "zero tests ran"
-      # (exit 8) for projects that have no integration tests. Add new transports here.
-      - name: Integration tests
+      # The Service Bus emulator needs a SQL backend and a mounted config, so bring it up via compose.
+      - name: Start Service Bus emulator
+        if: matrix.servicebus
+        run: |
+          docker compose up -d sqledge servicebus
+          for _ in $(seq 1 60); do (exec 3<>/dev/tcp/localhost/5673) 2>/dev/null && break || sleep 3; done
+
+      - name: Integration tests (${{ matrix.transport }})
         env:
           RABBITMQ_HOST: localhost
           AWS_SERVICE_URL: http://localhost:4566
@@ -81,9 +101,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: test
           AWS_REGION: us-east-1
           PUBSUB_EMULATOR_HOST: localhost:8085
-        run: |
-          dotnet test --project tests/Runax.Messaging.Transports.Aws.Sqs.Tests/Runax.Messaging.Transports.Aws.Sqs.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"
-          dotnet test --project tests/Runax.Messaging.Transports.RabbitMq.Tests/Runax.Messaging.Transports.RabbitMq.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"
-          dotnet test --project tests/Runax.Messaging.Transports.Google.PubSub.Tests/Runax.Messaging.Transports.Google.PubSub.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"
-          dotnet test --project tests/Runax.Messaging.Transports.Redis.Tests/Runax.Messaging.Transports.Redis.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"
-          dotnet test --project tests/Runax.Messaging.Transports.Aws.Sns.Tests/Runax.Messaging.Transports.Aws.Sns.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"
+        run: >-
+          dotnet test
+          --project tests/Runax.Messaging.Transports.${{ matrix.transport }}.Tests/Runax.Messaging.Transports.${{ matrix.transport }}.Tests.csproj
+          --no-build --verbosity normal -- --filter-trait "Category=Integration"

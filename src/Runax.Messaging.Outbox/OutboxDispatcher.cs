@@ -27,8 +27,7 @@ internal sealed class OutboxDispatcher(
 
                 foreach (var message in pending)
                 {
-                    if (stoppingToken.IsCancellationRequested)
-                        break;
+                    if (stoppingToken.IsCancellationRequested) break;
 
                     await transport.PublishAsync(message.Topic, message.Payload, stoppingToken);
                     await store.MarkDispatchedAsync(message.Id, stoppingToken);

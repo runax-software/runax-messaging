@@ -6,6 +6,7 @@
     <Project Path="tests\Runax.Messaging.Transports.RabbitMq.Tests\Runax.Messaging.Transports.RabbitMq.Tests.csproj" Type="Classic C#" />
     <Project Path="tests\Runax.Messaging.Transports.Aws.Sns.Tests\Runax.Messaging.Transports.Aws.Sns.Tests.csproj" Type="Classic C#" />
     <Project Path="tests\Runax.Messaging.Transports.Aws.Sqs.Tests\Runax.Messaging.Transports.Aws.Sqs.Tests.csproj" Type="Classic C#" />
+    <Project Path="tests\Runax.Messaging.Transports.Azure.ServiceBus.Tests\Runax.Messaging.Transports.Azure.ServiceBus.Tests.csproj" Type="Classic C#" />
     <Project Path="tests\Runax.Messaging.Tests\Runax.Messaging.Tests.csproj" Type="Classic C#" />
   </Folder>
   <Project Path="src\Runax.Messaging.Abstractions\Runax.Messaging.Abstractions.csproj" Type="Classic C#" />
@@ -14,6 +15,7 @@
   <Project Path="src\Runax.Messaging.Transports.Redis\Runax.Messaging.Transports.Redis.csproj" Type="Classic C#" />
   <Project Path="src\Runax.Messaging.Transports.RabbitMq\Runax.Messaging.Transports.RabbitMq.csproj" Type="Classic C#" />
   <Project Path="src\Runax.Messaging.Transports.Aws.Sns\Runax.Messaging.Transports.Aws.Sns.csproj" Type="Classic C#" />
+  <Project Path="src\Runax.Messaging.Transports.Azure.ServiceBus\Runax.Messaging.Transports.Azure.ServiceBus.csproj" Type="Classic C#" />
   <Project Path="src\Runax.Messaging.Transports.Aws.Sqs\Runax.Messaging.Transports.Aws.Sqs.csproj" Type="Classic C#" />
   <Project Path="src\Runax.Messaging\Runax.Messaging.csproj" Type="Classic C#" />
 </Solution>

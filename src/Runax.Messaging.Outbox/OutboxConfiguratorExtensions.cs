@@ -27,8 +27,7 @@ public static class OutboxConfiguratorExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        if (configure is not null)
-            options.Configure(configure);
+        if (configure is not null) options.Configure(configure);
 
         configurator.Services.TryAddSingleton(sp => sp.GetRequiredService<IOptions<OutboxOptions>>().Value);
 
