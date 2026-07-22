@@ -91,7 +91,12 @@ jobs:
         if: matrix.servicebus
         run: |
           docker compose up -d sqledge servicebus
-          for _ in $(seq 1 60); do (exec 3<>/dev/tcp/localhost/5673) 2>/dev/null && break || sleep 3; done
+          # The emulator opens its AMQP port before it can serve requests, so a bare TCP check races
+          # startup and yields "connection reset by peer". Wait for its readiness log instead.
+          for _ in $(seq 1 60); do
+            docker compose logs servicebus 2>&1 | grep -q "Emulator Service is Successfully Up" && break
+            sleep 3
+          done
 
       - name: Integration tests (${{ matrix.transport }})
         env:
