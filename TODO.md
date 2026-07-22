@@ -15,9 +15,6 @@ are flat). Sibling brokers to those already shipped by `runax-hookpipe`:
       `Azure.Messaging.ServiceBus` is pinned in `Directory.Packages.props` but has no project yet.
 - [ ] **Azure Event Hubs transport** (`Runax.Messaging.Transports.Azure.EventHubs`). Needs
       `Azure.Messaging.EventHubs` pinned; consume via a consumer group + checkpoint store.
-- [ ] **AWS SNS transport** (`Runax.Messaging.Transports.Aws.Sns`). Needs
-      `AWSSDK.SimpleNotificationService` pinned. SNS fans out to subscribers, so pair it with SQS
-      for the consume side (SNS→SQS).
 
 Publish-only / relay sinks that `runax-hookpipe` exposes but do **not** fit the bidirectional
 `IMessagingTransport` SPI (no poll/subscribe model). Revisit only if a publish-only transport

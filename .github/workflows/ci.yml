@@ -39,6 +39,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      # floci emulates both SQS and SNS.
       floci:
         image: floci/floci:latest
         ports:
@@ -85,3 +86,4 @@ jobs:
           dotnet test --project tests/Runax.Messaging.Transports.RabbitMq.Tests/Runax.Messaging.Transports.RabbitMq.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"
           dotnet test --project tests/Runax.Messaging.Transports.Google.PubSub.Tests/Runax.Messaging.Transports.Google.PubSub.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"
           dotnet test --project tests/Runax.Messaging.Transports.Redis.Tests/Runax.Messaging.Transports.Redis.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"
+          dotnet test --project tests/Runax.Messaging.Transports.Aws.Sns.Tests/Runax.Messaging.Transports.Aws.Sns.Tests.csproj --no-build --verbosity normal -- --filter-trait "Category=Integration"

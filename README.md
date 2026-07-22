@@ -13,8 +13,8 @@ strongly-typed messages without coupling your application to a specific broker.
 - **Configurable** — validated options with `IConfiguration` binding and pluggable
   `JsonSerializerOptions`.
 - **Transactional outbox** — optional package for atomic database-write + publish.
-- **Transports** — RabbitMQ, Amazon SQS, Google Cloud Pub/Sub, Redis Streams (Redis/Valkey), and a
-  built-in in-memory transport.
+- **Transports** — RabbitMQ, Amazon SQS, Amazon SNS, Google Cloud Pub/Sub, Redis Streams
+  (Redis/Valkey), and a built-in in-memory transport.
 
 ## Packages
 
@@ -23,6 +23,7 @@ strongly-typed messages without coupling your application to a specific broker.
 | [`Runax.Messaging.Abstractions`](src/Runax.Messaging.Abstractions/README.md) | Contracts only: `IMessagePublisher`, the `IMessagingTransport` SPI, `MessageContext`, and the `MessagingConfigurator` builder. Reference this from application and transport code. |
 | [`Runax.Messaging`](src/Runax.Messaging/README.md) | Default implementation: DI wiring, JSON serialization, hosted consumers, and an in-memory transport. |
 | [`Runax.Messaging.Transports.Aws.Sqs`](src/Runax.Messaging.Transports.Aws.Sqs/README.md) | Amazon SQS transport. |
+| [`Runax.Messaging.Transports.Aws.Sns`](src/Runax.Messaging.Transports.Aws.Sns/README.md) | Amazon SNS transport (publish to SNS, consume via SQS). |
 | [`Runax.Messaging.Transports.RabbitMq`](src/Runax.Messaging.Transports.RabbitMq/README.md) | RabbitMQ transport. |
 | [`Runax.Messaging.Transports.Google.PubSub`](src/Runax.Messaging.Transports.Google.PubSub/README.md) | Google Cloud Pub/Sub transport. |
 | [`Runax.Messaging.Transports.Redis`](src/Runax.Messaging.Transports.Redis/README.md) | Redis Streams transport (Redis and Valkey). |

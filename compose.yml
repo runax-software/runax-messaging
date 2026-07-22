@@ -11,7 +11,7 @@ services:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
 
-  # SQS-compatible emulator (AWS endpoint on :4566).
+  # SQS + SNS emulator (AWS endpoint on :4566).
   floci:
     image: floci/floci:latest
     ports:
