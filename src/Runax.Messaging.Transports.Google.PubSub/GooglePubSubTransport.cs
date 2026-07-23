@@ -18,7 +18,9 @@ internal sealed class GooglePubSubTransport(GooglePubSubOptions options, ILogger
 {
     private readonly ConcurrentDictionary<string, Task<PublisherClient>> _publishers = new();
 
-    public string SystemName => "google_pubsub";
+    internal const string TransportName = "google_pubsub";
+
+    public string SystemName => TransportName;
 
     public async ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default)
     {

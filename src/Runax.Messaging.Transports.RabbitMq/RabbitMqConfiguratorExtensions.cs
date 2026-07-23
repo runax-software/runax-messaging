@@ -49,6 +49,23 @@ public static class RabbitMqConfiguratorExtensions
         return AddRabbitMqCore(configurator);
     }
 
+    /// <summary>
+    /// Registers RabbitMQ as the messaging transport and scopes consumers to it via the builder block.
+    /// </summary>
+    /// <param name="configurator">The messaging configurator.</param>
+    /// <param name="configure">Action to configure <see cref="RabbitMqOptions"/>.</param>
+    /// <param name="configureTransport">Block that registers consumers bound to this broker.</param>
+    /// <returns>The same configurator, to allow chaining.</returns>
+    public static MessagingConfigurator AddRabbitMq(
+        this MessagingConfigurator configurator,
+        Action<RabbitMqOptions> configure,
+        Action<TransportBuilder> configureTransport)
+    {
+        AddRabbitMq(configurator, configure);
+        configureTransport(new TransportBuilder(configurator.Services, RabbitMqTransport.TransportName));
+        return configurator;
+    }
+
     private static MessagingConfigurator AddRabbitMqCore(MessagingConfigurator configurator)
     {
         configurator.Services.TryAddSingleton(sp => sp.GetRequiredService<IOptions<RabbitMqOptions>>().Value);

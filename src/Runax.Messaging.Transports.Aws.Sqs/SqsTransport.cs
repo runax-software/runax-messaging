@@ -40,7 +40,9 @@ internal sealed class SqsTransport : IMessagingTransport, IDisposable
         });
     }
 
-    public string SystemName => "sqs";
+    internal const string TransportName = "sqs";
+
+    public string SystemName => TransportName;
 
     public async ValueTask PublishAsync(
         string topic,

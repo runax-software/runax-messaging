@@ -49,7 +49,9 @@ internal sealed class SnsTransport : IMessagingTransport, IDisposable
         });
     }
 
-    public string SystemName => "aws_sns";
+    internal const string TransportName = "aws_sns";
+
+    public string SystemName => TransportName;
 
     private bool HasStaticCredentials => !string.IsNullOrEmpty(_options.AccessKey) && !string.IsNullOrEmpty(_options.SecretKey);
 

@@ -3,6 +3,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Runax.Messaging.Abstractions;
+using Runax.Messaging.InMemory;
 using Runax.Messaging.Serialization;
 
 namespace Runax.Messaging.Tests;
@@ -181,5 +182,51 @@ public class MultiTransportTests
 
         b.Published.ShouldHaveSingleItem().Topic.ShouldBe("ping");
         a.Published.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_consumer_registered_in_a_transport_block_is_subscribed()
+    {
+        var collector = new Collector();
+        collector.Expect(1);
+
+        var builder = Host.CreateApplicationBuilder();
+        builder.Services.AddSingleton(collector);
+        builder.Services.AddRunaxMessaging(m => m.AddInMemory(mem => mem.AddConsumer<PingConsumer>()));
+        using var host = builder.Build();
+        await host.StartAsync();
+
+        await host.Services.GetRequiredService<IMessagePublisher>().PublishAsync("ping", new Ping("scoped"));
+
+        await collector.Completed.WaitAsync(TimeSpan.FromSeconds(5));
+        collector.Handled.ShouldContain("scoped");
+
+        await host.StopAsync();
+    }
+
+    [Fact]
+    public async Task The_same_consumer_bound_to_two_brokers_receives_from_both_as_one_instance()
+    {
+        var collector = new Collector();
+        collector.Expect(2);
+        var a = new RecordingTransport("broker-a");
+        var b = new RecordingTransport("broker-b");
+
+        using var host = await StartHostAsync(collector, m =>
+        {
+            new TransportBuilder(m.Services, "broker-a").AddConsumer<PingConsumer>();
+            new TransportBuilder(m.Services, "broker-b").AddConsumer<PingConsumer>();
+        }, a, b);
+
+        // Registered against two brokers, but a single instance handles both.
+        host.Services.GetServices<PingConsumer>().Count().ShouldBe(1);
+
+        await a.DeliverAsync("ping", Envelope(host, new Ping("from-a")));
+        await b.DeliverAsync("ping", Envelope(host, new Ping("from-b")));
+
+        await collector.Completed.WaitAsync(TimeSpan.FromSeconds(5));
+        collector.Handled.ShouldBe(["from-a", "from-b"], ignoreOrder: true);
+
+        await host.StopAsync();
     }
 }

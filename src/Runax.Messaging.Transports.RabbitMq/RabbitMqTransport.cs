@@ -30,7 +30,9 @@ internal sealed class RabbitMqTransport : IMessagingTransport, IDisposable
             cancellationToken => CreateChannelAsync(_options.PublisherConfirms, cancellationToken));
     }
 
-    public string SystemName => "rabbitmq";
+    internal const string TransportName = "rabbitmq";
+
+    public string SystemName => TransportName;
 
     public async ValueTask PublishAsync(
         string topic,

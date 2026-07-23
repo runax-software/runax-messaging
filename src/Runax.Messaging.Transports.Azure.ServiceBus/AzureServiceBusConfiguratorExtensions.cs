@@ -49,6 +49,23 @@ public static class AzureServiceBusConfiguratorExtensions
         return AddAzureServiceBusCore(configurator);
     }
 
+    /// <summary>
+    /// Registers Azure Service Bus as the messaging transport and scopes consumers to it via the builder block.
+    /// </summary>
+    /// <param name="configurator">The messaging configurator.</param>
+    /// <param name="configure">Action to configure <see cref="AzureServiceBusOptions"/>.</param>
+    /// <param name="configureTransport">Block that registers consumers bound to this broker.</param>
+    /// <returns>The same configurator, to allow chaining.</returns>
+    public static MessagingConfigurator AddAzureServiceBus(
+        this MessagingConfigurator configurator,
+        Action<AzureServiceBusOptions> configure,
+        Action<TransportBuilder> configureTransport)
+    {
+        AddAzureServiceBus(configurator, configure);
+        configureTransport(new TransportBuilder(configurator.Services, AzureServiceBusTransport.TransportName));
+        return configurator;
+    }
+
     private static MessagingConfigurator AddAzureServiceBusCore(MessagingConfigurator configurator)
     {
         configurator.Services.TryAddSingleton(sp => sp.GetRequiredService<IOptions<AzureServiceBusOptions>>().Value);

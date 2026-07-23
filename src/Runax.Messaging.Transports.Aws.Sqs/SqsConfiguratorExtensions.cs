@@ -49,6 +49,23 @@ public static class SqsConfiguratorExtensions
         return AddSqsCore(configurator);
     }
 
+    /// <summary>
+    /// Registers Amazon SQS as the messaging transport and scopes consumers to it via the builder block.
+    /// </summary>
+    /// <param name="configurator">The messaging configurator.</param>
+    /// <param name="configure">Action to configure <see cref="SqsOptions"/>.</param>
+    /// <param name="configureTransport">Block that registers consumers bound to this broker.</param>
+    /// <returns>The same configurator, to allow chaining.</returns>
+    public static MessagingConfigurator AddSqs(
+        this MessagingConfigurator configurator,
+        Action<SqsOptions> configure,
+        Action<TransportBuilder> configureTransport)
+    {
+        AddSqs(configurator, configure);
+        configureTransport(new TransportBuilder(configurator.Services, SqsTransport.TransportName));
+        return configurator;
+    }
+
     private static MessagingConfigurator AddSqsCore(MessagingConfigurator configurator)
     {
         configurator.Services.TryAddSingleton(sp => sp.GetRequiredService<IOptions<SqsOptions>>().Value);

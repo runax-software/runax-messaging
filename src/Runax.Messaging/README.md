@@ -69,16 +69,17 @@ topic from more than one broker — even different ones:
 
 ```csharp
 builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddRabbitMq(o => o.HostName = "localhost")
+    .AddRabbitMq(o => o.HostName = "localhost",
+        rabbit => rabbit.AddConsumer<AuditConsumer>())   // scoped: only RabbitMQ
     .AddSqs(o => o.Region = "us-east-1")
-    .AddConsumer<OrderPlacedConsumer>()            // every registered transport
-    .AddConsumer<AuditConsumer>("rabbitmq")        // only RabbitMQ
-    .PublishTo("sqs"));                            // IMessagePublisher target
+    .AddConsumer<OrderPlacedConsumer>()                  // top-level: every registered transport
+    .PublishTo("sqs"));                                  // IMessagePublisher target
 ```
 
-`AddConsumer<T>()` subscribes on all registered transports; pass one or more `SystemName`s to target
-specific brokers. Each transport is subscribed and dispatched independently. With more than one transport
-registered, `PublishTo("<system-name>")` selects the publish target (a single transport is used
+A consumer registered inside a transport's block binds to that broker; a top-level `AddConsumer<T>()`
+subscribes on every registered transport. Register the same consumer under two brokers to consume from both
+(it stays a single instance). Each transport is subscribed and dispatched independently. With more than one
+transport registered, `PublishTo("<system-name>")` selects the publish target (a single transport is used
 automatically). Each transport must report a distinct `SystemName`.
 
 ## Retries & dead-lettering

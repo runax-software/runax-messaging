@@ -18,4 +18,19 @@ public static class InMemoryConfiguratorExtensions
         configurator.Services.AddSingleton<IMessagingTransport, InMemoryTransport>();
         return configurator;
     }
+
+    /// <summary>
+    /// Registers the in-process transport and scopes consumers to it via the builder block.
+    /// </summary>
+    /// <param name="configurator">The messaging configurator.</param>
+    /// <param name="configureTransport">Block that registers consumers bound to this transport.</param>
+    /// <returns>The same configurator, to allow chaining.</returns>
+    public static MessagingConfigurator AddInMemory(
+        this MessagingConfigurator configurator,
+        Action<TransportBuilder> configureTransport)
+    {
+        AddInMemory(configurator);
+        configureTransport(new TransportBuilder(configurator.Services, InMemoryTransport.TransportName));
+        return configurator;
+    }
 }

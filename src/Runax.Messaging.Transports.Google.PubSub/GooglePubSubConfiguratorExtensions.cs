@@ -49,6 +49,23 @@ public static class GooglePubSubConfiguratorExtensions
         return AddGooglePubSubCore(configurator);
     }
 
+    /// <summary>
+    /// Registers Google Cloud Pub/Sub as the messaging transport and scopes consumers to it via the builder block.
+    /// </summary>
+    /// <param name="configurator">The messaging configurator.</param>
+    /// <param name="configure">Action to configure <see cref="GooglePubSubOptions"/>.</param>
+    /// <param name="configureTransport">Block that registers consumers bound to this broker.</param>
+    /// <returns>The same configurator, to allow chaining.</returns>
+    public static MessagingConfigurator AddGooglePubSub(
+        this MessagingConfigurator configurator,
+        Action<GooglePubSubOptions> configure,
+        Action<TransportBuilder> configureTransport)
+    {
+        AddGooglePubSub(configurator, configure);
+        configureTransport(new TransportBuilder(configurator.Services, GooglePubSubTransport.TransportName));
+        return configurator;
+    }
+
     private static MessagingConfigurator AddGooglePubSubCore(MessagingConfigurator configurator)
     {
         configurator.Services.TryAddSingleton(sp => sp.GetRequiredService<IOptions<GooglePubSubOptions>>().Value);

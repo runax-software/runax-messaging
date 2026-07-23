@@ -28,7 +28,9 @@ internal sealed class RedisTransport : IMessagingTransport, IDisposable
             async () => await ConnectionMultiplexer.ConnectAsync(_options.Configuration).ConfigureAwait(false));
     }
 
-    public string SystemName => "redis";
+    internal const string TransportName = "redis";
+
+    public string SystemName => TransportName;
 
     public async ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default)
     {

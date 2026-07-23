@@ -25,7 +25,9 @@ internal sealed class AzureServiceBusTransport : IMessagingTransport, IDisposabl
         _client = new ServiceBusClient(options.ConnectionString);
     }
 
-    public string SystemName => "servicebus";
+    internal const string TransportName = "servicebus";
+
+    public string SystemName => TransportName;
 
     public async ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default)
     {

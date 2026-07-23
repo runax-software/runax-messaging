@@ -49,6 +49,23 @@ public static class RedisConfiguratorExtensions
         return AddRedisCore(configurator);
     }
 
+    /// <summary>
+    /// Registers Redis as the messaging transport and scopes consumers to it via the builder block.
+    /// </summary>
+    /// <param name="configurator">The messaging configurator.</param>
+    /// <param name="configure">Action to configure <see cref="RedisOptions"/>.</param>
+    /// <param name="configureTransport">Block that registers consumers bound to this broker.</param>
+    /// <returns>The same configurator, to allow chaining.</returns>
+    public static MessagingConfigurator AddRedis(
+        this MessagingConfigurator configurator,
+        Action<RedisOptions> configure,
+        Action<TransportBuilder> configureTransport)
+    {
+        AddRedis(configurator, configure);
+        configureTransport(new TransportBuilder(configurator.Services, RedisTransport.TransportName));
+        return configurator;
+    }
+
     private static MessagingConfigurator AddRedisCore(MessagingConfigurator configurator)
     {
         configurator.Services.TryAddSingleton(sp => sp.GetRequiredService<IOptions<RedisOptions>>().Value);

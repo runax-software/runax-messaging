@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Runax.Messaging.Abstractions;
 using Runax.Messaging.Consumers;
 using Runax.Messaging.Serialization;
@@ -28,13 +29,33 @@ public static class MessagingConfiguratorExtensions
         params string[] transports)
         where TConsumer : class
     {
-        configurator.Services.AddSingleton<TConsumer>();
+        configurator.Services.TryAddSingleton<TConsumer>();
         configurator.Services.AddSingleton(new ConsumerRegistration
         {
             ConsumerType = typeof(TConsumer),
             Transports = transports.Length > 0 ? transports : null,
         });
         return configurator;
+    }
+
+    /// <summary>
+    /// Registers a consumer scoped to a single transport. Call this inside a transport's configuration block
+    /// (e.g. <c>AddRabbitMq(o =&gt; ..., rabbit =&gt; rabbit.AddConsumer&lt;T&gt;())</c>) so the consumer
+    /// subscribes only on that broker. Register the same consumer under two transports to consume from both.
+    /// </summary>
+    /// <typeparam name="TConsumer">The consumer type to register.</typeparam>
+    /// <param name="builder">The transport builder for the broker to subscribe on.</param>
+    /// <returns>The same builder, to allow chaining.</returns>
+    public static TransportBuilder AddConsumer<TConsumer>(this TransportBuilder builder)
+        where TConsumer : class
+    {
+        builder.Services.TryAddSingleton<TConsumer>();
+        builder.Services.AddSingleton(new ConsumerRegistration
+        {
+            ConsumerType = typeof(TConsumer),
+            Transports = [builder.TransportName],
+        });
+        return builder;
     }
 
     /// <summary>
