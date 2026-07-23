@@ -124,36 +124,104 @@ The same options are applied on both publish and consume.
 
 ## Contract versioning
 
-Versioning is opt-in. Tag a message type with `[MessageContract(version)]` and the version travels in the
-envelope; consumers subscribe **one per version**, so several versions coexist on the same topic:
+Message shapes change over time — you add a field, rename one, drop another. Versioning lets the old and new
+shapes flow over the same topic while old and new consumers run side by side, so you can roll a change out
+without a coordinated big-bang deploy. It's **opt-in**: add nothing and every consumer keeps receiving every
+message on its topic, exactly as before.
+
+### 1. Put a version on the message type
+
+The publisher reads it and stamps it into the envelope for you — your publishing code doesn't change.
 
 ```csharp
 [MessageContract(1)] public sealed record OrderV1(int Id, string Coupon);
-[MessageContract(2)] public sealed record OrderV2(int Id, string Currency);
-
-public sealed class OrderV1Consumer : MessageConsumer<OrderV1> { public override string Topic => "orders.placed"; }
-public sealed class OrderV2Consumer : MessageConsumer<OrderV2> { public override string Topic => "orders.placed"; }
+[MessageContract(2)] public sealed record OrderV2(int Id, string Currency);   // dropped Coupon, added Currency
 ```
 
-A `v1` message reaches only `OrderV1Consumer` (with full fidelity — its `Coupon` field intact); a `v2`
-message reaches only `OrderV2Consumer`. A consumer with no `[MessageContract]` on its message type is
-unversioned and receives every message on its topic (the pre-versioning behavior), so mixing is fine.
+### 2. Write one consumer per version
 
-When a message arrives whose version **no** consumer handles, a pluggable strategy decides — it is never
-silently dropped:
+Both subscribe to the same topic:
+
+```csharp
+public sealed class OrderV1Consumer : MessageConsumer<OrderV1>
+{
+    public override string Topic => "orders.placed";
+    protected override ValueTask HandleAsync(OrderV1 order, CancellationToken ct) { /* ... */ }
+}
+
+public sealed class OrderV2Consumer : MessageConsumer<OrderV2>
+{
+    public override string Topic => "orders.placed";
+    protected override ValueTask HandleAsync(OrderV2 order, CancellationToken ct) { /* ... */ }
+}
+
+messaging
+    .AddRabbitMq(o => o.HostName = "localhost")
+    .AddConsumer<OrderV1Consumer>()
+    .AddConsumer<OrderV2Consumer>();
+```
+
+Runax routes each message to the consumer for **its** version: a `v1` message goes only to `OrderV1Consumer`,
+a `v2` message only to `OrderV2Consumer`. Each consumer receives its own exact type, so `OrderV1Consumer` still
+sees the `Coupon` field that `v2` removed — nothing is lost in translation.
+
+> **No attribute = unversioned.** A consumer whose message type has no `[MessageContract]` receives *every*
+> message on its topic, whatever the version. That's the original behaviour and your escape hatch when you
+> don't want per-version routing.
+
+### Rolling out a new version
+
+1. Deploy your app with **both** `OrderV1Consumer` and `OrderV2Consumer`. It now handles either version.
+2. Switch the producer to publish `OrderV2`. New messages go to the v2 consumer; any in-flight `v1` messages
+   still go to the v1 consumer.
+3. When no `v1` messages remain, delete `OrderV1Consumer` and `OrderV1`.
+
+The rule of thumb: **deploy consumers before the producer starts sending the new version.** The next section
+covers what happens if a version shows up that you don't handle yet.
+
+### What happens to a version nobody handles
+
+If a message arrives whose version no consumer accepts — e.g. a `v2` order reaches an app that still only has
+the `v1` consumer — it is **never silently dropped**. You choose the outcome:
 
 ```csharp
 messaging
-    .AddRabbitMq(o => o.HostName = "localhost")
-    .AddConsumer<OrderV2Consumer>()
-    .OnUnroutableMessage(UnroutableStrategy.DeadLetter);   // default; or Requeue / Discard
+    .AddConsumer<OrderV1Consumer>()
+    .OnUnroutableMessage(UnroutableStrategy.DeadLetter);   // this is the default
 ```
 
-For custom behavior (forward to a quarantine topic, alert, …) implement `IUnroutableMessageHandler` and
-register it with `OnUnroutableMessage<MyHandler>()`; return the disposition the transport should apply.
+| Strategy | What it does |
+| --- | --- |
+| `DeadLetter` *(default)* | Dead-letters it through your `DeadLetterStrategy` (a `{topic}.dead-letter` topic, or the broker's native DLQ). Redrive it once the missing consumer ships — nothing is lost. |
+| `Requeue` | Puts it back for redelivery. Only safe when the consumer is about to appear — otherwise it loops forever. |
+| `Discard` | Acknowledges and drops it. |
 
-Inject `IMessageContractCatalog` to check coverage at startup — e.g. `catalog.Accepts("orders.placed", 1)`
-— before letting a producer emit a new version.
+Need something else — forward to a quarantine topic, page on-call, log and move on? Implement
+`IUnroutableMessageHandler` and return the disposition the transport should apply:
+
+```csharp
+public sealed class AlertingUnroutableHandler(ILogger<AlertingUnroutableHandler> logger) : IUnroutableMessageHandler
+{
+    public ValueTask<MessageDisposition> HandleAsync(UnroutableMessage message, CancellationToken ct)
+    {
+        logger.LogWarning("Unhandled contract version {Version} on '{Topic}'", message.ContractVersion, message.Topic);
+        return ValueTask.FromResult(MessageDisposition.DeadLetter);   // then still dead-letter it
+    }
+}
+
+messaging.OnUnroutableMessage<AlertingUnroutableHandler>();
+```
+
+### Check what you handle before switching a producer
+
+`IMessageContractCatalog` reports the `(topic, version)` pairs your app consumes, so you can fail fast if a
+consumer is missing:
+
+```csharp
+var catalog = host.Services.GetRequiredService<IMessageContractCatalog>();
+if (!catalog.Accepts("orders.placed", 2))
+    throw new InvalidOperationException("Deploy the v2 consumer before publishing v2 orders.");
+```
 
 ## Observability
 
