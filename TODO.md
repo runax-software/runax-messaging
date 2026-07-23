@@ -10,21 +10,14 @@ Full publish + subscribe transports (implement `IMessagingTransport`), under the
 are flat). Sibling brokers to those already shipped by `runax-hookpipe`:
 
 - [ ] **Kafka transport** (`Runax.Messaging.Transports.Kafka`). `Confluent.Kafka` is pinned in
-  ```
-  `Directory.Packages.props` but has no project yet.
-  ```
+    ```
+    `Directory.Packages.props` but has no project yet.
+    ```
 - [ ] **Azure Event Hubs transport** (`Runax.Messaging.Transports.Azure.EventHubs`). Needs
-  ```
-  `Azure.Messaging.EventHubs` pinned; consume via a consumer group + checkpoint store.
-  ```
-- [ ] `**Runax.Messaging.TestKit`.** The in-memory transport exists but is `internal`;
-  ```
-  expose a public test harness for asserting consumer behavior.
-  ```
-
-## Tier 6 — Contracts & advanced routing
-
-- [ ] **Message contracts + versioning.** Support declaring versioned message contracts and evolving
-      them safely: carry a contract/version tag in the envelope, add resolver/upcaster hooks that
-      migrate an older payload to the current type, and make (de)serialization backward/forward
-      compatible so a consumer can accept more than one contract version.
+    ```
+    `Azure.Messaging.EventHubs` pinned; consume via a consumer group + checkpoint store.
+    ```
+- [ ] `**Runax.Messaging.TestKit`.\*\* The in-memory transport exists but is `internal`;
+    ```
+    expose a public test harness for asserting consumer behavior.
+    ```

@@ -122,6 +122,39 @@ builder.Services.AddRunaxMessaging(messaging => messaging
 
 The same options are applied on both publish and consume.
 
+## Contract versioning
+
+Versioning is opt-in. Tag a message type with `[MessageContract(version)]` and the version travels in the
+envelope; consumers subscribe **one per version**, so several versions coexist on the same topic:
+
+```csharp
+[MessageContract(1)] public sealed record OrderV1(int Id, string Coupon);
+[MessageContract(2)] public sealed record OrderV2(int Id, string Currency);
+
+public sealed class OrderV1Consumer : MessageConsumer<OrderV1> { public override string Topic => "orders.placed"; }
+public sealed class OrderV2Consumer : MessageConsumer<OrderV2> { public override string Topic => "orders.placed"; }
+```
+
+A `v1` message reaches only `OrderV1Consumer` (with full fidelity — its `Coupon` field intact); a `v2`
+message reaches only `OrderV2Consumer`. A consumer with no `[MessageContract]` on its message type is
+unversioned and receives every message on its topic (the pre-versioning behavior), so mixing is fine.
+
+When a message arrives whose version **no** consumer handles, a pluggable strategy decides — it is never
+silently dropped:
+
+```csharp
+messaging
+    .AddRabbitMq(o => o.HostName = "localhost")
+    .AddConsumer<OrderV2Consumer>()
+    .OnUnroutableMessage(UnroutableStrategy.DeadLetter);   // default; or Requeue / Discard
+```
+
+For custom behavior (forward to a quarantine topic, alert, …) implement `IUnroutableMessageHandler` and
+register it with `OnUnroutableMessage<MyHandler>()`; return the disposition the transport should apply.
+
+Inject `IMessageContractCatalog` to check coverage at startup — e.g. `catalog.Accepts("orders.placed", 1)`
+— before letting a producer emit a new version.
+
 ## Observability
 
 Publish and consume are instrumented with the in-box `System.Diagnostics`

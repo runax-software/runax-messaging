@@ -31,6 +31,8 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IMessageSerializer, JsonMessageSerializer>();
         services.TryAddSingleton<MessagingPublishOptions>();
         services.TryAddSingleton<IMessagePublisher, MessagePublisherAdapter>();
+        services.TryAddSingleton<IUnroutableMessageHandler, DeadLetterUnroutableHandler>();
+        services.TryAddSingleton<IMessageContractCatalog, MessageContractCatalog>();
 
         configure(new MessagingConfigurator(services));
 

@@ -26,6 +26,8 @@ public abstract class MessageConsumer<TMessage> : IMessageConsumer
 
     string IMessageConsumer.Topic => Topic;
 
+    int? IMessageConsumer.ContractVersion => MessageContractCache.For(typeof(TMessage))?.Version;
+
     ValueTask IMessageConsumer.HandleAsync(MessageContext context, CancellationToken cancellationToken)
     {
         var message = context.Deserialize<TMessage>()

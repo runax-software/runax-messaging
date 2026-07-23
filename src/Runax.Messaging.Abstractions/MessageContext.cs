@@ -23,6 +23,17 @@ public sealed class MessageContext
     public required IReadOnlyDictionary<string, string> Headers { get; init; }
 
     /// <summary>
+    /// Gets the contract name carried in the envelope, or <see langword="null"/> for an unversioned
+    /// message or one whose contract left the name unset (the topic is then the effective identity).
+    /// </summary>
+    public string? ContractName { get; init; }
+
+    /// <summary>
+    /// Gets the contract version carried in the envelope, or <see langword="null"/> for an unversioned message.
+    /// </summary>
+    public int? ContractVersion { get; init; }
+
+    /// <summary>
     /// Gets the JSON options used to deserialize the body, threaded through from the configured serializer.
     /// When <see langword="null"/>, default options are used.
     /// </summary>

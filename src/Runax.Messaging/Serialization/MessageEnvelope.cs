@@ -11,6 +11,16 @@ internal sealed class MessageEnvelope
     public string? MessageType { get; init; }
 
     /// <summary>
+    /// Gets or sets the contract name, when the payload is a versioned contract with an explicit name.
+    /// </summary>
+    public string? Contract { get; init; }
+
+    /// <summary>
+    /// Gets or sets the contract version, when the payload is a versioned contract.
+    /// </summary>
+    public int? ContractVersion { get; init; }
+
+    /// <summary>
     /// Gets or sets the JSON-serialized message body.
     /// </summary>
     public string? Body { get; init; }

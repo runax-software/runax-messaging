@@ -50,6 +50,41 @@ public static class MessagingConfiguratorExtensions
     }
 
     /// <summary>
+    /// Selects a built-in strategy for messages that no registered consumer accepts (an unhandled contract
+    /// version). Defaults to <see cref="UnroutableStrategy.DeadLetter"/> when not configured.
+    /// </summary>
+    /// <param name="configurator">The messaging configurator.</param>
+    /// <param name="strategy">The strategy to apply.</param>
+    /// <returns>The same configurator, to allow chaining.</returns>
+    public static MessagingConfigurator OnUnroutableMessage(
+        this MessagingConfigurator configurator,
+        UnroutableStrategy strategy)
+    {
+        configurator.Services.AddSingleton<IUnroutableMessageHandler>(_ => strategy switch
+        {
+            UnroutableStrategy.Requeue => new RequeueUnroutableHandler(),
+            UnroutableStrategy.Discard => new DiscardUnroutableHandler(),
+            _ => new DeadLetterUnroutableHandler(),
+        });
+
+        return configurator;
+    }
+
+    /// <summary>
+    /// Registers a custom <see cref="IUnroutableMessageHandler"/> for messages that no registered consumer
+    /// accepts — for example to forward them to a quarantine topic or raise an alert.
+    /// </summary>
+    /// <typeparam name="THandler">The handler implementation.</typeparam>
+    /// <param name="configurator">The messaging configurator.</param>
+    /// <returns>The same configurator, to allow chaining.</returns>
+    public static MessagingConfigurator OnUnroutableMessage<THandler>(this MessagingConfigurator configurator)
+        where THandler : class, IUnroutableMessageHandler
+    {
+        configurator.Services.AddSingleton<IUnroutableMessageHandler, THandler>();
+        return configurator;
+    }
+
+    /// <summary>
     /// Configures the retry and dead-letter policy applied to all consumers.
     /// </summary>
     /// <param name="configurator">The messaging configurator.</param>

@@ -20,6 +20,7 @@ internal sealed class MessageConsumerHostedService(
     IEnumerable<ConsumerRegistration> registrations,
     IEnumerable<IMessagingTransport> transports,
     IMessageSerializer serializer,
+    IUnroutableMessageHandler unroutableHandler,
     RetryOptions retryOptions,
     ILogger<MessageConsumerHostedService> logger)
     : BackgroundService
@@ -142,13 +143,29 @@ internal sealed class MessageConsumerHostedService(
             }
         }
 
+        // Versioned consumers accept only their contract version; an unversioned consumer accepts every
+        // message on the topic. If none match, the message is unroutable and the configured strategy decides.
+        var matched = MatchConsumers(consumers, context.ContractVersion);
+        if (matched.Count == 0)
+        {
+            try
+            {
+                return await HandleUnroutableAsync(transport, context, envelopeJson, cancellationToken);
+            }
+            finally
+            {
+                MessagingDiagnostics.ProcessingDuration.Record(
+                    Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds, tags);
+            }
+        }
+
         using var activity = StartProcessActivity(transport, topic, context.Headers);
         try
         {
             // Requeue wins outright (redeliver the whole message); otherwise a single dead-letter
             // verdict escalates the message away from a plain acknowledge.
             var result = MessageDisposition.Acknowledge;
-            foreach (var consumer in consumers)
+            foreach (var consumer in matched)
             {
                 var disposition = await DispatchToConsumerAsync(transport, consumer, context, envelopeJson, topic, cancellationToken);
                 if (disposition == MessageDisposition.Requeue)
@@ -167,6 +184,49 @@ internal sealed class MessageConsumerHostedService(
             MessagingDiagnostics.ProcessingDuration.Record(
                 Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds, tags);
         }
+    }
+
+    private static List<IMessageConsumer> MatchConsumers(List<IMessageConsumer> consumers, int? wireVersion)
+    {
+        var matched = new List<IMessageConsumer>(consumers.Count);
+        foreach (var consumer in consumers)
+        {
+            if (consumer.ContractVersion is null || consumer.ContractVersion == wireVersion)
+                matched.Add(consumer);
+        }
+
+        return matched;
+    }
+
+    private async ValueTask<MessageDisposition> HandleUnroutableAsync(
+        IMessagingTransport transport,
+        MessageContext context,
+        string envelopeJson,
+        CancellationToken cancellationToken)
+    {
+        logger.LogWarning(
+            "No consumer accepts contract version {Version} on topic '{Topic}' (transport '{Transport}').",
+            context.ContractVersion, context.Topic, transport.SystemName);
+
+        var unroutable = new UnroutableMessage
+        {
+            Topic = context.Topic,
+            ContractName = context.ContractName,
+            ContractVersion = context.ContractVersion,
+            Body = context.Body,
+            Headers = context.Headers,
+            TransportSystemName = transport.SystemName,
+        };
+
+        var disposition = await unroutableHandler.HandleAsync(unroutable, cancellationToken);
+
+        if (disposition == MessageDisposition.DeadLetter)
+        {
+            var reason = new UnroutableMessageException(context.Topic, context.ContractVersion);
+            return await DeadLetterAsync(transport, envelopeJson, context.Topic, reason, attempts: 0, cancellationToken);
+        }
+
+        return disposition;
     }
 
     private static Activity? StartProcessActivity(IMessagingTransport transport, string topic, IReadOnlyDictionary<string, string>? headers)

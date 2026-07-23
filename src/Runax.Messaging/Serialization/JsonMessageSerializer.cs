@@ -15,9 +15,13 @@ internal sealed class JsonMessageSerializer(JsonSerializerOptions? bodyOptions =
     /// <inheritdoc />
     public string Serialize<TMessage>(TMessage message, IDictionary<string, string>? headers)
     {
+        var contract = MessageContractCache.For(typeof(TMessage));
+
         return JsonSerializer.Serialize(new MessageEnvelope
         {
             MessageType = typeof(TMessage).AssemblyQualifiedName,
+            Contract = contract?.Name,
+            ContractVersion = contract?.Version,
             Body = JsonSerializer.Serialize(message, _bodyOptions),
             Headers = headers is not null
                 ? new Dictionary<string, string>(headers)
@@ -38,6 +42,8 @@ internal sealed class JsonMessageSerializer(JsonSerializerOptions? bodyOptions =
             Headers = envelope.Headers is not null
                 ? new Dictionary<string, string>(envelope.Headers)
                 : new Dictionary<string, string>(),
+            ContractName = envelope.Contract,
+            ContractVersion = envelope.ContractVersion,
             SerializerOptions = _bodyOptions,
         };
     }
@@ -58,6 +64,8 @@ internal sealed class JsonMessageSerializer(JsonSerializerOptions? bodyOptions =
         return JsonSerializer.Serialize(new MessageEnvelope
         {
             MessageType = envelope.MessageType,
+            Contract = envelope.Contract,
+            ContractVersion = envelope.ContractVersion,
             Body = envelope.Body,
             Headers = merged,
         });

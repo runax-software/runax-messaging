@@ -12,6 +12,8 @@ strongly-typed messages without coupling your application to a specific broker.
 - **Throughput** — batch publish and concurrent SQS consumption.
 - **Configurable** — validated options with `IConfiguration` binding and pluggable
   `JsonSerializerOptions`.
+- **Contract versioning** — optional `[MessageContract(version)]`; consumers subscribe per version, with a
+  pluggable strategy (dead-letter/requeue/custom) for versions no consumer handles.
 - **Transactional outbox** — optional package for atomic database-write + publish.
 - **Transports** — RabbitMQ, Amazon SQS, Amazon SNS, Azure Service Bus, Google Cloud Pub/Sub,
   Redis Streams (Redis/Valkey), and a built-in in-memory transport.

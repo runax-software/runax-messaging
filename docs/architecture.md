@@ -31,6 +31,9 @@ Runax.Messaging      Runax.Messaging.Transports.Aws.Sqs / .RabbitMq / <your tran
 | `MessageContext` | Abstractions | A received message (topic, body, headers) with `Deserialize<T>()`. |
 | `MessageDisposition` | Abstractions | The verdict a transport applies after dispatch: `Acknowledge`, `Requeue`, or `DeadLetter`. |
 | `PoisonMessageException` | Abstractions | Thrown by a consumer to skip retries and dead-letter the message immediately. |
+| `MessageContractAttribute` | Abstractions | Opt-in `[MessageContract(version)]` declaring a message type's contract version (and optional name). |
+| `IUnroutableMessageHandler` | Abstractions | Decides the fate of a message no consumer accepts; built-ins via `OnUnroutableMessage(...)`. |
+| `IMessageContractCatalog` | Core | Introspects which topics/versions the app handles (`Handled`, `Accepts(topic, version)`). |
 | `MessagingConfigurator` | Abstractions | Fluent builder; transports and consumers attach via extensions. |
 | `RetryOptions` / `DeadLetterStrategy` | Core | Retry backoff and dead-letter policy applied by the dispatcher (`WithRetry`). |
 | `MessagingDiagnostics` | Core | The `ActivitySource` and `Meter` names for tracing and metrics. |
@@ -46,6 +49,8 @@ Messages travel wrapped in an envelope so metadata rides alongside the payload:
 ```json
 {
   "MessageType": "MyApp.Order, MyApp",
+  "Contract": "orders.placed",
+  "ContractVersion": 2,
   "Body": "{\"Id\":1,\"Name\":\"widget\"}",
   "Headers": { "correlation-id": "abc" }
 }
@@ -53,7 +58,9 @@ Messages travel wrapped in an envelope so metadata rides alongside the payload:
 
 `Body` is the JSON-serialized message; `Headers` carries transport-level
 metadata. The transport only ever sees the serialized envelope string — it never
-needs to know your message types.
+needs to know your message types. `Contract` / `ContractVersion` are present only
+when the message type carries `[MessageContract]` (see [Contract versioning](#contract-versioning));
+they are `null` otherwise, so the format stays backward compatible.
 
 ## Publish flow
 
@@ -73,6 +80,8 @@ Host starts → MessageConsumerHostedService.ExecuteAsync
         └─ IMessagingTransport.SubscribeAsync(topics, onMessage) ──▶ returns MessageDisposition
                 └─ per message:
                         ├─ deserialize envelope → MessageContext; extract trace context → consumer span
+                        ├─ select the topic's consumers matching the contract version (see below)
+                        │       └─ none match → IUnroutableMessageHandler decides (dead-letter by default)
                         ├─ MessageConsumer<T>: deserialize Body → T → HandleAsync(T)
                         │       └─ on failure: retry with backoff, then dead-letter (see below)
                         └─ return Acknowledge / Requeue / DeadLetter to the transport
@@ -81,6 +90,23 @@ Host starts → MessageConsumerHostedService.ExecuteAsync
 Consumers are ordinary DI singletons. Dispatch runs inside a hosted
 `BackgroundService`, so consuming requires a .NET Generic Host. Publishing has no
 such requirement.
+
+## Contract versioning
+
+Versioning is opt-in and envelope-level, so it is transport-agnostic and composes with everything above.
+
+- **Identity.** `[MessageContract(version)]` on a message type stamps `Contract` (the optional name, else
+  the topic is the effective identity) and `ContractVersion` into the envelope. Types without the attribute
+  are unversioned — the envelope fields stay `null` and behavior is unchanged.
+- **Routing.** The dispatcher matches a message to the topic's consumers by version: a versioned consumer
+  (`MessageConsumer<T>` whose `T` is a contract) accepts only its own version, while an unversioned consumer
+  accepts every message on the topic. This lets several versions — one consumer each — coexist on one topic,
+  each receiving its exact type at full fidelity.
+- **Unroutable messages.** When no consumer accepts a version, an `IUnroutableMessageHandler` decides:
+  `OnUnroutableMessage(UnroutableStrategy.DeadLetter | Requeue | Discard)` (default dead-letter) or a custom
+  handler. `DeadLetter` runs through the same `DeadLetterStrategy` below, so nothing is silently dropped.
+- **Coverage.** `IMessageContractCatalog` reports the handled `(topic, version)` pairs so an app can verify
+  it consumes a version before a producer begins emitting it.
 
 ## Reliability: retries & dead-lettering
 
