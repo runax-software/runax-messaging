@@ -34,10 +34,11 @@ public sealed class MessageContext
     public int? ContractVersion { get; init; }
 
     /// <summary>
-    /// Gets the JSON options used to deserialize the body, threaded through from the configured serializer.
-    /// When <see langword="null"/>, default options are used.
+    /// Gets the JSON options used to deserialize the body, threaded through from the serializer. When
+    /// <see langword="null"/>, default options are used. Custom message serializers set this so
+    /// <see cref="Deserialize{T}"/> honors their configured options.
     /// </summary>
-    internal JsonSerializerOptions? SerializerOptions { get; init; }
+    public JsonSerializerOptions? SerializerOptions { get; init; }
 
     /// <summary>
     /// Deserializes the message body to the specified type using the configured serializer options.

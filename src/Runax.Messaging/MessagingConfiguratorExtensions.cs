@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Runax.Messaging.Abstractions;
 using Runax.Messaging.Consumers;
+using Runax.Messaging.Serialization;
 
 namespace Runax.Messaging;
 
@@ -116,6 +117,21 @@ public static class MessagingConfiguratorExtensions
         Action<JsonSerializerOptions> configure)
     {
         configurator.Services.Configure(configure);
+        return configurator;
+    }
+
+    /// <summary>
+    /// Replaces the default serializer with a custom <see cref="IMessageSerializer"/> — for example to read a
+    /// non-Runax wire format such as CloudEvents. The default already reads foreign/raw JSON (any payload without
+    /// the reserved <c>__runax</c> key) as-is, so a custom serializer is only needed for other encodings.
+    /// </summary>
+    /// <typeparam name="TSerializer">The serializer implementation.</typeparam>
+    /// <param name="configurator">The messaging configurator.</param>
+    /// <returns>The same configurator, to allow chaining.</returns>
+    public static MessagingConfigurator UseSerializer<TSerializer>(this MessagingConfigurator configurator)
+        where TSerializer : class, IMessageSerializer
+    {
+        configurator.Services.AddSingleton<IMessageSerializer, TSerializer>();
         return configurator;
     }
 }

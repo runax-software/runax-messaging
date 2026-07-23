@@ -157,6 +157,7 @@ written to your database in the same transaction and dispatched by a background 
 ## Documentation
 
 - [Architecture & message flow](docs/architecture.md)
+- [Serialization & custom serializers](docs/serialization.md)
 - [Writing a custom transport](docs/writing-a-custom-transport.md)
 
 ## Contributing

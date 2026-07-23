@@ -38,7 +38,7 @@ Runax.Messaging      Runax.Messaging.Transports.Aws.Sqs / .RabbitMq / <your tran
 | `RetryOptions` / `DeadLetterStrategy` | Core | Retry backoff and dead-letter policy applied by the dispatcher (`WithRetry`). |
 | `MessagingDiagnostics` | Core | The `ActivitySource` and `Meter` names for tracing and metrics. |
 | `MessagePublisherAdapter` | Core (internal) | Bridges `IMessagePublisher` → `IMessagingTransport`, serializing to an envelope and emitting publish telemetry. |
-| `IMessageSerializer` / `JsonMessageSerializer` | Core (internal) | Envelope serialization (System.Text.Json). |
+| `IMessageSerializer` | Core | Pluggable wire codec (`UseSerializer<T>()`); the default puts the payload at the top level with metadata under `__runax`. |
 | `MessageConsumer<TMessage>` | Core | Base class for a typed consumer of a single topic. |
 | `MessageConsumerHostedService` | Core (internal) | Background service that subscribes consumers and dispatches messages with retry, dead-lettering, and telemetry. |
 
@@ -48,19 +48,23 @@ Messages travel wrapped in an envelope so metadata rides alongside the payload:
 
 ```json
 {
-  "MessageType": "MyApp.Order, MyApp",
-  "Contract": "orders.placed",
-  "ContractVersion": 2,
-  "Body": "{\"Id\":1,\"Name\":\"widget\"}",
-  "Headers": { "correlation-id": "abc" }
+  "Id": 1,
+  "Name": "widget",
+  "__runax": {
+    "contract_name": "orders.placed",
+    "contract_version": 2,
+    "headers": { "correlation-id": "abc" }
+  }
 }
 ```
 
-`Body` is the JSON-serialized message; `Headers` carries transport-level
-metadata. The transport only ever sees the serialized envelope string — it never
-needs to know your message types. `Contract` / `ContractVersion` are present only
-when the message type carries `[MessageContract]` (see [Contract versioning](#contract-versioning));
-they are `null` otherwise, so the format stays backward compatible.
+The payload sits at the top level and framework metadata rides under the reserved `__runax` key. This makes
+the envelope **self-identifying** (presence of `__runax` = a Runax message) and interop cheap in both
+directions: a payload with **no** `__runax` — an S3 event, another producer's JSON — is read as a plain body,
+and foreign consumers see a normal object. `contract_name` / `contract_version` appear only when the message
+type carries `[MessageContract]` (see [Contract versioning](#contract-versioning)). The transport only ever sees the
+serialized string — it never needs to know your message types. The wire format is pluggable; see
+[Serialization & custom serializers](serialization.md).
 
 ## Publish flow
 

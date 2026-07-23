@@ -79,6 +79,18 @@ public class MessageContractTests
         }
     }
 
+    private sealed record S3Event(string Bucket);   // a foreign shape, no [MessageContract]
+
+    private sealed class S3EventConsumer(Recorder recorder) : MessageConsumer<S3Event>
+    {
+        public override string Topic => "s3-events";
+        protected override ValueTask HandleAsync(S3Event message, CancellationToken ct)
+        {
+            recorder.Record("s3", message.Bucket);
+            return ValueTask.CompletedTask;
+        }
+    }
+
     private sealed class RecordingUnroutableHandler(Recorder recorder) : IUnroutableMessageHandler
     {
         public ValueTask<MessageDisposition> HandleAsync(UnroutableMessage message, CancellationToken ct)
@@ -103,13 +115,12 @@ public class MessageContractTests
     {
         var serializer = new JsonMessageSerializer();
 
-        using var versioned = JsonDocument.Parse(serializer.Serialize(new OrderV1(1), headers: null));
-        versioned.RootElement.GetProperty("ContractVersion").GetInt32().ShouldBe(1);
-
-        using var plain = JsonDocument.Parse(serializer.Serialize(new OrderPlain(1), headers: null));
-        plain.RootElement.GetProperty("ContractVersion").ValueKind.ShouldBe(JsonValueKind.Null);
-
         serializer.Deserialize(serializer.Serialize(new OrderV1(1), null), Topic).ContractVersion.ShouldBe(1);
+        serializer.Deserialize(serializer.Serialize(new OrderPlain(1), null), Topic).ContractVersion.ShouldBeNull();
+
+        // The version rides under the reserved metadata key, not at the top level.
+        using var doc = JsonDocument.Parse(serializer.Serialize(new OrderV1(1), null));
+        doc.RootElement.GetProperty(JsonMessageSerializer.MetadataKey).GetProperty("contract_version").GetInt32().ShouldBe(1);
     }
 
     [Fact]
@@ -184,6 +195,22 @@ public class MessageContractTests
         await recorder.Wait("unroutable").WaitAsync(TimeSpan.FromSeconds(5));
 
         recorder.Received.ShouldContain(("unroutable", $"{Topic}:1"));
+
+        await host.StopAsync();
+    }
+
+    [Fact]
+    public async Task A_foreign_message_with_no_envelope_is_consumed_as_a_raw_body()
+    {
+        var recorder = new Recorder();
+        using var host = await StartAsync(recorder, m => m.AddInMemory().AddConsumer<S3EventConsumer>());
+
+        // Deliver a payload straight to the transport as an external producer would — no __runax key.
+        var transport = host.Services.GetRequiredService<IMessagingTransport>();
+        await transport.PublishAsync("s3-events", """{"Bucket":"my-bucket"}""");
+
+        await recorder.Wait("s3").WaitAsync(TimeSpan.FromSeconds(5));
+        recorder.Received.ShouldContain(("s3", "my-bucket"));
 
         await host.StopAsync();
     }

@@ -37,15 +37,37 @@ public class JsonMessageSerializerTests
     }
 
     [Fact]
-    public void Serialize_records_the_message_clr_type()
+    public void Serialize_places_the_payload_at_the_top_level_with_metadata_under_the_reserved_key()
     {
         var envelopeJson = _serializer.Serialize(new Order(3, "thing"), headers: null);
 
         using var document = JsonDocument.Parse(envelopeJson);
-        var messageType = document.RootElement.GetProperty("MessageType").GetString();
+        var root = document.RootElement;
 
-        messageType.ShouldNotBeNull();
-        messageType!.ShouldContain(typeof(Order).FullName!);
+        // Payload fields are at the top level so foreign readers see a normal object.
+        root.GetProperty("Id").GetInt32().ShouldBe(3);
+        root.GetProperty("Name").GetString().ShouldBe("thing");
+        // Framework metadata lives under the reserved key.
+        root.TryGetProperty(JsonMessageSerializer.MetadataKey, out _).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Deserialize_reads_a_foreign_payload_that_has_no_metadata_key_as_raw_body()
+    {
+        // An S3 event (or any producer outside this library) has no reserved key.
+        const string foreign = """{"Records":[{"eventSource":"aws:s3"}]}""";
+
+        var context = _serializer.Deserialize(foreign, "s3-events");
+
+        context.ContractVersion.ShouldBeNull();
+        context.Headers.ShouldBeEmpty();
+        context.Body.ShouldBe(foreign);
+    }
+
+    [Fact]
+    public void Serialize_throws_for_a_non_object_payload()
+    {
+        Should.Throw<InvalidOperationException>(() => _serializer.Serialize(42, headers: null));
     }
 
     [Fact]
@@ -63,9 +85,9 @@ public class JsonMessageSerializerTests
     }
 
     [Fact]
-    public void Deserialize_throws_for_a_malformed_envelope()
+    public void Deserialize_throws_for_unparseable_json()
     {
-        Should.Throw<InvalidOperationException>(() => _serializer.Deserialize("null", "orders"));
+        Should.Throw<JsonException>(() => _serializer.Deserialize("{ not json", "orders"));
     }
 
     [Fact]
@@ -93,9 +115,9 @@ public class JsonMessageSerializerTests
     }
 
     [Fact]
-    public void EnrichHeaders_throws_for_a_malformed_envelope()
+    public void EnrichHeaders_throws_for_unparseable_json()
     {
-        Should.Throw<InvalidOperationException>(
-            () => _serializer.EnrichHeaders("null", new Dictionary<string, string>()));
+        Should.Throw<JsonException>(
+            () => _serializer.EnrichHeaders("{ not json", new Dictionary<string, string>()));
     }
 }
