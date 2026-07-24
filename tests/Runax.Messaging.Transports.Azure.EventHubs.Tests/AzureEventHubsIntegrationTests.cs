@@ -31,8 +31,10 @@ public sealed class AzureEventHubsIntegrationTests
     public async Task Transport_round_trips_publish_to_subscribe()
     {
         var services = new ServiceCollection();
-        // Console logging surfaces the transport's EventProcessorClient errors (ProcessErrorAsync) in CI.
-        services.AddLogging(b => b.AddSimpleConsole().SetMinimumLevel(LogLevel.Debug));
+        // Capture the transport's logs so a timeout can surface the EventProcessorClient error (the MTP
+        // runner discards Console/ILogger output, but an exception message is shown in CI).
+        var logs = new CapturingLoggerProvider();
+        services.AddLogging(b => { b.SetMinimumLevel(LogLevel.Debug); b.AddProvider(logs); });
         services.AddRunaxMessaging(m => m.AddAzureEventHubs(eventHubs => eventHubs.Configure(o =>
         {
             o.ConnectionString = ConnectionString;
@@ -81,7 +83,17 @@ public sealed class AzureEventHubsIntegrationTests
             }
         }, cts.Token);
 
-        var result = await received.Task.WaitAsync(TimeSpan.FromSeconds(110));
+        string result;
+        try
+        {
+            result = await received.Task.WaitAsync(TimeSpan.FromSeconds(110));
+        }
+        catch (TimeoutException)
+        {
+            throw new TimeoutException(
+                "Event Hubs round-trip timed out. Transport logs:\n" + string.Join("\n", logs.Messages));
+        }
+
         result.ShouldBe(envelope);
 
         await cts.CancelAsync();
@@ -94,6 +106,33 @@ public sealed class AzureEventHubsIntegrationTests
             catch (OperationCanceledException)
             {
                 // Expected on shutdown.
+            }
+        }
+    }
+
+    private sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        public System.Collections.Concurrent.ConcurrentQueue<string> Messages { get; } = new();
+
+        public ILogger CreateLogger(string categoryName) => new CapturingLogger(categoryName, Messages);
+
+        public void Dispose() { }
+
+        private sealed class CapturingLogger(string category, System.Collections.Concurrent.ConcurrentQueue<string> sink)
+            : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(
+                LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+                Func<TState, Exception?, string> formatter)
+            {
+                var line = $"[{logLevel}] {category}: {formatter(state, exception)}";
+                if (exception is not null)
+                    line += " | " + exception;
+                sink.Enqueue(line);
             }
         }
     }
