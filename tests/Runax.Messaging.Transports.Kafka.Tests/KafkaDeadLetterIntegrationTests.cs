@@ -65,9 +65,17 @@ public sealed class KafkaDeadLetterIntegrationTests : IDisposable
         var deadline = DateTime.UtcNow.AddSeconds(30);
         while (deadLettered is null && DateTime.UtcNow < deadline)
         {
-            var result = consumer.Consume(TimeSpan.FromSeconds(1));
-            if (result?.Message is not null)
-                deadLettered = result.Message.Value;
+            try
+            {
+                var result = consumer.Consume(TimeSpan.FromSeconds(1));
+                if (result?.Message is not null)
+                    deadLettered = result.Message.Value;
+            }
+            catch (ConsumeException ex) when (ex.Error.Code == ErrorCode.UnknownTopicOrPart)
+            {
+                // The dead-letter topic is created lazily when the transport first produces to it; keep polling.
+                await Task.Delay(500);
+            }
         }
 
         consumer.Close();
