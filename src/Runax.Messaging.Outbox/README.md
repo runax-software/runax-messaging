@@ -17,11 +17,17 @@ dotnet add package Runax.Messaging.Outbox
 using Runax.Messaging;
 using Runax.Messaging.Outbox;
 
-builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddRabbitMq(rabbit => rabbit.Configure(o => o.HostName = "localhost"))
-    .AddConsumer<OrderPlacedConsumer>()
-    .AddOutbox(o => o.PollingInterval = TimeSpan.FromSeconds(2))
-    .AddInMemoryOutboxStore());   // or register your own IOutboxStore
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddRabbitMq(rabbitmq =>
+    {
+        rabbitmq.Configure(o => o.HostName = "localhost");
+        rabbitmq.AddConsumer<OrderPlacedConsumer>();
+    });
+
+    runax.AddOutbox(o => o.PollingInterval = TimeSpan.FromSeconds(2));
+    runax.AddInMemoryOutboxStore();   // or register your own IOutboxStore
+});
 ```
 
 `AddOutbox` makes `IMessagePublisher` write to the `IOutboxStore` instead of publishing directly;

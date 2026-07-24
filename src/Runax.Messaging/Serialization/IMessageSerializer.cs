@@ -3,11 +3,12 @@ using Runax.Messaging.Abstractions;
 namespace Runax.Messaging.Serialization;
 
 /// <summary>
-/// Encodes a message to the wire and decodes a received payload. Implement this and register it with
-/// <c>UseSerializer&lt;T&gt;()</c> to control the wire format — for example to interoperate with messages
-/// produced outside this library. The default implementation puts the payload at the top level with framework
-/// metadata under a reserved <c>__runax</c> key. Serializers here are JSON-oriented: <see cref="Deserialize"/>
-/// returns a body as a JSON string that <see cref="MessageContext.Deserialize{T}"/> reads.
+/// Framework-owned wire contract: it frames the reserved <c>__runax</c> envelope (the payload at the top
+/// level, framework metadata under the reserved key) around a body produced by a pluggable
+/// <see cref="ISerializer"/>. This is not the customization point — to change how bodies are encoded,
+/// implement <see cref="ISerializer"/> and register it with <c>UseSerializer&lt;T&gt;()</c>; the envelope
+/// then stays identical regardless. <see cref="Deserialize"/> returns a body as a JSON string that
+/// <see cref="MessageContext.Deserialize{T}"/> reads.
 /// </summary>
 public interface IMessageSerializer
 {

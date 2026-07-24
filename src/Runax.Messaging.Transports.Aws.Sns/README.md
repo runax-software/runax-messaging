@@ -17,15 +17,20 @@ dotnet add package Runax.Messaging.Transports.Aws.Sns
 using Runax.Messaging;
 using Runax.Messaging.Transports.Aws.Sns;
 
-builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddSns(sns => sns.Configure(options =>
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddSns(sns =>
     {
-        options.Region = "us-east-1";
-        // consume 'orders.placed' from an SQS queue subscribed to its SNS topic
-        options.TopicQueueUrlMap["orders.placed"] =
-            "https://sqs.us-east-1.amazonaws.com/123456789012/orders-worker";
-    }))
-    .AddConsumer<OrderPlacedConsumer>());
+        sns.Configure(options =>
+        {
+            options.Region = "us-east-1";
+            // consume 'orders.placed' from an SQS queue subscribed to its SNS topic
+            options.TopicQueueUrlMap["orders.placed"] =
+                "https://sqs.us-east-1.amazonaws.com/123456789012/orders-worker";
+        });
+        sns.AddConsumer<OrderPlacedConsumer>();
+    });
+});
 ```
 
 `AddSns` lives in the `Runax.Messaging.Transports.Aws.Sns` namespace, so add that `using`.

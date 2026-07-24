@@ -18,12 +18,17 @@ dotnet add package Runax.Messaging.Transports.RabbitMq
 using Runax.Messaging;
 using Runax.Messaging.Transports.RabbitMq;
 
-builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddRabbitMq(rabbit => rabbit.Configure(options =>
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddRabbitMq(rabbitmq =>
     {
-        options.HostName = "localhost";
-    }))
-    .AddConsumer<OrderPlacedConsumer>());
+        rabbitmq.Configure(options =>
+        {
+            options.HostName = "localhost";
+        });
+        rabbitmq.AddConsumer<OrderPlacedConsumer>();
+    });
+});
 ```
 
 `AddRabbitMq` lives in the `Runax.Messaging.Transports.RabbitMq` namespace, so add that `using`.

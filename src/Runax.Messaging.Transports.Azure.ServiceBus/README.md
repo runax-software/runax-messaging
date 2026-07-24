@@ -16,13 +16,18 @@ dotnet add package Runax.Messaging.Transports.Azure.ServiceBus
 using Runax.Messaging;
 using Runax.Messaging.Transports.Azure.ServiceBus;
 
-builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddAzureServiceBus(sb => sb.Configure(options =>
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddAzureServiceBus(serviceBus =>
     {
-        options.ConnectionString = "<your Service Bus connection string>";
-        options.TopicSubscriptionMap["orders.placed"] = "orders-worker"; // topic -> subscription
-    }))
-    .AddConsumer<OrderPlacedConsumer>());
+        serviceBus.Configure(options =>
+        {
+            options.ConnectionString = "<your Service Bus connection string>";
+            options.TopicSubscriptionMap["orders.placed"] = "orders-worker"; // topic -> subscription
+        });
+        serviceBus.AddConsumer<OrderPlacedConsumer>();
+    });
+});
 ```
 
 `AddAzureServiceBus` lives in the `Runax.Messaging.Transports.Azure.ServiceBus` namespace, so add that

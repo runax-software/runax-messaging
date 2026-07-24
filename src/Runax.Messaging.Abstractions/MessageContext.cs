@@ -34,16 +34,17 @@ public sealed class MessageContext
     public int? ContractVersion { get; init; }
 
     /// <summary>
-    /// Gets the JSON options used to deserialize the body, threaded through from the serializer. When
-    /// <see langword="null"/>, default options are used. Custom message serializers set this so
-    /// <see cref="Deserialize{T}"/> honors their configured options.
+    /// Gets the body serializer threaded through from the framework so <see cref="Deserialize{T}"/> uses the
+    /// same encoding the message was written with. When <see langword="null"/> (e.g. a hand-built context),
+    /// default System.Text.Json is used.
     /// </summary>
-    public JsonSerializerOptions? SerializerOptions { get; init; }
+    internal ISerializer? Serializer { get; init; }
 
     /// <summary>
-    /// Deserializes the message body to the specified type using the configured serializer options.
+    /// Deserializes the message body to the specified type using the configured serializer.
     /// </summary>
     /// <typeparam name="T">The type to deserialize the body into.</typeparam>
     /// <returns>The deserialized message, or <see langword="null"/> if the body is JSON null.</returns>
-    public T? Deserialize<T>() => JsonSerializer.Deserialize<T>(Body, SerializerOptions);
+    public T? Deserialize<T>() =>
+        Serializer is not null ? Serializer.Deserialize<T>(Body) : JsonSerializer.Deserialize<T>(Body);
 }

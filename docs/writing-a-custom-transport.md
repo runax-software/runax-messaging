@@ -155,9 +155,14 @@ host — your transport only contributes `IMessagingTransport` and its options.
 using Runax.Messaging;
 using Runax.Messaging.Foo;
 
-builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddFoo(foo => foo.Configure(o => o.Endpoint = "broker:1234"))
-    .AddConsumer<OrderPlacedConsumer>());
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddFoo(foo =>
+    {
+        foo.Configure(o => o.Endpoint = "broker:1234");
+        foo.AddConsumer<OrderPlacedConsumer>();
+    });
+});
 ```
 
 ## 6. Test it

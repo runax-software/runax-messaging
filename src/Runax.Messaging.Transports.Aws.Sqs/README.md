@@ -16,12 +16,17 @@ dotnet add package Runax.Messaging.Transports.Aws.Sqs
 using Runax.Messaging;
 using Runax.Messaging.Transports.Aws.Sqs;
 
-builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddSqs(sqs => sqs.Configure(options =>
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddSqs(sqs =>
     {
-        options.Region = "us-east-1";
-    }))
-    .AddConsumer<OrderPlacedConsumer>());
+        sqs.Configure(options =>
+        {
+            options.Region = "us-east-1";
+        });
+        sqs.AddConsumer<OrderPlacedConsumer>();
+    });
+});
 ```
 
 `AddSqs` lives in the `Runax.Messaging.Transports.Aws.Sqs` namespace, so add that `using`.
