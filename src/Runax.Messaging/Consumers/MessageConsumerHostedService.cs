@@ -19,7 +19,7 @@ internal sealed class MessageConsumerHostedService(
     IServiceProvider serviceProvider,
     IEnumerable<ConsumerRegistration> registrations,
     IEnumerable<IMessagingTransport> transports,
-    IMessageSerializer serializer,
+    IMessageSerializerProvider serializerProvider,
     IUnroutableMessageHandler unroutableHandler,
     RetryOptions retryOptions,
     ILogger<MessageConsumerHostedService> logger)
@@ -121,6 +121,7 @@ internal sealed class MessageConsumerHostedService(
 
         var startTimestamp = Stopwatch.GetTimestamp();
         var tags = MessagingDiagnostics.Tags(transport.SystemName, topic);
+        var serializer = serializerProvider.For(transport.SystemName);
 
         MessageContext context;
         try
@@ -347,7 +348,7 @@ internal sealed class MessageConsumerHostedService(
 
         try
         {
-            var enriched = serializer.EnrichHeaders(envelopeJson, new Dictionary<string, string>
+            var enriched = serializerProvider.For(transport.SystemName).EnrichHeaders(envelopeJson, new Dictionary<string, string>
             {
                 ["x-runax-dlq-reason"] = exception.Message,
                 ["x-runax-dlq-exception"] = exception.GetType().FullName ?? exception.GetType().Name,

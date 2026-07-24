@@ -16,13 +16,18 @@ dotnet add package Runax.Messaging.Transports.Redis
 using Runax.Messaging;
 using Runax.Messaging.Transports.Redis;
 
-builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddRedis(redis => redis.Configure(options =>
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddRedis(redis =>
     {
-        options.Configuration = "localhost:6379";
-        options.ConsumerGroup = "orders-workers";
-    }))
-    .AddConsumer<OrderPlacedConsumer>());
+        redis.Configure(options =>
+        {
+            options.Configuration = "localhost:6379";
+            options.ConsumerGroup = "orders-workers";
+        });
+        redis.AddConsumer<OrderPlacedConsumer>();
+    });
+});
 ```
 
 `AddRedis` lives in the `Runax.Messaging.Transports.Redis` namespace, so add that `using`.

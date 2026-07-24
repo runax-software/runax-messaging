@@ -1,14 +1,15 @@
 using System.Text.Json;
+using Runax.Messaging.Abstractions;
 using Runax.Messaging.Serialization;
 
 namespace Runax.Messaging.Tests;
 
-public class JsonMessageSerializerTests
+public class EnvelopeSerializerTests
 {
     public sealed record Order(int Id, string Name);
     public sealed record Nested(Order Order, IReadOnlyList<string> Tags);
 
-    private readonly JsonMessageSerializer _serializer = new();
+    private readonly EnvelopeSerializer _serializer = new(new SystemTextJsonSerializer());
 
     [Fact]
     public void Serialize_then_Deserialize_round_trips_body_and_headers()
@@ -48,7 +49,7 @@ public class JsonMessageSerializerTests
         root.GetProperty("Id").GetInt32().ShouldBe(3);
         root.GetProperty("Name").GetString().ShouldBe("thing");
         // Framework metadata lives under the reserved key.
-        root.TryGetProperty(JsonMessageSerializer.MetadataKey, out _).ShouldBeTrue();
+        root.TryGetProperty(EnvelopeSerializer.MetadataKey, out _).ShouldBeTrue();
     }
 
     [Fact]
@@ -119,5 +120,35 @@ public class JsonMessageSerializerTests
     {
         Should.Throw<JsonException>(
             () => _serializer.EnrichHeaders("{ not json", new Dictionary<string, string>()));
+    }
+
+    [Fact]
+    public void Envelope_stays_framework_owned_regardless_of_the_body_serializer()
+    {
+        // A custom body serializer controls only the body; the __runax envelope is still framed by the framework.
+        var serializer = new EnvelopeSerializer(new FakeBodySerializer("""{"custom":true}"""));
+
+        var json = serializer.Serialize(new Order(1, "widget"), new Dictionary<string, string> { ["h"] = "v" });
+
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        root.GetProperty("custom").GetBoolean().ShouldBeTrue();
+        var meta = root.GetProperty(EnvelopeSerializer.MetadataKey);
+        meta.GetProperty("headers").GetProperty("h").GetString().ShouldBe("v");
+    }
+
+    [Fact]
+    public void A_body_serializer_cannot_hijack_the_reserved_metadata_key()
+    {
+        var serializer = new EnvelopeSerializer(new FakeBodySerializer("""{"__runax":"evil"}"""));
+
+        Should.Throw<InvalidOperationException>(() => serializer.Serialize(new Order(1, "x"), headers: null));
+    }
+
+    private sealed class FakeBodySerializer(string bodyJson) : ISerializer
+    {
+        public string Serialize<TMessage>(TMessage message) => bodyJson;
+
+        public TMessage? Deserialize<TMessage>(string body) => default;
     }
 }

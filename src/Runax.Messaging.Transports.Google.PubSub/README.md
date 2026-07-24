@@ -16,13 +16,18 @@ dotnet add package Runax.Messaging.Transports.Google.PubSub
 using Runax.Messaging;
 using Runax.Messaging.Transports.Google.PubSub;
 
-builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddGooglePubSub(pubsub => pubsub.Configure(options =>
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddGooglePubSub(pubsub =>
     {
-        options.ProjectId = "my-gcp-project";
-        options.TopicSubscriptionMap["orders.placed"] = "orders-worker"; // topic -> subscription id
-    }))
-    .AddConsumer<OrderPlacedConsumer>());
+        pubsub.Configure(options =>
+        {
+            options.ProjectId = "my-gcp-project";
+            options.TopicSubscriptionMap["orders.placed"] = "orders-worker"; // topic -> subscription id
+        });
+        pubsub.AddConsumer<OrderPlacedConsumer>();
+    });
+});
 ```
 
 `AddGooglePubSub` lives in the `Runax.Messaging.Transports.Google.PubSub` namespace, so add that `using`.

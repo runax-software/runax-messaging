@@ -1,3 +1,4 @@
+using Runax.Messaging;
 using Runax.Messaging.Abstractions;
 using Runax.Messaging.Serialization;
 
@@ -8,8 +9,20 @@ namespace Runax.Messaging.Outbox;
 /// <see cref="IOutboxStore"/> instead of publishing directly, so the write can share the caller's
 /// transaction. The <see cref="OutboxDispatcher"/> later delivers them to the transport.
 /// </summary>
-internal sealed class OutboxPublisher(IMessageSerializer serializer, IOutboxStore store) : IMessagePublisher
+internal sealed class OutboxPublisher(
+    IMessageSerializerProvider serializerProvider,
+    IEnumerable<IMessagingTransport> transports,
+    MessagingPublishOptions publishOptions,
+    IOutboxStore store) : IMessagePublisher
 {
+    private IMessagingTransport? _target;
+
+    // The dispatcher delivers every outbox message to a single selected transport, so we serialize with that
+    // transport's serializer up front — matching OutboxDispatcher's PublishTargetSelector choice.
+    private IMessagingTransport Target => _target ??= PublishTargetSelector.Select(
+        transports as IReadOnlyList<IMessagingTransport> ?? transports.ToArray(),
+        publishOptions.DefaultTransport);
+
     public ValueTask PublishAsync<TMessage>(
         string topic,
         TMessage message,
@@ -38,7 +51,7 @@ internal sealed class OutboxPublisher(IMessageSerializer serializer, IOutboxStor
         IDictionary<string, string>? headers,
         CancellationToken cancellationToken)
     {
-        var payload = serializer.Serialize(message, headers);
+        var payload = serializerProvider.For(Target.SystemName).Serialize(message, headers);
         await store.AddAsync(new OutboxMessage { Topic = topic, Payload = payload }, cancellationToken)
             .ConfigureAwait(false);
     }

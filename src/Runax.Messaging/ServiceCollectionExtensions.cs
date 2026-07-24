@@ -28,7 +28,11 @@ public static class ServiceCollectionExtensions
 
         // Resolve the configured JsonSerializerOptions (default when ConfigureSerialization was not called).
         services.TryAddSingleton(sp => sp.GetRequiredService<IOptions<JsonSerializerOptions>>().Value);
-        services.TryAddSingleton<IMessageSerializer, JsonMessageSerializer>();
+        // Default body serializer; UseSerializer<T> overrides ISerializer without touching the envelope.
+        services.TryAddSingleton<ISerializer, SystemTextJsonSerializer>();
+        services.TryAddSingleton<IMessageSerializer, EnvelopeSerializer>();
+        // Resolves the serializer per transport, honoring per-broker UseSerializer/ConfigureSerialization.
+        services.TryAddSingleton<IMessageSerializerProvider, MessageSerializerProvider>();
         services.TryAddSingleton<MessagingPublishOptions>();
         services.TryAddSingleton<IMessagePublisher, MessagePublisherAdapter>();
         services.TryAddSingleton<IUnroutableMessageHandler, DeadLetterUnroutableHandler>();

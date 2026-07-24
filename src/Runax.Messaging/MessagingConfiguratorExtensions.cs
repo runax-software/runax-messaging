@@ -142,17 +142,58 @@ public static class MessagingConfiguratorExtensions
     }
 
     /// <summary>
-    /// Replaces the default serializer with a custom <see cref="IMessageSerializer"/> — for example to read a
-    /// non-Runax wire format such as CloudEvents. The default already reads foreign/raw JSON (any payload without
-    /// the reserved <c>__runax</c> key) as-is, so a custom serializer is only needed for other encodings.
+    /// Replaces the default body serializer with a custom <see cref="ISerializer"/> — for example a
+    /// source-generated, case-insensitive, or third-party JSON serializer. This changes only how message
+    /// bodies are encoded; the framework's reserved <c>__runax</c> envelope is always applied around the body
+    /// and stays identical regardless of which serializer is registered. For simple tweaks (naming policy,
+    /// converters) prefer <see cref="ConfigureSerialization(MessagingConfigurator, Action{JsonSerializerOptions})"/>.
     /// </summary>
-    /// <typeparam name="TSerializer">The serializer implementation.</typeparam>
+    /// <typeparam name="TSerializer">The body serializer implementation.</typeparam>
     /// <param name="configurator">The messaging configurator.</param>
     /// <returns>The same configurator, to allow chaining.</returns>
     public static MessagingConfigurator UseSerializer<TSerializer>(this MessagingConfigurator configurator)
-        where TSerializer : class, IMessageSerializer
+        where TSerializer : class, ISerializer
     {
-        configurator.Services.AddSingleton<IMessageSerializer, TSerializer>();
+        configurator.Services.AddSingleton<ISerializer, TSerializer>();
         return configurator;
+    }
+
+    /// <summary>
+    /// Replaces the body serializer for this transport only — messages published to or consumed from other
+    /// brokers keep the global serializer. Call inside a transport's configuration block
+    /// (e.g. <c>AddRabbitMq(rabbit =&gt; rabbit.UseSerializer&lt;MySerializer&gt;())</c>). As with the global
+    /// <see cref="UseSerializer{TSerializer}(MessagingConfigurator)"/>, this changes only the body; the reserved
+    /// <c>__runax</c> envelope is unaffected.
+    /// </summary>
+    /// <typeparam name="TSerializer">The body serializer implementation.</typeparam>
+    /// <param name="builder">The transport builder for the broker to scope to.</param>
+    /// <returns>The same builder, to allow chaining.</returns>
+    public static TransportBuilder UseSerializer<TSerializer>(this TransportBuilder builder)
+        where TSerializer : class, ISerializer
+    {
+        builder.Services.AddKeyedSingleton<ISerializer, TSerializer>(builder.TransportName);
+        return builder;
+    }
+
+    /// <summary>
+    /// Configures the <see cref="JsonSerializerOptions"/> used for this transport only. The options start as a
+    /// copy of the global options (from <see cref="ConfigureSerialization(MessagingConfigurator, Action{JsonSerializerOptions})"/>)
+    /// with <paramref name="configure"/> applied on top, so a broker inherits global settings and overrides just
+    /// what it needs. Call inside a transport's configuration block.
+    /// </summary>
+    /// <param name="builder">The transport builder for the broker to scope to.</param>
+    /// <param name="configure">Action to configure this broker's <see cref="JsonSerializerOptions"/>.</param>
+    /// <returns>The same builder, to allow chaining.</returns>
+    public static TransportBuilder ConfigureSerialization(
+        this TransportBuilder builder,
+        Action<JsonSerializerOptions> configure)
+    {
+        builder.Services.AddKeyedSingleton<ISerializer>(builder.TransportName, (sp, _) =>
+        {
+            var options = new JsonSerializerOptions(sp.GetRequiredService<JsonSerializerOptions>());
+            configure(options);
+            return new SystemTextJsonSerializer(options);
+        });
+        return builder;
     }
 }

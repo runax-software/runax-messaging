@@ -17,12 +17,16 @@ dotnet add package Runax.Messaging
 ```csharp
 using Runax.Messaging;
 
-builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddInMemory()
-    .AddConsumer<OrderPlacedConsumer>());
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddInMemory(inMemory =>
+    {
+        inMemory.AddConsumer<OrderPlacedConsumer>();
+    });
+});
 ```
 
-`AddRunaxMessaging` registers the JSON serializer and `IMessagePublisher`, then
+`AddRunaxMessaging` registers the default serializer and `IMessagePublisher`, then
 invokes your configuration. Register one or more transports. If any consumers are
 added, a hosted background service is registered to dispatch them — so consuming
 requires a .NET Generic Host.
@@ -68,15 +72,22 @@ Register several transports (each identified by its `SystemName`) and a single c
 topic from more than one broker — even different ones:
 
 ```csharp
-builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddRabbitMq(rabbit =>
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddRabbitMq(rabbitmq =>
     {
-        rabbit.Configure(o => o.HostName = "localhost");
-        rabbit.AddConsumer<AuditConsumer>();            // scoped: only RabbitMQ
-    })
-    .AddSqs(sqs => sqs.Configure(o => o.Region = "us-east-1"))
-    .AddConsumer<OrderPlacedConsumer>()                  // top-level: every registered transport
-    .PublishTo("sqs"));                                  // IMessagePublisher target
+        rabbitmq.Configure(o => o.HostName = "localhost");
+        rabbitmq.AddConsumer<AuditConsumer>();          // scoped: only RabbitMQ
+    });
+
+    runax.AddSqs(sqs =>
+    {
+        sqs.Configure(o => o.Region = "us-east-1");
+    });
+
+    runax.AddConsumer<OrderPlacedConsumer>();           // top-level: every registered transport
+    runax.PublishTo("sqs");                             // IMessagePublisher target
+});
 ```
 
 A consumer registered inside a transport's block binds to that broker; a top-level `AddConsumer<T>()`
@@ -91,17 +102,22 @@ Failed `HandleAsync` calls are retried with exponential backoff, and messages th
 cannot be handled are dead-lettered. Tune the policy with `WithRetry`:
 
 ```csharp
-builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddInMemory()
-    .AddConsumer<OrderPlacedConsumer>()
-    .WithRetry(o =>
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddInMemory(inMemory =>
+    {
+        inMemory.AddConsumer<OrderPlacedConsumer>();
+    });
+
+    runax.WithRetry(o =>
     {
         o.MaxAttempts = 5;                 // initial attempt + retries
         o.InitialDelay = TimeSpan.FromMilliseconds(200);
         o.BackoffFactor = 2.0;
         o.MaxDelay = TimeSpan.FromSeconds(30);
         // o.Strategy = DeadLetterStrategy.BrokerNative; // defer to broker DLX / redrive
-    }));
+    });
+});
 ```
 
 - **Retry** — up to `MaxAttempts`, growing by `BackoffFactor` up to `MaxDelay`.
@@ -119,12 +135,22 @@ converters, or a source-generated `JsonSerializerContext` (via `TypeInfoResolver
 trim-friendly / AOT path — with `ConfigureSerialization`:
 
 ```csharp
-builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddInMemory()
-    .ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase));
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddInMemory(inMemory =>
+    {
+        inMemory.AddConsumer<OrderPlacedConsumer>();
+    });
+
+    runax.ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
+});
 ```
 
-The same options are applied on both publish and consume.
+The same options are applied on both publish and consume. To swap the body serializer entirely, implement
+`ISerializer` and register it with `UseSerializer<T>()`. Both `ConfigureSerialization` and `UseSerializer`
+can be set globally (on `runax`) or **per broker** (inside a transport block, like `AddConsumer<T>()`); the
+framework-owned `__runax` envelope is identical either way. See
+[Serialization & custom serializers](../../docs/serialization.md).
 
 ## Contract versioning
 
@@ -159,10 +185,15 @@ public sealed class OrderV2Consumer : MessageConsumer<OrderV2>
     protected override ValueTask HandleAsync(OrderV2 order, CancellationToken ct) { /* ... */ }
 }
 
-messaging
-    .AddRabbitMq(rabbit => rabbit.Configure(o => o.HostName = "localhost"))
-    .AddConsumer<OrderV1Consumer>()
-    .AddConsumer<OrderV2Consumer>();
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddRabbitMq(rabbitmq =>
+    {
+        rabbitmq.Configure(o => o.HostName = "localhost");
+        rabbitmq.AddConsumer<OrderV1Consumer>();
+        rabbitmq.AddConsumer<OrderV2Consumer>();
+    });
+});
 ```
 
 Runax routes each message to the consumer for **its** version: a `v1` message goes only to `OrderV1Consumer`,
@@ -189,9 +220,16 @@ If a message arrives whose version no consumer accepts — e.g. a `v2` order rea
 the `v1` consumer — it is **never silently dropped**. You choose the outcome:
 
 ```csharp
-messaging
-    .AddConsumer<OrderV1Consumer>()
-    .OnUnroutableMessage(UnroutableStrategy.DeadLetter);   // this is the default
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddRabbitMq(rabbitmq =>
+    {
+        rabbitmq.Configure(o => o.HostName = "localhost");
+        rabbitmq.AddConsumer<OrderV1Consumer>();
+    });
+
+    runax.OnUnroutableMessage(UnroutableStrategy.DeadLetter);   // this is the default
+});
 ```
 
 | Strategy | What it does |
@@ -213,7 +251,16 @@ public sealed class AlertingUnroutableHandler(ILogger<AlertingUnroutableHandler>
     }
 }
 
-messaging.OnUnroutableMessage<AlertingUnroutableHandler>();
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddRabbitMq(rabbitmq =>
+    {
+        rabbitmq.Configure(o => o.HostName = "localhost");
+        rabbitmq.AddConsumer<OrderV1Consumer>();
+    });
+
+    runax.OnUnroutableMessage<AlertingUnroutableHandler>();
+});
 ```
 
 ### Check what you handle before switching a producer

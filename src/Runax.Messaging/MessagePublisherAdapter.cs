@@ -13,17 +13,17 @@ namespace Runax.Messaging;
 internal sealed class MessagePublisherAdapter : IMessagePublisher
 {
     private readonly IReadOnlyList<IMessagingTransport> _transports;
-    private readonly IMessageSerializer _serializer;
+    private readonly IMessageSerializerProvider _serializerProvider;
     private readonly string? _defaultTransportName;
     private IMessagingTransport? _resolvedTransport;
 
     public MessagePublisherAdapter(
         IEnumerable<IMessagingTransport> transports,
-        IMessageSerializer serializer,
+        IMessageSerializerProvider serializerProvider,
         MessagingPublishOptions publishOptions)
     {
         _transports = transports as IReadOnlyList<IMessagingTransport> ?? transports.ToArray();
-        _serializer = serializer;
+        _serializerProvider = serializerProvider;
         _defaultTransportName = publishOptions.DefaultTransport;
     }
 
@@ -71,9 +71,10 @@ internal sealed class MessagePublisherAdapter : IMessagePublisher
         }
 
         var headers = carrier.Count > 0 ? carrier : null;
+        var serializer = _serializerProvider.For(Transport.SystemName);
         var envelopes = new List<string>(messages.Count);
         foreach (var message in messages)
-            envelopes.Add(_serializer.Serialize(message, headers));
+            envelopes.Add(serializer.Serialize(message, headers));
 
         try
         {
@@ -113,7 +114,7 @@ internal sealed class MessagePublisherAdapter : IMessagePublisher
 
         try
         {
-            var envelope = _serializer.Serialize(message, carrier);
+            var envelope = _serializerProvider.For(Transport.SystemName).Serialize(message, carrier);
             await Transport.PublishAsync(topic, envelope, cancellationToken).ConfigureAwait(false);
             MessagingDiagnostics.Published.Add(1, MessagingDiagnostics.Tags(Transport.SystemName, topic));
         }

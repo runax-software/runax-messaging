@@ -1,26 +1,28 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Runax.Messaging.Abstractions;
 
 namespace Runax.Messaging.Serialization;
 
 /// <summary>
-/// Default serializer. The message is serialized at the top level and framework metadata (contract, version,
-/// headers) is attached under a single reserved <see cref="MetadataKey"/> object. A payload that carries no
-/// such key — e.g. an S3 event or any message from a producer outside this library — is read as-is, so foreign
-/// messages can be consumed, and this library's messages can be consumed by foreign readers, without ceremony.
+/// Framework-owned <see cref="IMessageSerializer"/>. It delegates the message body to a pluggable
+/// <see cref="ISerializer"/> and is the sole owner of the reserved <see cref="MetadataKey"/> envelope:
+/// the body is placed at the top level and framework metadata (contract name/version, headers) is attached
+/// under a single reserved key. A payload that carries no such key — e.g. an S3 event or any message from a
+/// producer outside this library — is read as-is, so foreign messages can be consumed, and this library's
+/// messages can be consumed by foreign readers, without ceremony. A custom <see cref="ISerializer"/> only
+/// controls the body; it can never change or omit this envelope.
 /// </summary>
-internal sealed class JsonMessageSerializer(JsonSerializerOptions? bodyOptions = null) : IMessageSerializer
+internal sealed class EnvelopeSerializer(ISerializer body) : IMessageSerializer
 {
     /// <summary>The reserved envelope key. Message types may not declare a property with this name.</summary>
     internal const string MetadataKey = "__runax";
 
-    private readonly JsonSerializerOptions _bodyOptions = bodyOptions ?? new JsonSerializerOptions();
+    private readonly ISerializer _body = body;
 
     /// <inheritdoc />
     public string Serialize<TMessage>(TMessage message, IDictionary<string, string>? headers)
     {
-        if (JsonSerializer.SerializeToNode(message, _bodyOptions) is not JsonObject body)
+        if (JsonNode.Parse(_body.Serialize(message)) is not JsonObject body)
         {
             throw new InvalidOperationException(
                 $"Message of type '{typeof(TMessage).Name}' must serialize to a JSON object to carry the " +
@@ -72,7 +74,7 @@ internal sealed class JsonMessageSerializer(JsonSerializerOptions? bodyOptions =
             Headers = headers,
             ContractName = contractName,
             ContractVersion = contractVersion,
-            SerializerOptions = _bodyOptions,
+            Serializer = _body,
         };
     }
 

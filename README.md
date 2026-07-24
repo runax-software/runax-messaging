@@ -10,8 +10,8 @@ strongly-typed messages without coupling your application to a specific broker.
 - **Observability** — OpenTelemetry-ready tracing and metrics (no SDK dependency)
   plus per-transport health checks.
 - **Throughput** — batch publish and concurrent SQS consumption.
-- **Configurable** — validated options with `IConfiguration` binding and pluggable
-  `JsonSerializerOptions`.
+- **Configurable** — validated options with `IConfiguration` binding, and a pluggable body
+  serializer set globally or per broker (the `__runax` envelope stays framework-owned).
 - **Contract versioning** — optional `[MessageContract(version)]`; consumers subscribe per version, with a
   pluggable strategy (dead-letter/requeue/custom) for versions no consumer handles.
 - **Transactional outbox** — optional package for atomic database-write + publish.
@@ -53,9 +53,13 @@ using Runax.Messaging.Abstractions; // IMessagePublisher
 
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddInMemory()                  // transport: in-process (great for tests / single process)
-    .AddConsumer<OrderPlacedConsumer>());
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddInMemory(inMemory =>       // transport: in-process (great for tests / single process)
+    {
+        inMemory.AddConsumer<OrderPlacedConsumer>();
+    });
+});
 
 var host = builder.Build();
 ```
@@ -97,11 +101,27 @@ Only the composition root changes; publishers and consumers stay the same:
 ```csharp
 // Amazon SQS
 using Runax.Messaging.Transports.Aws.Sqs;
-messaging.AddSqs(sqs => sqs.Configure(o => o.Region = "us-east-1")).AddConsumer<OrderPlacedConsumer>();
+
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddSqs(sqs =>
+    {
+        sqs.Configure(o => o.Region = "us-east-1");
+        sqs.AddConsumer<OrderPlacedConsumer>();
+    });
+});
 
 // RabbitMQ
 using Runax.Messaging.Transports.RabbitMq;
-messaging.AddRabbitMq(rabbit => rabbit.Configure(o => o.HostName = "localhost")).AddConsumer<OrderPlacedConsumer>();
+
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddRabbitMq(rabbitmq =>
+    {
+        rabbitmq.Configure(o => o.HostName = "localhost");
+        rabbitmq.AddConsumer<OrderPlacedConsumer>();
+    });
+});
 ```
 
 Each transport is registered with a single block: `Configure(o => ...)` sets its options, and
@@ -117,15 +137,22 @@ even different ones (e.g. RabbitMQ and SQS during a migration). Transports are i
 `SystemName` (`"rabbitmq"`, `"sqs"`, `"in-memory"`, ...):
 
 ```csharp
-builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddRabbitMq(rabbit =>
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddRabbitMq(rabbitmq =>
     {
-        rabbit.Configure(o => o.HostName = "localhost");
-        rabbit.AddConsumer<AuditConsumer>();            // scoped: only RabbitMQ
-    })
-    .AddSqs(sqs => sqs.Configure(o => o.Region = "us-east-1"))
-    .AddConsumer<OrderPlacedConsumer>()                  // top-level: every registered transport
-    .PublishTo("sqs"));                                  // IMessagePublisher publishes here
+        rabbitmq.Configure(o => o.HostName = "localhost");
+        rabbitmq.AddConsumer<AuditConsumer>();          // scoped: only RabbitMQ
+    });
+
+    runax.AddSqs(sqs =>
+    {
+        sqs.Configure(o => o.Region = "us-east-1");
+    });
+
+    runax.AddConsumer<OrderPlacedConsumer>();           // top-level: every registered transport
+    runax.PublishTo("sqs");                             // IMessagePublisher publishes here
+});
 ```
 
 A consumer registered **inside a transport's block** subscribes only on that broker; a **top-level**
@@ -141,10 +168,16 @@ Consumers get retry-with-backoff, poison-message handling, and dead-lettering ou
 of the box; tune them with `WithRetry(...)`:
 
 ```csharp
-messaging
-    .AddRabbitMq(rabbit => rabbit.Configure(o => o.HostName = "localhost"))
-    .AddConsumer<OrderPlacedConsumer>()
-    .WithRetry(o => o.MaxAttempts = 5);
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddRabbitMq(rabbitmq =>
+    {
+        rabbitmq.Configure(o => o.HostName = "localhost");
+        rabbitmq.AddConsumer<OrderPlacedConsumer>();
+    });
+
+    runax.WithRetry(o => o.MaxAttempts = 5);
+});
 ```
 
 Publish/consume are traced and metered via the in-box `System.Diagnostics` APIs —

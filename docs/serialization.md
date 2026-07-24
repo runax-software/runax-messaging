@@ -1,7 +1,7 @@
 # Serialization & custom serializers
 
-How messages are encoded on the wire, how messages from *other* producers are consumed, and how to plug in
-your own format.
+How messages are encoded on the wire, how messages from *other* producers are consumed, and how to customize
+the way message bodies are serialized.
 
 ## The default wire format
 
@@ -53,65 +53,118 @@ An S3 notification like `{"Records":[...]}` (or any shape you model) deserialize
 that payload can't be parsed as JSON at all, it's treated as a malformed message and dead-lettered — never
 silently dropped.
 
-## Writing a custom serializer
+## Customizing how bodies are serialized
 
-You only need one for a *different* wire format — a non-Runax envelope such as CloudEvents, or emitting bare
-JSON with no `__runax` at all (e.g. when a downstream consumer rejects unknown fields). Implement
-`IMessageSerializer`:
+You can change how a message **body** is turned into JSON and back — but not the envelope. The framework always
+frames the reserved `__runax` metadata around whatever your serializer produces, so it stays byte-for-byte the
+same regardless of which serializer is active. Every Runax message therefore remains self-identifying no matter
+how its body was encoded. There are two levels.
 
-```csharp
-public interface IMessageSerializer
-{
-    string Serialize<TMessage>(TMessage message, IDictionary<string, string>? headers);
-    MessageContext Deserialize(string payload, string topic);
-    string EnrichHeaders(string payload, IReadOnlyDictionary<string, string> headers);
-}
-```
+### Tweaking the JSON options (most cases)
 
-- **`Serialize`** encodes a message (and optional headers) to the wire string.
-- **`Deserialize`** decodes a received payload into a `MessageContext` — set `Body` (a JSON string that
-  `MessageContext.Deserialize<T>()` reads), plus `Headers` and, if your format carries them, `ContractName` /
-  `ContractVersion`. Set `SerializerOptions` so the body is deserialized with your options.
-- **`EnrichHeaders`** is called only when dead-lettering, to add `x-runax-dlq-*` headers. Return the payload
-  unchanged if your format can't carry headers.
-
-Serializers here are JSON-oriented: the `Body` you hand back is a JSON string.
-
-### Example: bare JSON, no envelope
-
-A serializer that emits/reads just the message — no metadata, no headers, no versioning. Useful for a topic
-shared with a strict external consumer:
+For a naming policy, converters, or a source-generated `JsonSerializerContext`, configure the shared
+`JsonSerializerOptions` — no custom type required:
 
 ```csharp
-public sealed class RawJsonSerializer(JsonSerializerOptions options) : IMessageSerializer
+builder.Services.AddRunaxMessaging(runax =>
 {
-    public string Serialize<TMessage>(TMessage message, IDictionary<string, string>? headers) =>
-        JsonSerializer.Serialize(message, options);
-
-    public MessageContext Deserialize(string payload, string topic) => new()
+    runax.AddInMemory(inMemory =>
     {
-        Topic = topic,
-        Body = payload,
-        Headers = new Dictionary<string, string>(),
-        SerializerOptions = options,
-    };
+        inMemory.AddConsumer<OrderPlacedConsumer>();
+    });
 
-    public string EnrichHeaders(string payload, IReadOnlyDictionary<string, string> headers) => payload;
+    runax.AddRabbitMq(rabbitmq =>
+    {
+        rabbitmq.Configure(opt => opt.HostName = "localhost");
+        rabbitmq.AddConsumer<OrderPlacedConsumer>();
+    });
+
+    runax.ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
+});
+```
+
+### Replacing the body serializer
+
+To use a different serialization mechanism entirely (a source-generated path, or a third-party library such as
+Json.NET), implement `ISerializer`:
+
+```csharp
+public interface ISerializer
+{
+    string Serialize<TMessage>(TMessage message);   // must return a JSON object
+    TMessage? Deserialize<TMessage>(string body);   // body has __runax already stripped
 }
 ```
 
-### Registering it
+- **`Serialize`** turns a message into a JSON **object** string. The framework attaches `__runax` as a sibling
+  key — so your output must be an object (arrays/primitives throw at publish time), and you must not emit a
+  `__runax` property yourself (it's reserved and rejected at publish time).
+- **`Deserialize`** turns a body — with `__runax` already stripped by the framework — back into your type.
+
+Example on top of Json.NET:
 
 ```csharp
-builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddSqs(sqs => sqs.Configure(o => o.Region = "us-east-1"))
-    .UseSerializer<RawJsonSerializer>()
-    .AddConsumer<S3EventConsumer>());
+public sealed class NewtonsoftSerializer : ISerializer
+{
+    public string Serialize<TMessage>(TMessage message) => JsonConvert.SerializeObject(message);
+
+    public TMessage? Deserialize<TMessage>(string body) => JsonConvert.DeserializeObject<TMessage>(body);
+}
 ```
 
-`UseSerializer<T>()` replaces the default serializer for the application. It's resolved from DI, so your
-serializer can take constructor dependencies (the configured `JsonSerializerOptions` is available). Because the
-default already reads foreign JSON, reach for a custom serializer only when the *format itself* differs.
+Register it at the top level — it applies to every transport, and the `__runax` envelope is unchanged:
 
-> Serializer selection is currently per-application. Per-topic / per-broker selection is a possible future
-> addition — most interop cases are already covered by the default reading raw payloads.
+```csharp
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddInMemory(inMemory =>
+    {
+        inMemory.AddConsumer<OrderPlacedConsumer>();
+    });
+
+    runax.AddRabbitMq(rabbitmq =>
+    {
+        rabbitmq.Configure(opt => opt.HostName = "localhost");
+        rabbitmq.AddConsumer<OrderPlacedConsumer>();
+    });
+
+    runax.UseSerializer<NewtonsoftSerializer>();
+});
+```
+
+`UseSerializer<T>()` is resolved from DI, so your serializer can take constructor dependencies. Because it only
+controls the body, there is no way for a custom serializer to change or drop the `__runax` envelope — that is
+by design.
+
+### Per-broker serialization
+
+Both `UseSerializer<T>()` and `ConfigureSerialization(...)` also work **inside a transport block**, scoping the
+serializer to that one broker — exactly like `AddConsumer<T>()`. A top-level call sets the global default; a
+call inside a transport block overrides it for that broker only. Useful when one broker talks to a system that
+needs a different shape (say camelCase, or Json.NET) while the rest of the app keeps the defaults.
+
+```csharp
+builder.Services.AddRunaxMessaging(runax =>
+{
+    // Global default: applies to every broker that doesn't override it.
+    runax.ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
+
+    runax.AddRabbitMq(rabbitmq =>
+    {
+        rabbitmq.Configure(o => o.HostName = "localhost");
+        rabbitmq.AddConsumer<OrderPlacedConsumer>();
+        // RabbitMQ inherits the global camelCase options.
+    });
+
+    runax.AddSqs(sqs =>
+    {
+        sqs.Configure(o => o.Region = "us-east-1");
+        sqs.AddConsumer<OrderPlacedConsumer>();
+        sqs.UseSerializer<NewtonsoftSerializer>();   // SQS only: a different body serializer
+    });
+});
+```
+
+A broker's scoped `ConfigureSerialization` starts from a copy of the global options and applies your tweaks on
+top, so it inherits global settings and overrides only what it names. The `__runax` envelope is identical on
+every broker regardless of which serializer is active.

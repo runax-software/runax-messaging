@@ -113,14 +113,14 @@ public class MessageContractTests
     [Fact]
     public void Serializer_stamps_contract_from_the_attribute_and_leaves_unversioned_types_null()
     {
-        var serializer = new JsonMessageSerializer();
+        var serializer = new EnvelopeSerializer(new SystemTextJsonSerializer());
 
         serializer.Deserialize(serializer.Serialize(new OrderV1(1), null), Topic).ContractVersion.ShouldBe(1);
         serializer.Deserialize(serializer.Serialize(new OrderPlain(1), null), Topic).ContractVersion.ShouldBeNull();
 
         // The version rides under the reserved metadata key, not at the top level.
         using var doc = JsonDocument.Parse(serializer.Serialize(new OrderV1(1), null));
-        doc.RootElement.GetProperty(JsonMessageSerializer.MetadataKey).GetProperty("contract_version").GetInt32().ShouldBe(1);
+        doc.RootElement.GetProperty(EnvelopeSerializer.MetadataKey).GetProperty("contract_version").GetInt32().ShouldBe(1);
     }
 
     [Fact]
