@@ -38,7 +38,7 @@ public sealed class SqsVisibilityIntegrationTests : IAsyncLifetime, IDisposable
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddSqs(o =>
+        services.AddRunaxMessaging(m => m.AddSqs(__tb => __tb.Configure(o =>
         {
             o.Region = Region;
             o.ServiceUrl = ServiceUrl;
@@ -47,7 +47,7 @@ public sealed class SqsVisibilityIntegrationTests : IAsyncLifetime, IDisposable
             o.WaitTimeSeconds = 1;
             o.MaxNumberOfMessages = 1;
             configure(o);
-        }));
+        })));
         return services.BuildServiceProvider();
     }
 

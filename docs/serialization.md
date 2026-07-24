@@ -104,7 +104,7 @@ public sealed class RawJsonSerializer(JsonSerializerOptions options) : IMessageS
 
 ```csharp
 builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddSqs(o => o.Region = "us-east-1")
+    .AddSqs(sqs => sqs.Configure(o => o.Region = "us-east-1"))
     .UseSerializer<RawJsonSerializer>()
     .AddConsumer<S3EventConsumer>());
 ```

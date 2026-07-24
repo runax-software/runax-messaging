@@ -24,11 +24,11 @@ public sealed class AzureServiceBusIntegrationTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddAzureServiceBus(o =>
+        services.AddRunaxMessaging(m => m.AddAzureServiceBus(__tb => __tb.Configure(o =>
         {
             o.ConnectionString = ConnectionString;
             o.TopicSubscriptionMap[Topic] = Subscription;
-        }));
+        })));
         await using var provider = services.BuildServiceProvider();
         var transport = provider.GetRequiredService<IMessagingTransport>();
 

@@ -97,12 +97,15 @@ Only the composition root changes; publishers and consumers stay the same:
 ```csharp
 // Amazon SQS
 using Runax.Messaging.Transports.Aws.Sqs;
-messaging.AddSqs(o => o.Region = "us-east-1").AddConsumer<OrderPlacedConsumer>();
+messaging.AddSqs(sqs => sqs.Configure(o => o.Region = "us-east-1")).AddConsumer<OrderPlacedConsumer>();
 
 // RabbitMQ
 using Runax.Messaging.Transports.RabbitMq;
-messaging.AddRabbitMq(o => o.HostName = "localhost").AddConsumer<OrderPlacedConsumer>();
+messaging.AddRabbitMq(rabbit => rabbit.Configure(o => o.HostName = "localhost")).AddConsumer<OrderPlacedConsumer>();
 ```
+
+Each transport is registered with a single block: `Configure(o => ...)` sets its options, and
+`AddConsumer<T>()` (inside the block) binds a consumer to that broker.
 
 Each transport's options are documented on its package page linked in the table
 above.
@@ -115,9 +118,12 @@ even different ones (e.g. RabbitMQ and SQS during a migration). Transports are i
 
 ```csharp
 builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddRabbitMq(o => o.HostName = "localhost",
-        rabbit => rabbit.AddConsumer<AuditConsumer>())   // scoped: only RabbitMQ
-    .AddSqs(o => o.Region = "us-east-1")
+    .AddRabbitMq(rabbit =>
+    {
+        rabbit.Configure(o => o.HostName = "localhost");
+        rabbit.AddConsumer<AuditConsumer>();            // scoped: only RabbitMQ
+    })
+    .AddSqs(sqs => sqs.Configure(o => o.Region = "us-east-1"))
     .AddConsumer<OrderPlacedConsumer>()                  // top-level: every registered transport
     .PublishTo("sqs"));                                  // IMessagePublisher publishes here
 ```
@@ -136,7 +142,7 @@ of the box; tune them with `WithRetry(...)`:
 
 ```csharp
 messaging
-    .AddRabbitMq(o => o.HostName = "localhost")
+    .AddRabbitMq(rabbit => rabbit.Configure(o => o.HostName = "localhost"))
     .AddConsumer<OrderPlacedConsumer>()
     .WithRetry(o => o.MaxAttempts = 5);
 ```

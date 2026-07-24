@@ -17,10 +17,10 @@ using Runax.Messaging;
 using Runax.Messaging.Transports.Aws.Sqs;
 
 builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddSqs(options =>
+    .AddSqs(sqs => sqs.Configure(options =>
     {
         options.Region = "us-east-1";
-    })
+    }))
     .AddConsumer<OrderPlacedConsumer>());
 ```
 

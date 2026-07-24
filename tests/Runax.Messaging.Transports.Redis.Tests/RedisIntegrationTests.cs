@@ -31,11 +31,11 @@ public sealed class RedisIntegrationTests
         {
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddRunaxMessaging(m => m.AddRedis(o =>
+            services.AddRunaxMessaging(m => m.AddRedis(__tb => __tb.Configure(o =>
             {
                 o.Configuration = configuration;
                 o.PollInterval = TimeSpan.FromMilliseconds(100);
-            }));
+            })));
             await using var provider = services.BuildServiceProvider();
             var transport = provider.GetRequiredService<IMessagingTransport>();
 
@@ -79,7 +79,7 @@ public sealed class RedisIntegrationTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddRedis(o => o.Configuration = configuration));
+        services.AddRunaxMessaging(m => m.AddRedis(__tb => __tb.Configure(o => o.Configuration = configuration)));
         services.AddHealthChecks().AddRedisTransport();
         await using var provider = services.BuildServiceProvider();
 

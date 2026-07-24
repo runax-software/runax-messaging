@@ -17,11 +17,11 @@ using Runax.Messaging;
 using Runax.Messaging.Transports.Google.PubSub;
 
 builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddGooglePubSub(options =>
+    .AddGooglePubSub(pubsub => pubsub.Configure(options =>
     {
         options.ProjectId = "my-gcp-project";
         options.TopicSubscriptionMap["orders.placed"] = "orders-worker"; // topic -> subscription id
-    })
+    }))
     .AddConsumer<OrderPlacedConsumer>());
 ```
 

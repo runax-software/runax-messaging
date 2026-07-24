@@ -12,20 +12,25 @@ namespace Runax.Messaging.Transports.Aws.Sqs;
 public static class SqsConfiguratorExtensions
 {
     /// <summary>
-    /// Registers Amazon SQS as the messaging transport.
+    /// Registers Amazon SQS as the messaging transport, configuring options and consumers in one block:
+    /// <c>AddSqs(sqs =&gt; { sqs.Configure(o =&gt; ...); sqs.AddConsumer&lt;T&gt;(); })</c>.
     /// </summary>
     /// <param name="configurator">The messaging configurator.</param>
-    /// <param name="configure">Action to configure <see cref="SqsOptions"/>.</param>
+    /// <param name="configure">Block that configures <see cref="SqsOptions"/> (via <c>Configure</c>) and registers consumers.</param>
     /// <returns>The same configurator, to allow chaining.</returns>
     public static MessagingConfigurator AddSqs(
         this MessagingConfigurator configurator,
-        Action<SqsOptions> configure)
+        Action<TransportBuilder<SqsOptions>> configure)
     {
-        configurator.Services
+        var builder = new TransportBuilder<SqsOptions>(configurator.Services, SqsTransport.TransportName);
+        configure(builder);
+
+        var options = configurator.Services
             .AddOptions<SqsOptions>()
-            .Configure(configure)
             .ValidateDataAnnotations()
             .ValidateOnStart();
+        if (builder.Configuration is not null)
+            options.Configure(builder.Configuration);
 
         return AddSqsCore(configurator);
     }
@@ -47,23 +52,6 @@ public static class SqsConfiguratorExtensions
             .ValidateOnStart();
 
         return AddSqsCore(configurator);
-    }
-
-    /// <summary>
-    /// Registers Amazon SQS as the messaging transport and scopes consumers to it via the builder block.
-    /// </summary>
-    /// <param name="configurator">The messaging configurator.</param>
-    /// <param name="configure">Action to configure <see cref="SqsOptions"/>.</param>
-    /// <param name="configureTransport">Block that registers consumers bound to this broker.</param>
-    /// <returns>The same configurator, to allow chaining.</returns>
-    public static MessagingConfigurator AddSqs(
-        this MessagingConfigurator configurator,
-        Action<SqsOptions> configure,
-        Action<TransportBuilder> configureTransport)
-    {
-        AddSqs(configurator, configure);
-        configureTransport(new TransportBuilder(configurator.Services, SqsTransport.TransportName));
-        return configurator;
     }
 
     private static MessagingConfigurator AddSqsCore(MessagingConfigurator configurator)

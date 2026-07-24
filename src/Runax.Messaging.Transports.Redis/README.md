@@ -17,11 +17,11 @@ using Runax.Messaging;
 using Runax.Messaging.Transports.Redis;
 
 builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddRedis(options =>
+    .AddRedis(redis => redis.Configure(options =>
     {
         options.Configuration = "localhost:6379";
         options.ConsumerGroup = "orders-workers";
-    })
+    }))
     .AddConsumer<OrderPlacedConsumer>());
 ```
 

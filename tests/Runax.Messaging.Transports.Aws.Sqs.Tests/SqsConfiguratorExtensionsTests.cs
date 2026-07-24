@@ -12,13 +12,13 @@ public class SqsConfiguratorExtensionsTests
         var services = new ServiceCollection();
         services.AddLogging();
 
-        services.AddRunaxMessaging(m => m.AddSqs(o =>
+        services.AddRunaxMessaging(m => m.AddSqs(__tb => __tb.Configure(o =>
         {
             o.Region = "eu-west-1";
             o.ServiceUrl = "http://localhost:4566";
             o.AccessKey = "test";
             o.SecretKey = "test";
-        }));
+        })));
 
         using var provider = services.BuildServiceProvider();
 
@@ -35,7 +35,7 @@ public class SqsConfiguratorExtensionsTests
         var services = new ServiceCollection();
         var configurator = new MessagingConfigurator(services);
 
-        var result = configurator.AddSqs(_ => { });
+        var result = configurator.AddSqs(__tb => __tb.Configure(_ => { }));
 
         result.ShouldBeSameAs(configurator);
     }

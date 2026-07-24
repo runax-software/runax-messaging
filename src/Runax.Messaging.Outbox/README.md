@@ -18,7 +18,7 @@ using Runax.Messaging;
 using Runax.Messaging.Outbox;
 
 builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddRabbitMq(o => o.HostName = "localhost")
+    .AddRabbitMq(rabbit => rabbit.Configure(o => o.HostName = "localhost"))
     .AddConsumer<OrderPlacedConsumer>()
     .AddOutbox(o => o.PollingInterval = TimeSpan.FromSeconds(2))
     .AddInMemoryOutboxStore());   // or register your own IOutboxStore

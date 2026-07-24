@@ -34,7 +34,7 @@ public sealed class SqsTransportIntegrationTests : IAsyncLifetime, IDisposable
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddSqs(o =>
+        services.AddRunaxMessaging(m => m.AddSqs(__tb => __tb.Configure(o =>
         {
             o.Region = Region;
             o.ServiceUrl = ServiceUrl;
@@ -42,7 +42,7 @@ public sealed class SqsTransportIntegrationTests : IAsyncLifetime, IDisposable
             o.SecretKey = "test";
             o.WaitTimeSeconds = 1;
             o.MaxNumberOfMessages = 1;
-        }));
+        })));
         _provider = services.BuildServiceProvider();
     }
 

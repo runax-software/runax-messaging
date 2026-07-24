@@ -12,20 +12,26 @@ namespace Runax.Messaging.Transports.Aws.Sns;
 public static class SnsConfiguratorExtensions
 {
     /// <summary>
-    /// Registers Amazon SNS as the messaging transport (publish to SNS, consume from a subscribed SQS queue).
+    /// Registers Amazon SNS as the messaging transport (publish to SNS, consume from a subscribed SQS queue),
+    /// configuring options and consumers in one block:
+    /// <c>AddSns(sns =&gt; { sns.Configure(o =&gt; ...); sns.AddConsumer&lt;T&gt;(); })</c>.
     /// </summary>
     /// <param name="configurator">The messaging configurator.</param>
-    /// <param name="configure">Action to configure <see cref="SnsOptions"/>.</param>
+    /// <param name="configure">Block that configures <see cref="SnsOptions"/> (via <c>Configure</c>) and registers consumers.</param>
     /// <returns>The same configurator, to allow chaining.</returns>
     public static MessagingConfigurator AddSns(
         this MessagingConfigurator configurator,
-        Action<SnsOptions> configure)
+        Action<TransportBuilder<SnsOptions>> configure)
     {
-        configurator.Services
+        var builder = new TransportBuilder<SnsOptions>(configurator.Services, SnsTransport.TransportName);
+        configure(builder);
+
+        var options = configurator.Services
             .AddOptions<SnsOptions>()
-            .Configure(configure)
             .ValidateDataAnnotations()
             .ValidateOnStart();
+        if (builder.Configuration is not null)
+            options.Configure(builder.Configuration);
 
         return AddSnsCore(configurator);
     }
@@ -47,23 +53,6 @@ public static class SnsConfiguratorExtensions
             .ValidateOnStart();
 
         return AddSnsCore(configurator);
-    }
-
-    /// <summary>
-    /// Registers Amazon SNS as the messaging transport and scopes consumers to it via the builder block.
-    /// </summary>
-    /// <param name="configurator">The messaging configurator.</param>
-    /// <param name="configure">Action to configure <see cref="SnsOptions"/>.</param>
-    /// <param name="configureTransport">Block that registers consumers bound to this broker.</param>
-    /// <returns>The same configurator, to allow chaining.</returns>
-    public static MessagingConfigurator AddSns(
-        this MessagingConfigurator configurator,
-        Action<SnsOptions> configure,
-        Action<TransportBuilder> configureTransport)
-    {
-        AddSns(configurator, configure);
-        configureTransport(new TransportBuilder(configurator.Services, SnsTransport.TransportName));
-        return configurator;
     }
 
     private static MessagingConfigurator AddSnsCore(MessagingConfigurator configurator)

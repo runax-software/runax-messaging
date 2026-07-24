@@ -31,13 +31,13 @@ public class SqsHealthCheckTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddSqs(o =>
+        services.AddRunaxMessaging(m => m.AddSqs(__tb => __tb.Configure(o =>
         {
             o.Region = Region;
             o.ServiceUrl = ServiceUrl;
             o.AccessKey = "test";
             o.SecretKey = "test";
-        }));
+        })));
         services.AddHealthChecks().AddSqsTransport();
         await using var provider = services.BuildServiceProvider();
 

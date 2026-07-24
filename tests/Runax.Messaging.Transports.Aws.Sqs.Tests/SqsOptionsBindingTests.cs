@@ -35,7 +35,7 @@ public class SqsOptionsBindingTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddSqs(o => o.MaxNumberOfMessages = 50));
+        services.AddRunaxMessaging(m => m.AddSqs(__tb => __tb.Configure(o => o.MaxNumberOfMessages = 50)));
         using var provider = services.BuildServiceProvider();
 
         Should.Throw<OptionsValidationException>(() => provider.GetRequiredService<SqsOptions>());

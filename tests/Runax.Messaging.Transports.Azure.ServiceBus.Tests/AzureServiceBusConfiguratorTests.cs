@@ -28,7 +28,7 @@ public class AzureServiceBusConfiguratorTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddAzureServiceBus(o => o.ConnectionString = ConnectionString));
+        services.AddRunaxMessaging(m => m.AddAzureServiceBus(__tb => __tb.Configure(o => o.ConnectionString = ConnectionString)));
 
         using var provider = services.BuildServiceProvider();
 
@@ -42,7 +42,7 @@ public class AzureServiceBusConfiguratorTests
         var services = new ServiceCollection();
         var configurator = new MessagingConfigurator(services);
 
-        var result = configurator.AddAzureServiceBus(o => o.ConnectionString = ConnectionString);
+        var result = configurator.AddAzureServiceBus(__tb => __tb.Configure(o => o.ConnectionString = ConnectionString));
 
         result.ShouldBeSameAs(configurator);
     }
@@ -74,7 +74,7 @@ public class AzureServiceBusConfiguratorTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddAzureServiceBus(_ => { }));
+        services.AddRunaxMessaging(m => m.AddAzureServiceBus(__tb => __tb.Configure(_ => { })));
         using var provider = services.BuildServiceProvider();
 
         Should.Throw<OptionsValidationException>(() => provider.GetRequiredService<AzureServiceBusOptions>());

@@ -18,13 +18,13 @@ using Runax.Messaging;
 using Runax.Messaging.Transports.Aws.Sns;
 
 builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddSns(options =>
+    .AddSns(sns => sns.Configure(options =>
     {
         options.Region = "us-east-1";
         // consume 'orders.placed' from an SQS queue subscribed to its SNS topic
         options.TopicQueueUrlMap["orders.placed"] =
             "https://sqs.us-east-1.amazonaws.com/123456789012/orders-worker";
-    })
+    }))
     .AddConsumer<OrderPlacedConsumer>());
 ```
 

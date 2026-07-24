@@ -12,20 +12,25 @@ namespace Runax.Messaging.Transports.RabbitMq;
 public static class RabbitMqConfiguratorExtensions
 {
     /// <summary>
-    /// Registers RabbitMQ as the messaging transport.
+    /// Registers RabbitMQ as the messaging transport, configuring options and consumers in one block:
+    /// <c>AddRabbitMq(rabbit =&gt; { rabbit.Configure(o =&gt; ...); rabbit.AddConsumer&lt;T&gt;(); })</c>.
     /// </summary>
     /// <param name="configurator">The messaging configurator.</param>
-    /// <param name="configure">Action to configure <see cref="RabbitMqOptions"/>.</param>
+    /// <param name="configure">Block that configures <see cref="RabbitMqOptions"/> (via <c>Configure</c>) and registers consumers.</param>
     /// <returns>The same configurator, to allow chaining.</returns>
     public static MessagingConfigurator AddRabbitMq(
         this MessagingConfigurator configurator,
-        Action<RabbitMqOptions> configure)
+        Action<TransportBuilder<RabbitMqOptions>> configure)
     {
-        configurator.Services
+        var builder = new TransportBuilder<RabbitMqOptions>(configurator.Services, RabbitMqTransport.TransportName);
+        configure(builder);
+
+        var options = configurator.Services
             .AddOptions<RabbitMqOptions>()
-            .Configure(configure)
             .ValidateDataAnnotations()
             .ValidateOnStart();
+        if (builder.Configuration is not null)
+            options.Configure(builder.Configuration);
 
         return AddRabbitMqCore(configurator);
     }
@@ -47,23 +52,6 @@ public static class RabbitMqConfiguratorExtensions
             .ValidateOnStart();
 
         return AddRabbitMqCore(configurator);
-    }
-
-    /// <summary>
-    /// Registers RabbitMQ as the messaging transport and scopes consumers to it via the builder block.
-    /// </summary>
-    /// <param name="configurator">The messaging configurator.</param>
-    /// <param name="configure">Action to configure <see cref="RabbitMqOptions"/>.</param>
-    /// <param name="configureTransport">Block that registers consumers bound to this broker.</param>
-    /// <returns>The same configurator, to allow chaining.</returns>
-    public static MessagingConfigurator AddRabbitMq(
-        this MessagingConfigurator configurator,
-        Action<RabbitMqOptions> configure,
-        Action<TransportBuilder> configureTransport)
-    {
-        AddRabbitMq(configurator, configure);
-        configureTransport(new TransportBuilder(configurator.Services, RabbitMqTransport.TransportName));
-        return configurator;
     }
 
     private static MessagingConfigurator AddRabbitMqCore(MessagingConfigurator configurator)

@@ -37,7 +37,7 @@ public class RabbitMqOptionsBindingTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddRabbitMq(o => o.Port = 70000));
+        services.AddRunaxMessaging(m => m.AddRabbitMq(__tb => __tb.Configure(o => o.Port = 70000)));
         using var provider = services.BuildServiceProvider();
 
         Should.Throw<OptionsValidationException>(() => provider.GetRequiredService<RabbitMqOptions>());

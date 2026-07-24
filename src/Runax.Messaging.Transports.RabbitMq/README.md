@@ -19,10 +19,10 @@ using Runax.Messaging;
 using Runax.Messaging.Transports.RabbitMq;
 
 builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddRabbitMq(options =>
+    .AddRabbitMq(rabbit => rabbit.Configure(options =>
     {
         options.HostName = "localhost";
-    })
+    }))
     .AddConsumer<OrderPlacedConsumer>());
 ```
 

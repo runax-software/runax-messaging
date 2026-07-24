@@ -69,9 +69,12 @@ topic from more than one broker — even different ones:
 
 ```csharp
 builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddRabbitMq(o => o.HostName = "localhost",
-        rabbit => rabbit.AddConsumer<AuditConsumer>())   // scoped: only RabbitMQ
-    .AddSqs(o => o.Region = "us-east-1")
+    .AddRabbitMq(rabbit =>
+    {
+        rabbit.Configure(o => o.HostName = "localhost");
+        rabbit.AddConsumer<AuditConsumer>();            // scoped: only RabbitMQ
+    })
+    .AddSqs(sqs => sqs.Configure(o => o.Region = "us-east-1"))
     .AddConsumer<OrderPlacedConsumer>()                  // top-level: every registered transport
     .PublishTo("sqs"));                                  // IMessagePublisher target
 ```
@@ -157,7 +160,7 @@ public sealed class OrderV2Consumer : MessageConsumer<OrderV2>
 }
 
 messaging
-    .AddRabbitMq(o => o.HostName = "localhost")
+    .AddRabbitMq(rabbit => rabbit.Configure(o => o.HostName = "localhost"))
     .AddConsumer<OrderV1Consumer>()
     .AddConsumer<OrderV2Consumer>();
 ```

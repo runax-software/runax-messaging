@@ -12,20 +12,25 @@ namespace Runax.Messaging.Transports.Google.PubSub;
 public static class GooglePubSubConfiguratorExtensions
 {
     /// <summary>
-    /// Registers Google Cloud Pub/Sub as the messaging transport.
+    /// Registers Google Cloud Pub/Sub as the messaging transport, configuring options and consumers in one block:
+    /// <c>AddGooglePubSub(pubsub =&gt; { pubsub.Configure(o =&gt; ...); pubsub.AddConsumer&lt;T&gt;(); })</c>.
     /// </summary>
     /// <param name="configurator">The messaging configurator.</param>
-    /// <param name="configure">Action to configure <see cref="GooglePubSubOptions"/>.</param>
+    /// <param name="configure">Block that configures <see cref="GooglePubSubOptions"/> (via <c>Configure</c>) and registers consumers.</param>
     /// <returns>The same configurator, to allow chaining.</returns>
     public static MessagingConfigurator AddGooglePubSub(
         this MessagingConfigurator configurator,
-        Action<GooglePubSubOptions> configure)
+        Action<TransportBuilder<GooglePubSubOptions>> configure)
     {
-        configurator.Services
+        var builder = new TransportBuilder<GooglePubSubOptions>(configurator.Services, GooglePubSubTransport.TransportName);
+        configure(builder);
+
+        var options = configurator.Services
             .AddOptions<GooglePubSubOptions>()
-            .Configure(configure)
             .ValidateDataAnnotations()
             .ValidateOnStart();
+        if (builder.Configuration is not null)
+            options.Configure(builder.Configuration);
 
         return AddGooglePubSubCore(configurator);
     }
@@ -47,23 +52,6 @@ public static class GooglePubSubConfiguratorExtensions
             .ValidateOnStart();
 
         return AddGooglePubSubCore(configurator);
-    }
-
-    /// <summary>
-    /// Registers Google Cloud Pub/Sub as the messaging transport and scopes consumers to it via the builder block.
-    /// </summary>
-    /// <param name="configurator">The messaging configurator.</param>
-    /// <param name="configure">Action to configure <see cref="GooglePubSubOptions"/>.</param>
-    /// <param name="configureTransport">Block that registers consumers bound to this broker.</param>
-    /// <returns>The same configurator, to allow chaining.</returns>
-    public static MessagingConfigurator AddGooglePubSub(
-        this MessagingConfigurator configurator,
-        Action<GooglePubSubOptions> configure,
-        Action<TransportBuilder> configureTransport)
-    {
-        AddGooglePubSub(configurator, configure);
-        configureTransport(new TransportBuilder(configurator.Services, GooglePubSubTransport.TransportName));
-        return configurator;
     }
 
     private static MessagingConfigurator AddGooglePubSubCore(MessagingConfigurator configurator)

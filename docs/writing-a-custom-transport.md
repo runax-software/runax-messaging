@@ -60,8 +60,11 @@ namespace Runax.Messaging.Foo;
 internal sealed class FooTransport(FooOptions options, ILogger<FooTransport> logger)
     : IMessagingTransport
 {
-    // messaging.system tag applied to telemetry (OpenTelemetry convention).
-    public string SystemName => "foo";
+    // Identifies the transport: the messaging.system telemetry tag, and the key used by
+    // AddConsumer<T>("foo") / PublishTo("foo"). Expose it as a constant so registration can reference it.
+    internal const string TransportName = "foo";
+
+    public string SystemName => TransportName;
 
     public ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default)
     {
@@ -108,8 +111,13 @@ Contract notes:
 This is how callers select your transport. Register the options and your
 transport as `IMessagingTransport`:
 
+Follow the built-in transports: take a single builder block so callers configure options (via
+`Configure`) and register consumers in one place.
+
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Runax.Messaging.Abstractions;
 
 namespace Runax.Messaging.Foo;
@@ -118,12 +126,19 @@ public static class FooConfiguratorExtensions
 {
     public static MessagingConfigurator AddFoo(
         this MessagingConfigurator configurator,
-        Action<FooOptions> configure)
+        Action<TransportBuilder<FooOptions>> configure)
     {
-        var options = new FooOptions();
-        configure(options);
+        var builder = new TransportBuilder<FooOptions>(configurator.Services, FooTransport.TransportName);
+        configure(builder);
 
-        configurator.Services.AddSingleton(options);
+        var options = configurator.Services
+            .AddOptions<FooOptions>()
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        if (builder.Configuration is not null)
+            options.Configure(builder.Configuration);
+
+        configurator.Services.TryAddSingleton(sp => sp.GetRequiredService<IOptions<FooOptions>>().Value);
         configurator.Services.AddSingleton<IMessagingTransport, FooTransport>();
 
         return configurator;
@@ -141,7 +156,7 @@ using Runax.Messaging;
 using Runax.Messaging.Foo;
 
 builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddFoo(o => o.Endpoint = "broker:1234")
+    .AddFoo(foo => foo.Configure(o => o.Endpoint = "broker:1234"))
     .AddConsumer<OrderPlacedConsumer>());
 ```
 

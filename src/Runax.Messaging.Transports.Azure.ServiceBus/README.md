@@ -17,11 +17,11 @@ using Runax.Messaging;
 using Runax.Messaging.Transports.Azure.ServiceBus;
 
 builder.Services.AddRunaxMessaging(messaging => messaging
-    .AddAzureServiceBus(options =>
+    .AddAzureServiceBus(sb => sb.Configure(options =>
     {
         options.ConnectionString = "<your Service Bus connection string>";
         options.TopicSubscriptionMap["orders.placed"] = "orders-worker"; // topic -> subscription
-    })
+    }))
     .AddConsumer<OrderPlacedConsumer>());
 ```
 

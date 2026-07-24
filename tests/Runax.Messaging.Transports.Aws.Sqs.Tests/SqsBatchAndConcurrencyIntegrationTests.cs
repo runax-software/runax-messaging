@@ -37,7 +37,7 @@ public sealed class SqsBatchAndConcurrencyIntegrationTests : IAsyncLifetime, IDi
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddSqs(o =>
+        services.AddRunaxMessaging(m => m.AddSqs(__tb => __tb.Configure(o =>
         {
             o.Region = Region;
             o.ServiceUrl = ServiceUrl;
@@ -46,7 +46,7 @@ public sealed class SqsBatchAndConcurrencyIntegrationTests : IAsyncLifetime, IDi
             o.WaitTimeSeconds = 1;
             o.MaxNumberOfMessages = 10;
             configure?.Invoke(o);
-        }));
+        })));
         return services.BuildServiceProvider();
     }
 

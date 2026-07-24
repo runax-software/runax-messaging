@@ -30,7 +30,7 @@ public class RabbitMqHealthCheckTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddRabbitMq(o => o.HostName = HostName));
+        services.AddRunaxMessaging(m => m.AddRabbitMq(__tb => __tb.Configure(o => o.HostName = HostName)));
         services.AddHealthChecks().AddRabbitMqTransport();
         await using var provider = services.BuildServiceProvider();
 

@@ -24,7 +24,7 @@ public class GooglePubSubConfiguratorTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddGooglePubSub(o => o.ProjectId = "my-project"));
+        services.AddRunaxMessaging(m => m.AddGooglePubSub(__tb => __tb.Configure(o => o.ProjectId = "my-project")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -38,7 +38,7 @@ public class GooglePubSubConfiguratorTests
         var services = new ServiceCollection();
         var configurator = new MessagingConfigurator(services);
 
-        var result = configurator.AddGooglePubSub(o => o.ProjectId = "p");
+        var result = configurator.AddGooglePubSub(__tb => __tb.Configure(o => o.ProjectId = "p"));
 
         result.ShouldBeSameAs(configurator);
     }
@@ -69,7 +69,7 @@ public class GooglePubSubConfiguratorTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddGooglePubSub(_ => { }));
+        services.AddRunaxMessaging(m => m.AddGooglePubSub(__tb => __tb.Configure(_ => { })));
         using var provider = services.BuildServiceProvider();
 
         Should.Throw<OptionsValidationException>(() => provider.GetRequiredService<GooglePubSubOptions>());

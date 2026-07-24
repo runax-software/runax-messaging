@@ -28,11 +28,11 @@ public class RedisConfiguratorTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddRedis(o =>
+        services.AddRunaxMessaging(m => m.AddRedis(__tb => __tb.Configure(o =>
         {
             o.Configuration = "localhost:6379";
             o.ConsumerGroup = "workers";
-        }));
+        })));
 
         using var provider = services.BuildServiceProvider();
 
@@ -48,7 +48,7 @@ public class RedisConfiguratorTests
         var services = new ServiceCollection();
         var configurator = new MessagingConfigurator(services);
 
-        var result = configurator.AddRedis(o => o.Configuration = "localhost:6379");
+        var result = configurator.AddRedis(__tb => __tb.Configure(o => o.Configuration = "localhost:6379"));
 
         result.ShouldBeSameAs(configurator);
     }
@@ -81,7 +81,7 @@ public class RedisConfiguratorTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddRedis(_ => { }));
+        services.AddRunaxMessaging(m => m.AddRedis(__tb => __tb.Configure(_ => { })));
         using var provider = services.BuildServiceProvider();
 
         Should.Throw<OptionsValidationException>(() => provider.GetRequiredService<RedisOptions>());
