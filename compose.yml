@@ -55,3 +55,28 @@ services:
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: "Runax_Str0ng_P@ss!"
+
+  # Azure Event Hubs emulator (needs Azurite for storage + a mounted config). AMQP mapped to :5674
+  # to avoid the RabbitMQ (:5672) and Service Bus (:5673) clashes.
+  eventhubs:
+    image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:latest
+    depends_on:
+      - azurite
+    environment:
+      ACCEPT_EULA: "Y"
+      BLOB_SERVER: azurite
+      METADATA_SERVER: azurite
+    ports:
+      - "5674:5672"
+    volumes:
+      - ./docker/eventhubs-config.json:/Eventhubs_Emulator/ConfigFiles/Config.json:ro
+
+  # Azure Storage emulator: backs the Event Hubs emulator and the blob checkpoint store (blob on :10000).
+  # --skipApiVersionCheck lets newer Azure.Storage SDKs talk to Azurite without an API-version mismatch.
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    command: ["azurite", "--blobHost", "0.0.0.0", "--queueHost", "0.0.0.0", "--tableHost", "0.0.0.0", "--skipApiVersionCheck"]
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"

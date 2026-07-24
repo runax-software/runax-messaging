@@ -41,6 +41,8 @@ jobs:
             pubsub: true
           - transport: Azure.ServiceBus
             servicebus: true
+          - transport: Azure.EventHubs
+            eventhubs: true
 
     services:
       rabbitmq:
@@ -97,6 +99,21 @@ jobs:
             docker compose logs servicebus 2>&1 | grep -q "Emulator Service is Successfully Up" && break
             sleep 3
           done
+
+      # The Event Hubs emulator needs Azurite for storage and a mounted config, so bring it up via compose.
+      - name: Start Event Hubs emulator
+        if: matrix.eventhubs
+        run: |
+          docker compose up -d azurite eventhubs
+          # Wait for the emulator's readiness log rather than a bare TCP check (which races startup).
+          ready=
+          for _ in $(seq 1 80); do
+            if docker compose logs eventhubs 2>&1 | grep -q "Emulator Service is Successfully Up"; then ready=1; break; fi
+            sleep 3
+          done
+          echo "::group::azurite logs"; docker compose logs azurite; echo "::endgroup::"
+          echo "::group::eventhubs logs"; docker compose logs eventhubs; echo "::endgroup::"
+          if [ -z "$ready" ]; then echo "::error::Event Hubs emulator did not report readiness"; exit 1; fi
 
       - name: Integration tests (${{ matrix.transport }})
         env:
