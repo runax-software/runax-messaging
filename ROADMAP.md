@@ -12,10 +12,19 @@ observability (see [CHANGELOG.md](CHANGELOG.md)).
   exactly-once-ish delivery.
 - [ ] **Delayed / scheduled messages** — publish with a delay: native where the
   broker supports it (SQS, Service Bus), emulated elsewhere.
+- [ ] **Sagas / state machines** — persisted, long-running workflow
+  orchestration: a saga reacts to a stream of events over time and coordinates a
+  multi-step process, with timeouts and compensation on failure. Depends on a
+  saga state store and the scheduling work above (for timeouts).
 - [ ] **AOT / trim support** — mark the shippable projects `IsTrimmable` /
   `IsAotCompatible` and validate; the serializer is already source-gen-capable.
 - [ ] **Benchmarks (BenchmarkDotNet)** — guard throughput and allocations against
   regressions as the library grows.
+
+## Transports
+
+- [ ] **ActiveMQ transport** (`Runax.Messaging.Transports.ActiveMq`) — publish/
+  consume over ActiveMQ (Artemis / classic) via the `IMessagingTransport` SPI.
 
 ## Nice-to-have
 
