@@ -7,7 +7,6 @@ updates:
       interval: weekly
     open-pull-requests-limit: 10
     labels:
-      - dependencies
       - chore
     assignees:
       - Katyara11
@@ -32,7 +31,6 @@ updates:
     schedule:
       interval: weekly
     labels:
-      - dependencies
       - chore
     assignees:
       - Katyara11
