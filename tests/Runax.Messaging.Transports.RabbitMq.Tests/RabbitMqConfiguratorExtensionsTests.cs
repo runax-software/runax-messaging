@@ -12,7 +12,7 @@ public class RabbitMqConfiguratorExtensionsTests
         var services = new ServiceCollection();
         services.AddLogging();
 
-        services.AddRunaxMessaging(m => m.AddRabbitMq(__tb => __tb.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddRabbitMq(rabbit => rabbit.Configure(o =>
         {
             o.HostName = "broker.internal";
             o.ExchangeName = "custom.exchange";
@@ -33,7 +33,7 @@ public class RabbitMqConfiguratorExtensionsTests
         var services = new ServiceCollection();
         var configurator = new MessagingConfigurator(services);
 
-        var result = configurator.AddRabbitMq(__tb => __tb.Configure(_ => { }));
+        var result = configurator.AddRabbitMq(rabbit => rabbit.Configure(_ => { }));
 
         result.ShouldBeSameAs(configurator);
     }

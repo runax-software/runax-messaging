@@ -31,7 +31,7 @@ public sealed class RedisIntegrationTests
         {
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddRunaxMessaging(m => m.AddRedis(__tb => __tb.Configure(o =>
+            services.AddRunaxMessaging(m => m.AddRedis(redis => redis.Configure(o =>
             {
                 o.Configuration = configuration;
                 o.PollInterval = TimeSpan.FromMilliseconds(100);
@@ -79,7 +79,7 @@ public sealed class RedisIntegrationTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddRedis(__tb => __tb.Configure(o => o.Configuration = configuration)));
+        services.AddRunaxMessaging(m => m.AddRedis(redis => redis.Configure(o => o.Configuration = configuration)));
         services.AddHealthChecks().AddRedisTransport();
         await using var provider = services.BuildServiceProvider();
 

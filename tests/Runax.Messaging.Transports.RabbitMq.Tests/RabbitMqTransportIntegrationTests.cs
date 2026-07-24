@@ -39,7 +39,7 @@ public sealed class RabbitMqTransportIntegrationTests : IAsyncLifetime, IDisposa
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddRabbitMq(__tb => __tb.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddRabbitMq(rabbit => rabbit.Configure(o =>
         {
             o.HostName = HostName;
             o.ExchangeName = _exchange;

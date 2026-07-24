@@ -24,7 +24,7 @@ public sealed class AzureServiceBusIntegrationTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddAzureServiceBus(__tb => __tb.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddAzureServiceBus(serviceBus => serviceBus.Configure(o =>
         {
             o.ConnectionString = ConnectionString;
             o.TopicSubscriptionMap[Topic] = Subscription;

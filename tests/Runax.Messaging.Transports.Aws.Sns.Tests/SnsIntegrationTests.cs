@@ -52,7 +52,7 @@ public sealed class SnsIntegrationTests : IAsyncLifetime
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddSns(__tb => __tb.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddSns(sns => sns.Configure(o =>
         {
             o.Region = Region;
             o.ServiceUrl = ServiceUrl;
@@ -103,7 +103,7 @@ public sealed class SnsIntegrationTests : IAsyncLifetime
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddSns(__tb => __tb.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddSns(sns => sns.Configure(o =>
         {
             o.Region = Region;
             o.ServiceUrl = ServiceUrl;

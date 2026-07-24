@@ -27,7 +27,7 @@ public class SnsConfiguratorTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddSns(__tb => __tb.Configure(o => o.Region = "eu-west-1")));
+        services.AddRunaxMessaging(m => m.AddSns(sns => sns.Configure(o => o.Region = "eu-west-1")));
 
         using var provider = services.BuildServiceProvider();
 
@@ -41,7 +41,7 @@ public class SnsConfiguratorTests
         var services = new ServiceCollection();
         var configurator = new MessagingConfigurator(services);
 
-        var result = configurator.AddSns(__tb => __tb.Configure(_ => { }));
+        var result = configurator.AddSns(sns => sns.Configure(_ => { }));
 
         result.ShouldBeSameAs(configurator);
     }
@@ -72,7 +72,7 @@ public class SnsConfiguratorTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddSns(__tb => __tb.Configure(o => o.MaxNumberOfMessages = 50)));
+        services.AddRunaxMessaging(m => m.AddSns(sns => sns.Configure(o => o.MaxNumberOfMessages = 50)));
         using var provider = services.BuildServiceProvider();
 
         Should.Throw<OptionsValidationException>(() => provider.GetRequiredService<SnsOptions>());

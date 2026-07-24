@@ -38,7 +38,7 @@ public sealed class SqsVisibilityIntegrationTests : IAsyncLifetime, IDisposable
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddSqs(__tb => __tb.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddSqs(sqs => sqs.Configure(o =>
         {
             o.Region = Region;
             o.ServiceUrl = ServiceUrl;

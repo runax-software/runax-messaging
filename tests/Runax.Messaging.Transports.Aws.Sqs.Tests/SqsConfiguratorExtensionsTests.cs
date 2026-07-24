@@ -12,7 +12,7 @@ public class SqsConfiguratorExtensionsTests
         var services = new ServiceCollection();
         services.AddLogging();
 
-        services.AddRunaxMessaging(m => m.AddSqs(__tb => __tb.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddSqs(sqs => sqs.Configure(o =>
         {
             o.Region = "eu-west-1";
             o.ServiceUrl = "http://localhost:4566";
@@ -35,7 +35,7 @@ public class SqsConfiguratorExtensionsTests
         var services = new ServiceCollection();
         var configurator = new MessagingConfigurator(services);
 
-        var result = configurator.AddSqs(__tb => __tb.Configure(_ => { }));
+        var result = configurator.AddSqs(sqs => sqs.Configure(_ => { }));
 
         result.ShouldBeSameAs(configurator);
     }

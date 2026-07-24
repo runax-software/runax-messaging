@@ -55,7 +55,7 @@ public sealed class GooglePubSubIntegrationTests : IAsyncLifetime
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddGooglePubSub(__tb => __tb.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddGooglePubSub(pubsub => pubsub.Configure(o =>
         {
             o.ProjectId = ProjectId;
             o.TopicSubscriptionMap[_topicId] = _subscriptionId;
@@ -103,7 +103,7 @@ public sealed class GooglePubSubIntegrationTests : IAsyncLifetime
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddGooglePubSub(__tb => __tb.Configure(o => o.ProjectId = ProjectId)));
+        services.AddRunaxMessaging(m => m.AddGooglePubSub(pubsub => pubsub.Configure(o => o.ProjectId = ProjectId)));
         services.AddHealthChecks().AddGooglePubSubTransport();
         await using var provider = services.BuildServiceProvider();
 
