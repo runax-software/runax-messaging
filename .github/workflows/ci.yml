@@ -106,10 +106,14 @@ jobs:
         run: |
           docker compose up -d azurite eventhubs
           # Wait for the emulator's readiness log rather than a bare TCP check (which races startup).
-          for _ in $(seq 1 60); do
-            docker compose logs eventhubs 2>&1 | grep -q "Emulator Service is Successfully Up" && break
+          ready=
+          for _ in $(seq 1 80); do
+            if docker compose logs eventhubs 2>&1 | grep -q "Emulator Service is Successfully Up"; then ready=1; break; fi
             sleep 3
           done
+          echo "::group::azurite logs"; docker compose logs azurite; echo "::endgroup::"
+          echo "::group::eventhubs logs"; docker compose logs eventhubs; echo "::endgroup::"
+          if [ -z "$ready" ]; then echo "::error::Event Hubs emulator did not report readiness"; exit 1; fi
 
       - name: Integration tests (${{ matrix.transport }})
         env:
