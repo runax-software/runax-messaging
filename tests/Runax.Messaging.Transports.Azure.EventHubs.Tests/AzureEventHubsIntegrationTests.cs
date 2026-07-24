@@ -83,18 +83,21 @@ public sealed class AzureEventHubsIntegrationTests
             }
         }, cts.Token);
 
-        string result;
-        try
-        {
-            result = await received.Task.WaitAsync(TimeSpan.FromSeconds(110));
-        }
-        catch (TimeoutException)
+        // SubscribeAsync runs until cancellation; if it completes early it faulted during startup, so await it
+        // to surface the real exception instead of masking it as a plain timeout.
+        var timeout = Task.Delay(TimeSpan.FromSeconds(110));
+        var completed = await Task.WhenAny(received.Task, subscription, publishLoop, timeout);
+        if (completed == subscription)
+            await subscription;
+        if (completed == publishLoop)
+            await publishLoop;
+        if (!received.Task.IsCompletedSuccessfully)
         {
             throw new TimeoutException(
                 "Event Hubs round-trip timed out. Transport logs:\n" + string.Join("\n", logs.Messages));
         }
 
-        result.ShouldBe(envelope);
+        (await received.Task).ShouldBe(envelope);
 
         await cts.CancelAsync();
         foreach (var task in new[] { subscription, publishLoop })
