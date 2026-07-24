@@ -93,6 +93,29 @@ public static class MessagingConfiguratorExtensions
     }
 
     /// <summary>
+    /// Selects a built-in strategy for messages that no registered consumer accepts on this transport only —
+    /// messages on other brokers keep the global strategy (or the built-in <see cref="UnroutableStrategy.DeadLetter"/>
+    /// default). Call inside a transport's configuration block
+    /// (e.g. <c>AddRabbitMq(rabbit =&gt; rabbit.OnUnroutableMessage(UnroutableStrategy.Discard))</c>).
+    /// </summary>
+    /// <param name="builder">The transport builder for the broker to scope to.</param>
+    /// <param name="strategy">The strategy to apply.</param>
+    /// <returns>The same builder, to allow chaining.</returns>
+    public static TransportBuilder OnUnroutableMessage(
+        this TransportBuilder builder,
+        UnroutableStrategy strategy)
+    {
+        builder.Services.AddKeyedSingleton<IUnroutableMessageHandler>(builder.TransportName, (_, _) => strategy switch
+        {
+            UnroutableStrategy.Requeue => new RequeueUnroutableHandler(),
+            UnroutableStrategy.Discard => new DiscardUnroutableHandler(),
+            _ => new DeadLetterUnroutableHandler(),
+        });
+
+        return builder;
+    }
+
+    /// <summary>
     /// Registers a custom <see cref="IUnroutableMessageHandler"/> for messages that no registered consumer
     /// accepts — for example to forward them to a quarantine topic or raise an alert.
     /// </summary>
@@ -104,6 +127,21 @@ public static class MessagingConfiguratorExtensions
     {
         configurator.Services.AddSingleton<IUnroutableMessageHandler, THandler>();
         return configurator;
+    }
+
+    /// <summary>
+    /// Registers a custom <see cref="IUnroutableMessageHandler"/> for unroutable messages on this transport only —
+    /// messages on other brokers keep the global handler (or the built-in default). Call inside a transport's
+    /// configuration block (e.g. <c>AddRabbitMq(rabbit =&gt; rabbit.OnUnroutableMessage&lt;MyHandler&gt;())</c>).
+    /// </summary>
+    /// <typeparam name="THandler">The handler implementation.</typeparam>
+    /// <param name="builder">The transport builder for the broker to scope to.</param>
+    /// <returns>The same builder, to allow chaining.</returns>
+    public static TransportBuilder OnUnroutableMessage<THandler>(this TransportBuilder builder)
+        where THandler : class, IUnroutableMessageHandler
+    {
+        builder.Services.AddKeyedSingleton<IUnroutableMessageHandler, THandler>(builder.TransportName);
+        return builder;
     }
 
     /// <summary>
@@ -123,6 +161,31 @@ public static class MessagingConfiguratorExtensions
             .ValidateOnStart();
 
         return configurator;
+    }
+
+    /// <summary>
+    /// Configures the retry and dead-letter policy for consumers on this transport only — consumers on other
+    /// brokers keep the global policy (or the built-in defaults when no global <c>WithRetry</c> was called). Call
+    /// inside a transport's configuration block (e.g. <c>AddRabbitMq(rabbit =&gt; rabbit.WithRetry(o =&gt; o.MaxAttempts = 5))</c>).
+    /// The scoped policy starts from the <see cref="RetryOptions"/> defaults with <paramref name="configure"/>
+    /// applied on top and is validated with the same DataAnnotations as the global policy.
+    /// </summary>
+    /// <param name="builder">The transport builder for the broker to scope to.</param>
+    /// <param name="configure">Action to configure this broker's <see cref="RetryOptions"/>.</param>
+    /// <returns>The same builder, to allow chaining.</returns>
+    public static TransportBuilder WithRetry(
+        this TransportBuilder builder,
+        Action<RetryOptions> configure)
+    {
+        builder.Services
+            .AddOptions<RetryOptions>(builder.TransportName)
+            .Configure(configure)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        builder.Services.AddSingleton(new ScopedRetryMarker { TransportName = builder.TransportName });
+
+        return builder;
     }
 
     /// <summary>

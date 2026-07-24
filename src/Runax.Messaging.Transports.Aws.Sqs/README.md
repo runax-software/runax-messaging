@@ -35,18 +35,25 @@ lambda: `AddSqs(builder.Configuration.GetSection("Sqs"))`.
 
 ## Options
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `Region` | `us-east-1` | AWS region. |
-| `AccessKey` | `null` | Access key. If null (with `SecretKey`), the default AWS credential chain is used. |
-| `SecretKey` | `null` | Secret key. If null (with `AccessKey`), the default AWS credential chain is used. |
-| `ServiceUrl` | `null` | Custom endpoint, e.g. for LocalStack or testing. |
-| `MaxNumberOfMessages` | `10` | Maximum messages received per poll. |
-| `WaitTimeSeconds` | `20` | Long-polling wait time in seconds. |
-| `MaxConcurrentMessages` | `10` | Maximum messages handled concurrently across all polled queues. |
-| `VisibilityTimeoutSeconds` | `30` | Visibility timeout requested per receive, hiding the message while it is processed. |
-| `ExtendVisibilityDuringProcessing` | `true` | Periodically extend visibility while a message is handled (including retry backoff) so it does not reappear and get processed twice. |
-| `TopicQueueUrlMap` | empty | Explicit topic → queue-URL map. Unmapped topics are resolved by queue name via `GetQueueUrl`. |
+Configure these on `SqsOptions` via `sqs.Configure(o => ...)`.
+
+| Option | Meaning | Default | Required? |
+| --- | --- | --- | --- |
+| `Region` | AWS region. | `us-east-1` | No |
+| `AccessKey` | Access key. If null (with `SecretKey`), the default AWS credential chain is used. | `null` | No |
+| `SecretKey` | Secret key. If null (with `AccessKey`), the default AWS credential chain is used. | `null` | No |
+| `ServiceUrl` | Custom endpoint, e.g. for LocalStack or testing. | `null` | No |
+| `MaxNumberOfMessages` | Maximum messages received per poll (1–10). | `10` | No |
+| `WaitTimeSeconds` | Long-polling wait time in seconds (0–20). | `20` | No |
+| `MaxConcurrentMessages` | Maximum messages handled concurrently across all polled queues. | `10` | No |
+| `VisibilityTimeoutSeconds` | Visibility timeout requested per receive (0–43200), hiding the message while it is processed. | `30` | No |
+| `ExtendVisibilityDuringProcessing` | Periodically extend visibility while a message is handled (including retry backoff) so it does not reappear and get processed twice. | `true` | No |
+| `TopicQueueUrlMap` | Explicit topic → queue-URL map. Unmapped topics are resolved by queue name via `GetQueueUrl`. | empty | No |
+
+Beyond these transport options, settings from the core package can be applied to this broker
+inside the `AddSqs(...)` block — `AddConsumer<T>()`, `WithRetry(...)`, `OnUnroutableMessage(...)`,
+`ConfigureSerialization(...)`, and `UseSerializer<T>()` — each overriding the global default for
+SQS only. See [Configuration & per-broker settings](../../docs/configuration.md).
 
 ## Behavior
 

@@ -20,8 +20,8 @@ internal sealed class MessageConsumerHostedService(
     IEnumerable<ConsumerRegistration> registrations,
     IEnumerable<IMessagingTransport> transports,
     IMessageSerializerProvider serializerProvider,
-    IUnroutableMessageHandler unroutableHandler,
-    RetryOptions retryOptions,
+    IUnroutableMessageHandlerProvider unroutableHandlerProvider,
+    IRetryOptionsProvider retryOptionsProvider,
     ILogger<MessageConsumerHostedService> logger)
     : BackgroundService
 {
@@ -219,7 +219,8 @@ internal sealed class MessageConsumerHostedService(
             TransportSystemName = transport.SystemName,
         };
 
-        var disposition = await unroutableHandler.HandleAsync(unroutable, cancellationToken);
+        var handler = unroutableHandlerProvider.For(transport.SystemName);
+        var disposition = await handler.HandleAsync(unroutable, cancellationToken);
 
         if (disposition == MessageDisposition.DeadLetter)
         {
@@ -272,6 +273,8 @@ internal sealed class MessageConsumerHostedService(
         string topic,
         CancellationToken cancellationToken)
     {
+        var retryOptions = retryOptionsProvider.For(transport.SystemName);
+
         for (var attempt = 1; ; attempt++)
         {
             try
@@ -289,7 +292,7 @@ internal sealed class MessageConsumerHostedService(
             }
             catch (Exception ex) when (attempt < retryOptions.MaxAttempts && !cancellationToken.IsCancellationRequested)
             {
-                var delay = ComputeBackoff(attempt);
+                var delay = ComputeBackoff(retryOptions, attempt);
                 logger.LogWarning(ex,
                     "Consumer {Consumer} failed on '{Topic}' (attempt {Attempt}/{MaxAttempts}). Retrying in {Delay}.",
                     consumer.GetType().Name, topic, attempt, retryOptions.MaxAttempts, delay);
@@ -313,7 +316,7 @@ internal sealed class MessageConsumerHostedService(
         }
     }
 
-    private TimeSpan ComputeBackoff(int attempt)
+    private static TimeSpan ComputeBackoff(RetryOptions retryOptions, int attempt)
     {
         var factor = Math.Pow(retryOptions.BackoffFactor, attempt - 1);
         var ticks = Math.Min(retryOptions.InitialDelay.Ticks * factor, retryOptions.MaxDelay.Ticks);
@@ -328,6 +331,8 @@ internal sealed class MessageConsumerHostedService(
         int attempts,
         CancellationToken cancellationToken)
     {
+        var retryOptions = retryOptionsProvider.For(transport.SystemName);
+
         MessagingDiagnostics.Failed.Add(1, MessagingDiagnostics.Tags(transport.SystemName, topic));
 
         if (!retryOptions.EnableDeadLettering)

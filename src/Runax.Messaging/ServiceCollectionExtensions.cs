@@ -36,6 +36,10 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<MessagingPublishOptions>();
         services.TryAddSingleton<IMessagePublisher, MessagePublisherAdapter>();
         services.TryAddSingleton<IUnroutableMessageHandler, DeadLetterUnroutableHandler>();
+        // Resolves the unroutable handler per transport, honoring per-broker OnUnroutableMessage.
+        services.TryAddSingleton<IUnroutableMessageHandlerProvider, UnroutableMessageHandlerProvider>();
+        // Resolves the retry policy per transport, honoring per-broker WithRetry.
+        services.TryAddSingleton<IRetryOptionsProvider, RetryOptionsProvider>();
         services.TryAddSingleton<IMessageContractCatalog, MessageContractCatalog>();
 
         configure(new MessagingConfigurator(services));

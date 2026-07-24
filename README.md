@@ -167,7 +167,8 @@ registered transport is used automatically). Each transport must report a distin
 ## Reliability & observability
 
 Consumers get retry-with-backoff, poison-message handling, and dead-lettering out
-of the box; tune them with `WithRetry(...)`:
+of the box; tune them with `WithRetry(...)` — globally, or **per broker** inside a
+transport block (the global call is the fallback):
 
 ```csharp
 builder.Services.AddRunaxMessaging(runax =>
@@ -176,11 +177,16 @@ builder.Services.AddRunaxMessaging(runax =>
     {
         rabbitmq.Configure(o => o.HostName = "localhost");
         rabbitmq.AddConsumer<OrderPlacedConsumer>();
+        rabbitmq.WithRetry(o => o.MaxAttempts = 8);   // per-broker override
     });
 
-    runax.WithRetry(o => o.MaxAttempts = 5);
+    runax.WithRetry(o => o.MaxAttempts = 5);          // global default
 });
 ```
+
+`WithRetry`, `OnUnroutableMessage`, `ConfigureSerialization`, `UseSerializer<T>()`, and
+`AddConsumer<T>()` can all be scoped to one broker this way; `PublishTo` is global-only. See
+[Configuration & per-broker settings](docs/configuration.md) for the full table and fallback rules.
 
 Publish/consume are traced and metered via the in-box `System.Diagnostics` APIs —
 subscribe an OpenTelemetry pipeline with `AddSource("Runax.Messaging")` and
@@ -198,6 +204,7 @@ written to your database in the same transaction and dispatched by a background 
 
 ## Documentation
 
+- [Configuration & per-broker settings](docs/configuration.md)
 - [Architecture & message flow](docs/architecture.md)
 - [Serialization & custom serializers](docs/serialization.md)
 - [Writing a custom transport](docs/writing-a-custom-transport.md)

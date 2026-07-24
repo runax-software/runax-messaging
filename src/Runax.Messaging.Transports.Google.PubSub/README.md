@@ -39,10 +39,18 @@ For local development, point at the Pub/Sub emulator with the `PUBSUB_EMULATOR_H
 
 ## Options
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `ProjectId` | (required) | Google Cloud project id. |
-| `TopicSubscriptionMap` | empty | Topic → subscription id used to consume it. Topics without an entry consume from a subscription named after the topic. |
+Configure these on `GooglePubSubOptions` via `pubsub.Configure(o => ...)`.
+
+| Option | Meaning | Default | Required? |
+| --- | --- | --- | --- |
+| `ProjectId` | Google Cloud project id. | (none) | Yes |
+| `TopicSubscriptionMap` | Topic → subscription id used to consume it. Topics without an entry consume from a subscription named after the topic. | empty | No |
+
+Beyond these transport options, settings from the core package can be applied to this broker
+inside the `AddGooglePubSub(...)` block — `AddConsumer<T>()`, `WithRetry(...)`,
+`OnUnroutableMessage(...)`, `ConfigureSerialization(...)`, and `UseSerializer<T>()` — each
+overriding the global default for Pub/Sub only. See
+[Configuration & per-broker settings](../../docs/configuration.md).
 
 ## Behavior
 
