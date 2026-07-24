@@ -10,7 +10,7 @@
             "PartitionCount": "1",
             "ConsumerGroups": [
               {
-                "Name": "$Default"
+                "Name": "runax"
               }
             ]
           }

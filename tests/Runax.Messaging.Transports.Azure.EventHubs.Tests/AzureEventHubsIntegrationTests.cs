@@ -15,6 +15,7 @@ namespace Runax.Messaging.Transports.Azure.EventHubs.Tests;
 public sealed class AzureEventHubsIntegrationTests
 {
     private const string Topic = "runax.test.topic";
+    private const string ConsumerGroup = "runax";
     private const string BlobContainer = "runax-checkpoints";
 
     private static string ConnectionString =>
@@ -33,6 +34,7 @@ public sealed class AzureEventHubsIntegrationTests
         services.AddRunaxMessaging(m => m.AddAzureEventHubs(eventHubs => eventHubs.Configure(o =>
         {
             o.ConnectionString = ConnectionString;
+            o.ConsumerGroup = ConsumerGroup;
             o.BlobConnectionString = BlobConnectionString;
             o.BlobContainerName = BlobContainer;
         })));
