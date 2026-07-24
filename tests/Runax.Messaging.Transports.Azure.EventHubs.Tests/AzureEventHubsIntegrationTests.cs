@@ -6,9 +6,10 @@ namespace Runax.Messaging.Transports.Azure.EventHubs.Tests;
 
 /// <summary>
 /// Integration tests for the Azure Event Hubs transport.
-/// Requires a live Event Hubs namespace (EVENTHUBS_CONNECTION_STRING) plus an Azure Storage account for
-/// the blob checkpoint store (EVENTHUBS_BLOB_CONNECTION_STRING). The event hub named <see cref="Topic"/>,
-/// its consumer group, and the blob container must be provisioned ahead of time.
+/// Runs against the Event Hubs emulator (AMQP on localhost:5674) with Azurite as the blob checkpoint store
+/// (localhost:10000) — see compose.yml. The event hub named <see cref="Topic"/> and its <c>$Default</c>
+/// consumer group are pre-declared in docker/eventhubs-config.json; the blob container is created on demand.
+/// Override with EVENTHUBS_CONNECTION_STRING / EVENTHUBS_BLOB_CONNECTION_STRING to target a live namespace.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class AzureEventHubsIntegrationTests
@@ -18,11 +19,11 @@ public sealed class AzureEventHubsIntegrationTests
 
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("EVENTHUBS_CONNECTION_STRING")
-        ?? throw new InvalidOperationException("EVENTHUBS_CONNECTION_STRING is not set.");
+        ?? "Endpoint=sb://localhost:5674;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;";
 
     private static string BlobConnectionString =>
         Environment.GetEnvironmentVariable("EVENTHUBS_BLOB_CONNECTION_STRING")
-        ?? throw new InvalidOperationException("EVENTHUBS_BLOB_CONNECTION_STRING is not set.");
+        ?? "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;";
 
     [Fact]
     public async Task Transport_round_trips_publish_to_subscribe()
