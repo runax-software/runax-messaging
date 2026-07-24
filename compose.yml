@@ -80,3 +80,9 @@ services:
       - "10000:10000"
       - "10001:10001"
       - "10002:10002"
+
+  # Kafka in KRaft mode (no ZooKeeper). Bootstrap server on :9092.
+  kafka:
+    image: apache/kafka:3.9.0
+    ports:
+      - "9092:9092"
