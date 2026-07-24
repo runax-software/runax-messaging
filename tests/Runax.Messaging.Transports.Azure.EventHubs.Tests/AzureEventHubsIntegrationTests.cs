@@ -43,7 +43,7 @@ public sealed class AzureEventHubsIntegrationTests
 
         var envelope = $$"""{"probe":"{{Guid.NewGuid():N}}"}""";
         var received = new TaskCompletionSource<string>();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
 
         // The hub is shared across runs; acknowledge everything and match our own probe.
         var subscription = transport.SubscribeAsync([Topic], (json, _) =>
@@ -53,20 +53,46 @@ public sealed class AzureEventHubsIntegrationTests
             return ValueTask.FromResult(MessageDisposition.Acknowledge);
         }, cts.Token);
 
-        await Task.Delay(TimeSpan.FromSeconds(5));
-        await transport.PublishAsync(Topic, envelope);
+        // The EventProcessorClient needs time to claim its partition and begin reading; an event published
+        // before that can be missed, so keep republishing the probe until the processor delivers it.
+        var publishLoop = Task.Run(async () =>
+        {
+            while (!received.Task.IsCompleted && !cts.Token.IsCancellationRequested)
+            {
+                try
+                {
+                    await transport.PublishAsync(Topic, envelope, cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
 
-        var result = await received.Task.WaitAsync(TimeSpan.FromSeconds(50));
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(3), cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+        }, cts.Token);
+
+        var result = await received.Task.WaitAsync(TimeSpan.FromSeconds(110));
         result.ShouldBe(envelope);
 
         await cts.CancelAsync();
-        try
+        foreach (var task in new[] { subscription, publishLoop })
         {
-            await subscription;
-        }
-        catch (OperationCanceledException)
-        {
-            // Expected on shutdown.
+            try
+            {
+                await task;
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected on shutdown.
+            }
         }
     }
 }
