@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Runax.Messaging.Abstractions;
 using Runax.Messaging.Transports.Azure.EventHubs;
 
@@ -30,7 +31,8 @@ public sealed class AzureEventHubsIntegrationTests
     public async Task Transport_round_trips_publish_to_subscribe()
     {
         var services = new ServiceCollection();
-        services.AddLogging();
+        // Console logging surfaces the transport's EventProcessorClient errors (ProcessErrorAsync) in CI.
+        services.AddLogging(b => b.AddSimpleConsole().SetMinimumLevel(LogLevel.Debug));
         services.AddRunaxMessaging(m => m.AddAzureEventHubs(eventHubs => eventHubs.Configure(o =>
         {
             o.ConnectionString = ConnectionString;
