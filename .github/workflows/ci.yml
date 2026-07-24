@@ -36,6 +36,8 @@ jobs:
           - transport: Aws.Sqs
           - transport: Aws.Sns
           - transport: RabbitMq
+          - transport: Kafka
+            kafka: true
           - transport: Redis
           - transport: Google.PubSub
             pubsub: true
@@ -114,6 +116,19 @@ jobs:
           echo "::group::azurite logs"; docker compose logs azurite; echo "::endgroup::"
           echo "::group::eventhubs logs"; docker compose logs eventhubs; echo "::endgroup::"
           if [ -z "$ready" ]; then echo "::error::Event Hubs emulator did not report readiness"; exit 1; fi
+
+      # Kafka (KRaft) via compose; wait until the broker answers an API-versions probe from inside the container.
+      - name: Start Kafka
+        if: matrix.kafka
+        run: |
+          docker compose up -d kafka
+          ready=
+          for _ in $(seq 1 40); do
+            if docker compose exec -T kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1; then ready=1; break; fi
+            sleep 3
+          done
+          docker compose logs kafka
+          if [ -z "$ready" ]; then echo "::error::Kafka did not become ready"; exit 1; fi
 
       - name: Integration tests (${{ matrix.transport }})
         env:
