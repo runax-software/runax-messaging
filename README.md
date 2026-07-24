@@ -15,8 +15,8 @@ strongly-typed messages without coupling your application to a specific broker.
 - **Contract versioning** — optional `[MessageContract(version)]`; consumers subscribe per version, with a
   pluggable strategy (dead-letter/requeue/custom) for versions no consumer handles.
 - **Transactional outbox** — optional package for atomic database-write + publish.
-- **Transports** — RabbitMQ, Amazon SQS, Amazon SNS, Azure Service Bus, Google Cloud Pub/Sub,
-  Redis Streams (Redis/Valkey), and a built-in in-memory transport.
+- **Transports** — RabbitMQ, Amazon SQS, Amazon SNS, Azure Service Bus, Azure Event Hubs,
+  Google Cloud Pub/Sub, Redis Streams (Redis/Valkey), and a built-in in-memory transport.
 
 ## Packages
 
@@ -27,10 +27,12 @@ strongly-typed messages without coupling your application to a specific broker.
 | [`Runax.Messaging.Transports.Aws.Sqs`](src/Runax.Messaging.Transports.Aws.Sqs/README.md) | Amazon SQS transport. |
 | [`Runax.Messaging.Transports.Aws.Sns`](src/Runax.Messaging.Transports.Aws.Sns/README.md) | Amazon SNS transport (publish to SNS, consume via SQS). |
 | [`Runax.Messaging.Transports.Azure.ServiceBus`](src/Runax.Messaging.Transports.Azure.ServiceBus/README.md) | Azure Service Bus transport. |
+| [`Runax.Messaging.Transports.Azure.EventHubs`](src/Runax.Messaging.Transports.Azure.EventHubs/README.md) | Azure Event Hubs transport. |
 | [`Runax.Messaging.Transports.RabbitMq`](src/Runax.Messaging.Transports.RabbitMq/README.md) | RabbitMQ transport. |
 | [`Runax.Messaging.Transports.Google.PubSub`](src/Runax.Messaging.Transports.Google.PubSub/README.md) | Google Cloud Pub/Sub transport. |
 | [`Runax.Messaging.Transports.Redis`](src/Runax.Messaging.Transports.Redis/README.md) | Redis Streams transport (Redis and Valkey). |
 | [`Runax.Messaging.Outbox`](src/Runax.Messaging.Outbox/README.md) | Transactional outbox: persist in your DB transaction, dispatch reliably. |
+| [`Runax.Messaging.TestKit`](src/Runax.Messaging.TestKit/README.md) | Test-support: a broker-free `MessagingTestHarness` to publish messages and assert what your consumers handled, retried, or dead-lettered. |
 
 Application code that only publishes needs `Runax.Messaging.Abstractions`. The
 composition root (where you call `AddRunaxMessaging`) needs `Runax.Messaging`
