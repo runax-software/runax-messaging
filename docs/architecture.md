@@ -116,7 +116,10 @@ Versioning is opt-in and envelope-level, so it is transport-agnostic and compose
 ## Reliability: retries & dead-lettering
 
 The dispatcher (`MessageConsumerHostedService`) applies a uniform, transport-agnostic
-policy around every `HandleAsync`, configured with `WithRetry(...)` (`RetryOptions`):
+policy around every `HandleAsync`, configured with `WithRetry(...)` (`RetryOptions`).
+`WithRetry` and `OnUnroutableMessage` can be set globally or **per broker** (inside a transport
+block), with the global call — or the built-in default — as the fallback; see
+[Configuration & per-broker settings](configuration.md).
 
 - **Retry.** A failed `HandleAsync` is retried up to `MaxAttempts` with exponential
   backoff (`InitialDelay` × `BackoffFactor`, capped at `MaxDelay`).
@@ -181,5 +184,9 @@ idempotent). See the [package README](../src/Runax.Messaging.Outbox/README.md).
   subscribes on every registered transport by default, or on a named subset; the hosted dispatcher
   subscribes and dispatches each transport independently. `IMessagePublisher` targets the sole
   transport, or the one chosen with `PublishTo("<system-name>")`.
+- Scoped settings (`AddConsumer`, `WithRetry`, `OnUnroutableMessage`, `ConfigureSerialization`,
+  `UseSerializer`) resolve **by `SystemName`**: the per-broker value if set inside that transport's
+  block, else the global value, else the built-in default. `PublishTo` is global-only. See
+  [Configuration & per-broker settings](configuration.md).
 - Applications depend on `IMessagePublisher` (from Abstractions), not on any
   concrete transport.

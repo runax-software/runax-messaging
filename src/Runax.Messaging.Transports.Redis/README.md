@@ -38,14 +38,21 @@ Options are validated at startup; pass an `IConfiguration` section to bind them 
 
 ## Options
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `Configuration` | (required) | StackExchange.Redis connection string. |
-| `ConsumerGroup` | `runax` | Consumer group used to read each stream. |
-| `ConsumerName` | per-process unique | This consumer's name within the group. |
-| `ReadBatchSize` | `10` | Maximum entries read per poll. |
-| `PollInterval` | `1s` | Wait before polling again when a stream is idle. |
-| `ClaimIdleTime` | `30s` | Idle time before a pending entry is reclaimed and redelivered. |
+Configure these on `RedisOptions` via `redis.Configure(o => ...)`.
+
+| Option | Meaning | Default | Required? |
+| --- | --- | --- | --- |
+| `Configuration` | StackExchange.Redis connection string. | (none) | Yes |
+| `ConsumerGroup` | Consumer group used to read each stream. | `runax` | No |
+| `ConsumerName` | This consumer's name within the group. | per-process unique | No |
+| `ReadBatchSize` | Maximum entries read per poll. | `10` | No |
+| `PollInterval` | Wait before polling again when a stream is idle. | `1s` | No |
+| `ClaimIdleTime` | Idle time before a pending entry is reclaimed and redelivered. | `30s` | No |
+
+Beyond these transport options, settings from the core package can be applied to this broker
+inside the `AddRedis(...)` block — `AddConsumer<T>()`, `WithRetry(...)`, `OnUnroutableMessage(...)`,
+`ConfigureSerialization(...)`, and `UseSerializer<T>()` — each overriding the global default for
+Redis only. See [Configuration & per-broker settings](../../docs/configuration.md).
 
 ## Behavior
 

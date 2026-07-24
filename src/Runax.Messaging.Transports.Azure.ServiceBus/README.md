@@ -38,11 +38,19 @@ Provision the topics and subscriptions ahead of time.
 
 ## Options
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `ConnectionString` | (required) | Service Bus connection string. |
-| `TopicSubscriptionMap` | empty | Topic → subscription used to consume it. Required to consume a topic. |
-| `MaxConcurrentCalls` | `1` | Messages processed concurrently per subscription. |
+Configure these on `AzureServiceBusOptions` via `serviceBus.Configure(o => ...)`.
+
+| Option | Meaning | Default | Required? |
+| --- | --- | --- | --- |
+| `ConnectionString` | Service Bus connection string. | (none) | Yes |
+| `TopicSubscriptionMap` | Topic → subscription used to consume it. | empty | To consume a topic |
+| `MaxConcurrentCalls` | Messages processed concurrently per subscription. | `1` | No |
+
+Beyond these transport options, settings from the core package can be applied to this broker
+inside the `AddAzureServiceBus(...)` block — `AddConsumer<T>()`, `WithRetry(...)`,
+`OnUnroutableMessage(...)`, `ConfigureSerialization(...)`, and `UseSerializer<T>()` — each
+overriding the global default for Service Bus only. See
+[Configuration & per-broker settings](../../docs/configuration.md).
 
 ## Behavior
 

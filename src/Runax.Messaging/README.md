@@ -128,6 +128,24 @@ builder.Services.AddRunaxMessaging(runax =>
   message so the transport's native DLQ handles it (pair with `MaxAttempts = 1` to
   rely purely on the broker).
 
+`WithRetry` can be set globally (on `runax`) or **per broker** — call it inside a transport
+block to give that broker its own policy, falling back to the global (or built-in) defaults
+for every other broker:
+
+```csharp
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddRabbitMq(rabbitmq =>
+    {
+        rabbitmq.Configure(o => o.HostName = "localhost");
+        rabbitmq.AddConsumer<OrderPlacedConsumer>();
+        rabbitmq.WithRetry(o => o.MaxAttempts = 8);   // per-broker: RabbitMQ retries harder
+    });
+
+    runax.WithRetry(o => o.MaxAttempts = 3);          // global default for every other broker
+});
+```
+
 ## Serialization
 
 Message bodies are serialized with `System.Text.Json`. Configure the options — naming policy,
@@ -263,6 +281,11 @@ builder.Services.AddRunaxMessaging(runax =>
 });
 ```
 
+Like `WithRetry`, `OnUnroutableMessage` (both the strategy and the custom-handler form) can be set
+globally or **per broker** — call it inside a transport block to override the strategy for that
+broker only, falling back to the global (or the built-in dead-letter default) elsewhere. See
+[Configuration & per-broker settings](../../docs/configuration.md).
+
 ### Check what you handle before switching a producer
 
 `IMessageContractCatalog` reports the `(topic, version)` pairs your app consumes, so you can fail fast if a
@@ -299,6 +322,23 @@ Transport packages add broker health checks (`AddRabbitMqTransport()`,
 `AddInMemory()` delivers messages in-process through channels, one per topic. It
 is intended for tests and single-process scenarios — messages are not persisted
 and do not cross process boundaries.
+
+The in-memory transport has **no transport options** of its own. It still honors the per-broker
+core settings, though: pass a builder block to scope consumers or override policy for it —
+
+```csharp
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddInMemory(inMemory =>
+    {
+        inMemory.AddConsumer<OrderPlacedConsumer>();
+        inMemory.WithRetry(o => o.MaxAttempts = 1);   // per-broker override
+    });
+});
+```
+
+Its `SystemName` is `in-memory`. See
+[Configuration & per-broker settings](../../docs/configuration.md).
 
 ## License
 

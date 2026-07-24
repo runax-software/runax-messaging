@@ -43,16 +43,23 @@ are set.
 
 ## Options
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `Region` | `us-east-1` | AWS region. |
-| `AccessKey` / `SecretKey` | `null` | Static credentials; falls back to the default credential chain. |
-| `ServiceUrl` | `null` | Custom endpoint, e.g. for a local emulator. |
-| `TopicArnMap` | empty | Topic → SNS topic ARN for publishing. Unmapped topics are resolved via `CreateTopic` (idempotent). |
-| `TopicQueueUrlMap` | empty | Topic → SQS queue URL (subscribed to the topic) used to consume it. Required to consume a topic. |
-| `MaxNumberOfMessages` | `10` | Messages received per SQS poll. |
-| `WaitTimeSeconds` | `20` | SQS long-polling wait time. |
-| `VisibilityTimeoutSeconds` | `30` | SQS visibility timeout per receive. |
+Configure these on `SnsOptions` via `sns.Configure(o => ...)`.
+
+| Option | Meaning | Default | Required? |
+| --- | --- | --- | --- |
+| `Region` | AWS region. | `us-east-1` | No |
+| `AccessKey` / `SecretKey` | Static credentials; falls back to the default credential chain. | `null` | No |
+| `ServiceUrl` | Custom endpoint, e.g. for a local emulator. | `null` | No |
+| `TopicArnMap` | Topic → SNS topic ARN for publishing. Unmapped topics are resolved via `CreateTopic` (idempotent). | empty | No |
+| `TopicQueueUrlMap` | Topic → SQS queue URL (subscribed to the topic) used to consume it. | empty | To consume a topic |
+| `MaxNumberOfMessages` | Messages received per SQS poll (1–10). | `10` | No |
+| `WaitTimeSeconds` | SQS long-polling wait time (0–20). | `20` | No |
+| `VisibilityTimeoutSeconds` | SQS visibility timeout per receive (0–43200). | `30` | No |
+
+Beyond these transport options, settings from the core package can be applied to this broker
+inside the `AddSns(...)` block — `AddConsumer<T>()`, `WithRetry(...)`, `OnUnroutableMessage(...)`,
+`ConfigureSerialization(...)`, and `UseSerializer<T>()` — each overriding the global default for
+SNS only. See [Configuration & per-broker settings](../../docs/configuration.md).
 
 ## Behavior
 

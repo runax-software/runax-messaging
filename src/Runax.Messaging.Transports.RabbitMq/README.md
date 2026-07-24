@@ -37,24 +37,32 @@ lambda: `AddRabbitMq(builder.Configuration.GetSection("RabbitMq"))`.
 
 ## Options
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `HostName` | `localhost` | RabbitMQ host. Ignored when `Uri` is set. |
-| `Port` | `5672` | RabbitMQ port. Ignored when `Uri` is set. |
-| `UserName` | `guest` | Username. Ignored when `Uri` is set. |
-| `Password` | `guest` | Password. Prefer `Uri` (an `amqps://` string) or a secret store. Ignored when `Uri` is set. |
-| `VirtualHost` | `/` | Virtual host. Ignored when `Uri` is set. |
-| `Uri` | `null` | Full AMQP connection URI (e.g. `amqps://user:pass@host:5671/vhost`). Takes precedence over the discrete settings and enables TLS for the `amqps` scheme. |
-| `UseTls` | `false` | Enable TLS when connecting via the discrete host settings (not `Uri`). |
-| `SslServerName` | `null` | TLS server name (SNI) when `UseTls` is on. Defaults to `HostName`. |
-| `ExchangeName` | `runax.messaging` | Exchange to publish to and bind against. |
-| `ExchangeType` | `topic` | Exchange type. |
-| `PrefetchCount` | `10` | Unacknowledged messages allowed in flight per consumer (`BasicQos`). |
-| `PublisherConfirms` | `true` | Wait for broker acknowledgement of each publish. |
-| `ConfirmTimeout` | `5s` | How long to wait for a publisher confirm before failing. |
-| `PublishChannelPoolSize` | `5` | Size of the publish channel pool; larger allows more concurrent publishes. |
-| `DeadLetterExchange` | `null` | Dead-letter exchange for broker-native dead-lettering. When set, consumer queues are declared with `x-dead-letter-exchange`. |
-| `DeadLetterExchangeType` | `topic` | Type of the declared `DeadLetterExchange`. |
+Configure these on `RabbitMqOptions` via `rabbitmq.Configure(o => ...)`.
+
+| Option | Meaning | Default | Required? |
+| --- | --- | --- | --- |
+| `HostName` | RabbitMQ host. Ignored when `Uri` is set. | `localhost` | No |
+| `Port` | RabbitMQ port. Ignored when `Uri` is set. | `5672` | No |
+| `UserName` | Username. Ignored when `Uri` is set. | `guest` | No |
+| `Password` | Password. Prefer `Uri` (an `amqps://` string) or a secret store. Ignored when `Uri` is set. | `guest` | No |
+| `VirtualHost` | Virtual host. Ignored when `Uri` is set. | `/` | No |
+| `Uri` | Full AMQP connection URI (e.g. `amqps://user:pass@host:5671/vhost`). Takes precedence over the discrete settings and enables TLS for the `amqps` scheme. | `null` | No |
+| `UseTls` | Enable TLS when connecting via the discrete host settings (not `Uri`). | `false` | No |
+| `SslServerName` | TLS server name (SNI) when `UseTls` is on. Defaults to `HostName`. | `null` | No |
+| `ExchangeName` | Exchange to publish to and bind against. | `runax.messaging` | No |
+| `ExchangeType` | Exchange type. | `topic` | No |
+| `PrefetchCount` | Unacknowledged messages allowed in flight per consumer (`BasicQos`). | `10` | No |
+| `PublisherConfirms` | Wait for broker acknowledgement of each publish. | `true` | No |
+| `ConfirmTimeout` | How long to wait for a publisher confirm before failing. | `5s` | No |
+| `PublishChannelPoolSize` | Size of the publish channel pool; larger allows more concurrent publishes. | `5` | No |
+| `DeadLetterExchange` | Dead-letter exchange for broker-native dead-lettering. When set, consumer queues are declared with `x-dead-letter-exchange`. | `null` | No |
+| `DeadLetterExchangeType` | Type of the declared `DeadLetterExchange`. | `topic` | No |
+
+Beyond these transport options, settings from the core package can be applied to this broker
+inside the `AddRabbitMq(...)` block — `AddConsumer<T>()`, `WithRetry(...)`,
+`OnUnroutableMessage(...)`, `ConfigureSerialization(...)`, and `UseSerializer<T>()` — each
+overriding the global default for RabbitMQ only. See
+[Configuration & per-broker settings](../../docs/configuration.md).
 
 ## Behavior
 
