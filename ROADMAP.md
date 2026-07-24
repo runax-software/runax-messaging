@@ -10,8 +10,16 @@ observability (see [CHANGELOG.md](CHANGELOG.md)).
 - [ ] **Inbox / idempotent consumer** — consume-side deduplication, the natural
   partner to the transactional outbox and the biggest remaining gap for
   exactly-once-ish delivery.
-- [ ] **Delayed / scheduled messages** — publish with a delay: native where the
-  broker supports it (SQS, Service Bus), emulated elsewhere.
+- [ ] **Scheduling (delayed / scheduled messages)** — deliver a message at or
+  after a chosen time: broker-native where supported (SQS delay, Service Bus
+  scheduled enqueue), scheduler-emulated elsewhere. Also underpins saga timeouts
+  and delayed retries.
+- [ ] **Request/response** — correlated RPC over the broker: `await` a reply to a
+  published request, matched back via a correlation ID and a temporary reply
+  queue, giving synchronous-feeling calls on an async transport.
+- [ ] **In-process mediator** — the same publish/consume (and request/response)
+  programming model with no broker or transport; handlers run in-memory within
+  the process, for local decoupling without a network hop.
 - [ ] **Sagas / state machines** — persisted, long-running workflow
   orchestration: a saga reacts to a stream of events over time and coordinates a
   multi-step process, with timeouts and compensation on failure. Depends on a
@@ -28,6 +36,10 @@ observability (see [CHANGELOG.md](CHANGELOG.md)).
 
 ## Nice-to-have
 
+- [ ] **Routing slips** *(tentative)* — choreographed multi-step transactions:
+  the message carries an itinerary of activities, each recording a compensation
+  to roll back on failure. The choreographed counterpart to sagas; revisit once
+  sagas land.
 - [ ] **Per-topic serializer** — serializer selection per topic (global and
   per-broker selection already ship).
 - [ ] **CloudEvents serializer** — optional serializer emitting/consuming the
