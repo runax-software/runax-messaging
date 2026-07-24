@@ -32,7 +32,6 @@ strongly-typed messages without coupling your application to a specific broker.
 | [`Runax.Messaging.Transports.Google.PubSub`](src/Runax.Messaging.Transports.Google.PubSub/README.md) | Google Cloud Pub/Sub transport. |
 | [`Runax.Messaging.Transports.Redis`](src/Runax.Messaging.Transports.Redis/README.md) | Redis Streams transport (Redis and Valkey). |
 | [`Runax.Messaging.Outbox`](src/Runax.Messaging.Outbox/README.md) | Transactional outbox: persist in your DB transaction, dispatch reliably. |
-| [`Runax.Messaging.TestKit`](src/Runax.Messaging.TestKit/README.md) | Test-support: a broker-free `MessagingTestHarness` to publish messages and assert what your consumers handled, retried, or dead-lettered. |
 
 Application code that only publishes needs `Runax.Messaging.Abstractions`. The
 composition root (where you call `AddRunaxMessaging`) needs `Runax.Messaging`

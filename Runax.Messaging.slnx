@@ -9,7 +9,6 @@
     <Project Path="tests\Runax.Messaging.Transports.Azure.ServiceBus.Tests\Runax.Messaging.Transports.Azure.ServiceBus.Tests.csproj" Type="Classic C#" />
     <Project Path="tests\Runax.Messaging.Transports.Azure.EventHubs.Tests\Runax.Messaging.Transports.Azure.EventHubs.Tests.csproj" Type="Classic C#" />
     <Project Path="tests\Runax.Messaging.Tests\Runax.Messaging.Tests.csproj" Type="Classic C#" />
-    <Project Path="tests\Runax.Messaging.TestKit.Tests\Runax.Messaging.TestKit.Tests.csproj" Type="Classic C#" />
   </Folder>
   <Project Path="src\Runax.Messaging.Abstractions\Runax.Messaging.Abstractions.csproj" Type="Classic C#" />
   <Project Path="src\Runax.Messaging.Outbox\Runax.Messaging.Outbox.csproj" Type="Classic C#" />
@@ -20,6 +19,5 @@
   <Project Path="src\Runax.Messaging.Transports.Azure.ServiceBus\Runax.Messaging.Transports.Azure.ServiceBus.csproj" Type="Classic C#" />
   <Project Path="src\Runax.Messaging.Transports.Azure.EventHubs\Runax.Messaging.Transports.Azure.EventHubs.csproj" Type="Classic C#" />
   <Project Path="src\Runax.Messaging.Transports.Aws.Sqs\Runax.Messaging.Transports.Aws.Sqs.csproj" Type="Classic C#" />
-  <Project Path="src\Runax.Messaging.TestKit\Runax.Messaging.TestKit.csproj" Type="Classic C#" />
   <Project Path="src\Runax.Messaging\Runax.Messaging.csproj" Type="Classic C#" />
 </Solution>
