@@ -80,3 +80,12 @@ services:
       - "10000:10000"
       - "10001:10001"
       - "10002:10002"
+
+  # Kafka in KRaft mode (no ZooKeeper). Bootstrap server on :9092.
+  # The apache/kafka image ships a working single-node KRaft config that already advertises
+  # localhost:9092 and auto-creates topics, so host-based clients work out of the box — don't
+  # override the listeners (setting advertised.listeners to 0.0.0.0 makes the broker refuse to start).
+  kafka:
+    image: apache/kafka:3.9.0
+    ports:
+      - "9092:9092"
