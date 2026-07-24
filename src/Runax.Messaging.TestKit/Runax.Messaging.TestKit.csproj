@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Test-support for Runax.Messaging: a broker-free MessagingTestHarness that drives your consumers over the in-memory transport so you can publish and assert what was handled, retried, or dead-lettered.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Runax.Messaging.Abstractions/Runax.Messaging.Abstractions.csproj" />
+    <ProjectReference Include="../Runax.Messaging/Runax.Messaging.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+</Project>
