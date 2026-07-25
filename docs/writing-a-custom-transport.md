@@ -90,7 +90,8 @@ Contract notes:
 
 - `SystemName` is a short broker identifier (`"rabbitmq"`, `"sqs"`, `"foo"`) used
   as the `messaging.system` telemetry tag. It also identifies the transport when several are
-  registered (for `AddConsumer<T>("foo")` and `PublishTo("foo")`), so make it unique and stable.
+  registered (for `AddConsumer<T>("foo")`, `PublishTo("foo")`, and
+  `IMessagePublisherFactory.ForTransport("foo")`), so make it unique and stable.
 - `PublishAsync` receives the already-serialized envelope. Send it as-is.
 - `SubscribeAsync` must run until cancellation and invoke `onMessage` with
   `(envelopeJson, topic)` for each message, then act on the returned

@@ -32,6 +32,8 @@ builder.Services.AddRunaxMessaging(runax =>
 
 `AddOutbox` makes `IMessagePublisher` write to the `IOutboxStore` instead of publishing directly;
 the `OutboxDispatcher` background service drains pending entries to the transport and marks them dispatched.
+Only the default `IMessagePublisher` is wrapped — publishers obtained from
+`IMessagePublisherFactory.ForTransport("<system-name>")` write straight to their transport and skip the outbox.
 
 ## Providing a durable store
 

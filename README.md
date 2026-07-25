@@ -165,6 +165,23 @@ a message is only handled by consumers bound to the broker it arrived on. When s
 registered, `PublishTo("<system-name>")` selects which one `IMessagePublisher` publishes to (a single
 registered transport is used automatically). Each transport must report a distinct `SystemName`.
 
+To publish the same event to **several** transports, inject `IMessagePublisherFactory` and call
+`ForTransport("<system-name>")` per broker — each returns an `IMessagePublisher` pinned to that transport:
+
+```csharp
+public sealed class OrderService(IMessagePublisherFactory publishers)
+{
+    public async Task PlaceAsync(OrderPlaced order, CancellationToken ct)
+    {
+        await publishers.ForTransport("kafka").PublishAsync("orders", order, ct);
+        await publishers.ForTransport("sqs").PublishAsync("orders", order, ct);
+    }
+}
+```
+
+The sends are independent (no atomic fan-out), and `ForTransport(...)` publishes straight to the transport
+without routing through the outbox.
+
 ## Reliability & observability
 
 Consumers get retry-with-backoff, poison-message handling, and dead-lettering out
