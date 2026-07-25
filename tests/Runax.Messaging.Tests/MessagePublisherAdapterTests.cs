@@ -12,7 +12,7 @@ public class MessagePublisherAdapterTests
     {
         var transport = Substitute.For<IMessagingTransport>();
         var provider = new SingleSerializerProvider(new EnvelopeSerializer(new SystemTextJsonSerializer()));
-        var adapter = new MessagePublisherAdapter([transport], provider, new MessagingPublishOptions());
+        var adapter = new MessagePublisherAdapter(transport, provider);
 
         await adapter.PublishAsync("orders", new Order(1));
 

@@ -5,7 +5,7 @@ OSS messaging library. Nothing here blocks a release; 1.0.0 shipped the full
 transport set, outbox, TestKit, contract versioning, reliability, and
 observability (see [CHANGELOG.md](CHANGELOG.md)).
 
-## 1.x candidates
+## Core enhancements
 
 - [ ] **Inbox / idempotent consumer** — consume-side deduplication, the natural
   partner to the transactional outbox and the biggest remaining gap for
@@ -40,6 +40,17 @@ observability (see [CHANGELOG.md](CHANGELOG.md)).
   the message carries an itinerary of activities, each recording a compensation
   to roll back on failure. The choreographed counterpart to sagas; revisit once
   sagas land.
+- [ ] **Multi-transport fan-out publish** *(tentative)* — a one-call helper
+  (`BroadcastAsync`) to send to several transports at once, layered over the
+  per-transport `IMessagePublisherFactory.ForTransport(...)` that already ships.
+  Design is deferred pending two decisions: (1) the same-contract case (one
+  message mirrored to N transports) and the different-contract case (each
+  transport gets its own topic + payload, e.g. `user.order` differing on Kafka vs
+  SQS) want different shapes — likely a per-transport builder of independent
+  `(transport, topic, message)` entries rather than a single-message overload;
+  (2) a partial-failure policy (fail-fast vs. best-effort with an aggregate),
+  since the sends are independent and at-least-once. Until then, publish to each
+  transport explicitly with `ForTransport(...)`.
 - [ ] **Per-topic serializer** — serializer selection per topic (global and
   per-broker selection already ship).
 - [ ] **CloudEvents serializer** — optional serializer emitting/consuming the

@@ -96,6 +96,23 @@ subscribes on every registered transport. Register the same consumer under two b
 transport registered, `PublishTo("<system-name>")` selects the publish target (a single transport is used
 automatically). Each transport must report a distinct `SystemName`.
 
+To publish the same event to **several** transports, inject `IMessagePublisherFactory` and call
+`ForTransport("<system-name>")` per broker — each returns an `IMessagePublisher` pinned to that transport:
+
+```csharp
+public sealed class OrderService(IMessagePublisherFactory publishers)
+{
+    public async Task PlaceAsync(OrderPlaced order, CancellationToken ct)
+    {
+        await publishers.ForTransport("kafka").PublishAsync("orders", order, ct);
+        await publishers.ForTransport("sqs").PublishAsync("orders", order, ct);
+    }
+}
+```
+
+The two sends are independent (no atomic fan-out), and `ForTransport(...)` publishes straight to the
+transport without routing through the outbox.
+
 ## Retries & dead-lettering
 
 Failed `HandleAsync` calls are retried with exponential backoff, and messages that

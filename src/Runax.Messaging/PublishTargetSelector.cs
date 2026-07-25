@@ -27,8 +27,25 @@ internal static class PublishTargetSelector
             1 => transports[0],
             _ => throw new InvalidOperationException(
                 "Multiple messaging transports are registered. Call PublishTo(\"<system-name>\") to choose which one " +
-                $"publishes are routed to. Registered transports: {Describe(transports)}."),
+                "publishes are routed to, or resolve IMessagePublisherFactory and call ForTransport(\"<system-name>\") " +
+                $"to target one explicitly. Registered transports: {Describe(transports)}."),
         };
+    }
+
+    /// <summary>
+    /// Returns the transport with the given <paramref name="systemName"/> for an explicit
+    /// <see cref="Abstractions.IMessagePublisherFactory.ForTransport"/> lookup, throwing when none matches.
+    /// </summary>
+    public static IMessagingTransport SelectByName(
+        IReadOnlyList<IMessagingTransport> transports,
+        string systemName)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(systemName);
+
+        return transports.FirstOrDefault(t => t.SystemName == systemName)
+            ?? throw new InvalidOperationException(
+                $"No registered transport reports the system name '{systemName}'. " +
+                $"Registered transports: {Describe(transports)}.");
     }
 
     private static string Describe(IReadOnlyList<IMessagingTransport> transports) =>

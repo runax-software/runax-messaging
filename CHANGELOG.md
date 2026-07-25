@@ -22,7 +22,9 @@ First stable release.
   built-in in-memory transport.
 - **Multiple transports at once** — register several brokers side by side; a
   consumer can bind to one broker or to all, and `PublishTo("<system-name>")`
-  selects the publish target.
+  selects the default publish target. Inject `IMessagePublisherFactory` and call
+  `ForTransport("<system-name>")` to publish the same event to several transports
+  explicitly (e.g. both Kafka and SQS).
 - **Reliability** — retry with exponential backoff, poison-message handling, and
   framework-managed or broker-native dead-lettering, configurable globally or
   per broker via `WithRetry(...)` and `OnUnroutableMessage(...)`.

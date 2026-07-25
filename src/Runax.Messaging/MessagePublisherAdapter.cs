@@ -6,29 +6,18 @@ using Runax.Messaging.Serialization;
 namespace Runax.Messaging;
 
 /// <summary>
-/// Bridges <see cref="IMessagePublisher"/> to the underlying <see cref="IMessagingTransport"/>,
+/// Bridges <see cref="IMessagePublisher"/> to a single <see cref="IMessagingTransport"/>,
 /// handling serialization of the message into an envelope and emitting publish telemetry.
-/// When several transports are registered, the target is chosen with <c>PublishTo</c>.
+/// The target transport is chosen by the caller — <see cref="DefaultMessagePublisher"/> for the
+/// default target, or <see cref="MessagePublisherFactory"/> for an explicitly named one.
 /// </summary>
-internal sealed class MessagePublisherAdapter : IMessagePublisher
+internal sealed class MessagePublisherAdapter(
+    IMessagingTransport transport,
+    IMessageSerializerProvider serializerProvider) : IMessagePublisher
 {
-    private readonly IReadOnlyList<IMessagingTransport> _transports;
-    private readonly IMessageSerializerProvider _serializerProvider;
-    private readonly string? _defaultTransportName;
-    private IMessagingTransport? _resolvedTransport;
+    private readonly IMessageSerializerProvider _serializerProvider = serializerProvider;
 
-    public MessagePublisherAdapter(
-        IEnumerable<IMessagingTransport> transports,
-        IMessageSerializerProvider serializerProvider,
-        MessagingPublishOptions publishOptions)
-    {
-        _transports = transports as IReadOnlyList<IMessagingTransport> ?? transports.ToArray();
-        _serializerProvider = serializerProvider;
-        _defaultTransportName = publishOptions.DefaultTransport;
-    }
-
-    private IMessagingTransport Transport =>
-        _resolvedTransport ??= PublishTargetSelector.Select(_transports, _defaultTransportName);
+    private IMessagingTransport Transport => transport;
 
     /// <inheritdoc />
     public ValueTask PublishAsync<TMessage>(

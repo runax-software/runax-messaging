@@ -185,6 +185,81 @@ public class MultiTransportTests
     }
 
     [Fact]
+    public async Task Factory_For_publishes_to_the_named_transport()
+    {
+        var a = new RecordingTransport("broker-a");
+        var b = new RecordingTransport("broker-b");
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddRunaxMessaging(m =>
+        {
+            m.Services.AddSingleton<IMessagingTransport>(a);
+            m.Services.AddSingleton<IMessagingTransport>(b);
+        });
+        await using var provider = services.BuildServiceProvider();
+        var factory = provider.GetRequiredService<IMessagePublisherFactory>();
+
+        await factory.ForTransport("broker-a").PublishAsync("ping", new Ping("x"));
+
+        a.Published.ShouldHaveSingleItem().Topic.ShouldBe("ping");
+        b.Published.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Factory_lets_a_single_event_go_to_two_transports_masstransit_style()
+    {
+        var a = new RecordingTransport("broker-a");
+        var b = new RecordingTransport("broker-b");
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddRunaxMessaging(m =>
+        {
+            m.Services.AddSingleton<IMessagingTransport>(a);
+            m.Services.AddSingleton<IMessagingTransport>(b);
+        });
+        await using var provider = services.BuildServiceProvider();
+        var factory = provider.GetRequiredService<IMessagePublisherFactory>();
+
+        var evt = new Ping("both");
+        await factory.ForTransport("broker-a").PublishAsync("ping", evt);
+        await factory.ForTransport("broker-b").PublishAsync("ping", evt);
+
+        a.Published.ShouldHaveSingleItem().Topic.ShouldBe("ping");
+        b.Published.ShouldHaveSingleItem().Topic.ShouldBe("ping");
+    }
+
+    [Fact]
+    public async Task Factory_caches_a_publisher_per_transport_name()
+    {
+        var a = new RecordingTransport("broker-a");
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddRunaxMessaging(m => m.Services.AddSingleton<IMessagingTransport>(a));
+        await using var provider = services.BuildServiceProvider();
+        var factory = provider.GetRequiredService<IMessagePublisherFactory>();
+
+        factory.ForTransport("broker-a").ShouldBeSameAs(factory.ForTransport("broker-a"));
+    }
+
+    [Fact]
+    public async Task Factory_For_with_an_unknown_transport_name_throws()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddRunaxMessaging(m =>
+            m.Services.AddSingleton<IMessagingTransport>(new RecordingTransport("broker-a")));
+        await using var provider = services.BuildServiceProvider();
+        var factory = provider.GetRequiredService<IMessagePublisherFactory>();
+
+        var ex = Should.Throw<InvalidOperationException>(() => factory.ForTransport("nope"));
+        ex.Message.ShouldContain("nope");
+        ex.Message.ShouldContain("broker-a");
+    }
+
+    [Fact]
     public async Task A_consumer_registered_in_a_transport_block_is_subscribed()
     {
         var collector = new Collector();

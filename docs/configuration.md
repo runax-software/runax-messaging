@@ -25,8 +25,11 @@ transport's package README.
 | Transport options (`Configure(o => ...)`) | No | Yes (belong to one broker) | — |
 
 `PublishTo` is global-only by design: `IMessagePublisher` publishes to a single target, so choosing
-that target is a global decision (a single registered transport is used automatically). Transport
-options (`Configure`) are inherently per-broker — they describe one broker's connection.
+that target is a global decision (a single registered transport is used automatically). To publish to
+several transports explicitly — for example the same event to both Kafka and SQS — resolve
+`IMessagePublisherFactory` and call `ForTransport("<system-name>")` per broker (see
+[Publishing to several transports](#publishing-to-several-transports-imessagepublisherfactory)).
+Transport options (`Configure`) are inherently per-broker — they describe one broker's connection.
 
 ## How scoping and fallback work
 
@@ -144,6 +147,50 @@ builder.Services.AddRunaxMessaging(runax =>
     runax.PublishTo("sqs");   // IMessagePublisher publishes to SQS
 });
 ```
+
+## Publishing to several transports (`IMessagePublisherFactory`)
+
+`PublishTo` picks the *one* transport the default `IMessagePublisher` sends to. When you want to send
+the same event to more than one broker — the fan-out that `PublishTo` deliberately does not do —
+resolve `IMessagePublisherFactory` and call `ForTransport("<system-name>")` once per broker. Each call
+returns an `IMessagePublisher` pinned to that transport, and you publish to each explicitly:
+
+```csharp
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddKafka(kafka =>
+    {
+        kafka.Configure(o => o.BootstrapServers = "localhost:9092");
+    });
+
+    runax.AddSqs(sqs =>
+    {
+        sqs.Configure(o => o.Region = "us-east-1");
+    });
+});
+```
+
+```csharp
+public sealed class OrderService(IMessagePublisherFactory publishers)
+{
+    public async Task PlaceAsync(OrderPlaced order, CancellationToken cancellationToken)
+    {
+        await publishers.ForTransport("kafka").PublishAsync("orders", order, cancellationToken);
+        await publishers.ForTransport("sqs").PublishAsync("orders", order, cancellationToken);
+    }
+}
+```
+
+Notes:
+
+- The two publishes are independent operations — there is no built-in atomic fan-out. If sending to
+  the second broker must not be lost when the first succeeds, drive each transport from its own outbox
+  or add your own coordination.
+- `ForTransport(...)` targets a transport **directly** and does not route through the outbox, even when
+  `AddOutbox()` is configured (the outbox only wraps the default `IMessagePublisher`).
+- An unknown system name throws with the list of registered transports, so typos fail fast.
+- A single `IMessagePublisher` still works unchanged for the common one-transport case; you only reach
+  for the factory when you explicitly need more than one target.
 
 ## A note on style
 

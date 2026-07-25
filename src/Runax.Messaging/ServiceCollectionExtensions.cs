@@ -34,7 +34,10 @@ public static class ServiceCollectionExtensions
         // Resolves the serializer per transport, honoring per-broker UseSerializer/ConfigureSerialization.
         services.TryAddSingleton<IMessageSerializerProvider, MessageSerializerProvider>();
         services.TryAddSingleton<MessagingPublishOptions>();
-        services.TryAddSingleton<IMessagePublisher, MessagePublisherAdapter>();
+        // Hands out publishers pinned to a named transport for explicit per-transport publishing.
+        services.TryAddSingleton<IMessagePublisherFactory, MessagePublisherFactory>();
+        // The default publisher targets the sole transport, or the one chosen with PublishTo.
+        services.TryAddSingleton<IMessagePublisher, DefaultMessagePublisher>();
         services.TryAddSingleton<IUnroutableMessageHandler, DeadLetterUnroutableHandler>();
         // Resolves the unroutable handler per transport, honoring per-broker OnUnroutableMessage.
         services.TryAddSingleton<IUnroutableMessageHandlerProvider, UnroutableMessageHandlerProvider>();

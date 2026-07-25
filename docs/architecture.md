@@ -27,6 +27,7 @@ Runax.Messaging      Runax.Messaging.Transports.Aws.Sqs / .RabbitMq / <your tran
 | Type | Package | Responsibility |
 | --- | --- | --- |
 | `IMessagePublisher` | Abstractions | The publish API applications call (`PublishAsync`, `PublishBatchAsync`). |
+| `IMessagePublisherFactory` | Abstractions | Resolves an `IMessagePublisher` pinned to a named transport (`ForTransport("<system-name>")`) for explicit per-transport / multi-transport publishing. |
 | `IMessagingTransport` | Abstractions | Provider SPI: broker-specific publish (single + `PublishBatchAsync`) / subscribe over serialized envelopes, plus a `SystemName` telemetry tag. |
 | `MessageContext` | Abstractions | A received message (topic, body, headers) with `Deserialize<T>()`. |
 | `MessageDisposition` | Abstractions | The verdict a transport applies after dispatch: `Acknowledge`, `Requeue`, or `DeadLetter`. |
@@ -37,7 +38,9 @@ Runax.Messaging      Runax.Messaging.Transports.Aws.Sqs / .RabbitMq / <your tran
 | `MessagingConfigurator` | Abstractions | Fluent builder; transports and consumers attach via extensions. |
 | `RetryOptions` / `DeadLetterStrategy` | Core | Retry backoff and dead-letter policy applied by the dispatcher (`WithRetry`). |
 | `MessagingDiagnostics` | Core | The `ActivitySource` and `Meter` names for tracing and metrics. |
-| `MessagePublisherAdapter` | Core (internal) | Bridges `IMessagePublisher` → `IMessagingTransport`, serializing to an envelope and emitting publish telemetry. |
+| `MessagePublisherAdapter` | Core (internal) | Bridges `IMessagePublisher` → a single `IMessagingTransport`, serializing to an envelope and emitting publish telemetry. |
+| `DefaultMessagePublisher` | Core (internal) | The default `IMessagePublisher`: lazily resolves the sole transport (or the `PublishTo` choice) and delegates to its `MessagePublisherAdapter`. |
+| `MessagePublisherFactory` | Core (internal) | The default `IMessagePublisherFactory`: caches a `MessagePublisherAdapter` per named transport. |
 | `ISerializer` | Core | Pluggable **body** serializer (`UseSerializer<T>()`) — controls how bodies are encoded, not the envelope. The default is System.Text.Json. |
 | `IMessageSerializer` | Core (framework-owned) | Frames the reserved `__runax` envelope around the body; not a customization point. |
 | `MessageConsumer<TMessage>` | Core | Base class for a typed consumer of a single topic. |
@@ -175,7 +178,9 @@ replaces `IMessagePublisher` with one that serializes and writes to an `IOutboxS
 publishing directly; a background `OutboxDispatcher` later drains pending rows to the transport and
 marks them dispatched. A durable store's `AddAsync` enlists in the caller's database transaction, so
 the message row commits together with the business data (at-least-once delivery — keep consumers
-idempotent). See the [package README](../src/Runax.Messaging.Outbox/README.md).
+idempotent). See the [package README](../src/Runax.Messaging.Outbox/README.md). `AddOutbox()` wraps only
+the default `IMessagePublisher`; publishers obtained from `IMessagePublisherFactory.ForTransport(...)`
+still write straight to their transport.
 
 ## Design rules
 
@@ -183,7 +188,8 @@ idempotent). See the [package README](../src/Runax.Messaging.Outbox/README.md).
 - One or more transports may be registered, each identified by a distinct `SystemName`. A consumer
   subscribes on every registered transport by default, or on a named subset; the hosted dispatcher
   subscribes and dispatches each transport independently. `IMessagePublisher` targets the sole
-  transport, or the one chosen with `PublishTo("<system-name>")`.
+  transport, or the one chosen with `PublishTo("<system-name>")`; resolve `IMessagePublisherFactory`
+  and call `ForTransport("<system-name>")` to publish to more than one transport explicitly.
 - Scoped settings (`AddConsumer`, `WithRetry`, `OnUnroutableMessage`, `ConfigureSerialization`,
   `UseSerializer`) resolve **by `SystemName`**: the per-broker value if set inside that transport's
   block, else the global value, else the built-in default. `PublishTo` is global-only. See
