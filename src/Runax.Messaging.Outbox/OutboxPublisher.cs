@@ -51,7 +51,7 @@ internal sealed class OutboxPublisher(
         IDictionary<string, string>? headers,
         CancellationToken cancellationToken)
     {
-        var payload = serializerProvider.For(Target.SystemName).Serialize(message, headers);
+        var payload = serializerProvider.For(Target.SystemName, topic).Serialize(message, headers);
         await store.AddAsync(new OutboxMessage { Topic = topic, Payload = payload }, cancellationToken)
             .ConfigureAwait(false);
     }

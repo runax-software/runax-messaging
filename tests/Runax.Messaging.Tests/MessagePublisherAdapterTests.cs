@@ -24,6 +24,6 @@ public class MessagePublisherAdapterTests
 
     private sealed class SingleSerializerProvider(IMessageSerializer serializer) : IMessageSerializerProvider
     {
-        public IMessageSerializer For(string transportName) => serializer;
+        public IMessageSerializer For(string transportName, string topic) => serializer;
     }
 }

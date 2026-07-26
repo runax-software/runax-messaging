@@ -45,9 +45,9 @@ public class ScopedRetryAndUnroutableTests
             .First(t => t.SystemName != "other").SystemName;
 
         // The in-memory broker got its scoped policy...
-        retry.For(inMemoryName).MaxAttempts.ShouldBe(7);
+        retry.For(inMemoryName, "any").MaxAttempts.ShouldBe(7);
         // ...but the other broker falls back to the built-in default.
-        retry.For("other").MaxAttempts.ShouldBe(3);
+        retry.For("other", "any").MaxAttempts.ShouldBe(3);
     }
 
     [Fact]
@@ -67,8 +67,8 @@ public class ScopedRetryAndUnroutableTests
         var inMemoryName = provider.GetServices<IMessagingTransport>()
             .First(t => t.SystemName != "other").SystemName;
 
-        retry.For(inMemoryName).MaxAttempts.ShouldBe(7); // scoped wins
-        retry.For("other").MaxAttempts.ShouldBe(5);      // global applies
+        retry.For(inMemoryName, "any").MaxAttempts.ShouldBe(7); // scoped wins
+        retry.For("other", "any").MaxAttempts.ShouldBe(5);      // global applies
     }
 
     [Fact]
@@ -86,8 +86,8 @@ public class ScopedRetryAndUnroutableTests
 
         var retry = provider.GetRequiredService<IRetryOptionsProvider>();
 
-        retry.For("in-memory").MaxAttempts.ShouldBe(9);
-        retry.For("other").MaxAttempts.ShouldBe(9);
+        retry.For("in-memory", "any").MaxAttempts.ShouldBe(9);
+        retry.For("other", "any").MaxAttempts.ShouldBe(9);
     }
 
     [Fact]
@@ -100,7 +100,53 @@ public class ScopedRetryAndUnroutableTests
 
         var retry = provider.GetRequiredService<IRetryOptionsProvider>();
 
-        retry.For("in-memory").MaxAttempts.ShouldBe(3);
+        retry.For("in-memory", "any").MaxAttempts.ShouldBe(3);
+    }
+
+    [Fact]
+    public void WithRetryForTopic_applies_only_to_that_topic()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddRunaxMessaging(m =>
+        {
+            m.AddInMemory();
+            m.WithRetryForTopic("payments", o => o.MaxAttempts = 10);
+        });
+        using var provider = services.BuildServiceProvider();
+
+        var retry = provider.GetRequiredService<IRetryOptionsProvider>();
+
+        // The "payments" topic gets the per-topic policy on any transport...
+        retry.For("in-memory", "payments").MaxAttempts.ShouldBe(10);
+        // ...while every other topic keeps the built-in default.
+        retry.For("in-memory", "telemetry").MaxAttempts.ShouldBe(3);
+    }
+
+    [Fact]
+    public void Topic_retry_policy_wins_over_broker_policy_for_the_same_topic()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddRunaxMessaging(m =>
+        {
+            m.AddInMemory(inMemory =>
+            {
+                inMemory.WithRetry(o => o.MaxAttempts = 7);              // per-broker: any topic
+                inMemory.WithRetryForTopic("payments", o => o.MaxAttempts = 10); // per-broker + topic
+            });
+            m.WithRetryForTopic("payments", o => o.MaxAttempts = 99);    // global per-topic
+        });
+        using var provider = services.BuildServiceProvider();
+
+        var retry = provider.GetRequiredService<IRetryOptionsProvider>();
+
+        // Transport+topic is the most specific scope, so it wins over both the global per-topic and per-broker.
+        retry.For("in-memory", "payments").MaxAttempts.ShouldBe(10);
+        // A different topic on the same broker still gets the per-broker policy.
+        retry.For("in-memory", "telemetry").MaxAttempts.ShouldBe(7);
+        // The global per-topic policy applies on any other transport.
+        retry.For("other", "payments").MaxAttempts.ShouldBe(99);
     }
 
     [Fact]

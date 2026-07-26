@@ -60,7 +60,7 @@ internal sealed class MessagePublisherAdapter(
         }
 
         var headers = carrier.Count > 0 ? carrier : null;
-        var serializer = _serializerProvider.For(Transport.SystemName);
+        var serializer = _serializerProvider.For(Transport.SystemName, topic);
         var envelopes = new List<string>(messages.Count);
         foreach (var message in messages)
             envelopes.Add(serializer.Serialize(message, headers));
@@ -103,7 +103,7 @@ internal sealed class MessagePublisherAdapter(
 
         try
         {
-            var envelope = _serializerProvider.For(Transport.SystemName).Serialize(message, carrier);
+            var envelope = _serializerProvider.For(Transport.SystemName, topic).Serialize(message, carrier);
             await Transport.PublishAsync(topic, envelope, cancellationToken).ConfigureAwait(false);
             MessagingDiagnostics.Published.Add(1, MessagingDiagnostics.Tags(Transport.SystemName, topic));
         }
