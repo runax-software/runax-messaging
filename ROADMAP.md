@@ -29,10 +29,14 @@ observability (see [CHANGELOG.md](CHANGELOG.md)).
 - [ ] **Benchmarks (BenchmarkDotNet)** — guard throughput and allocations against
   regressions as the library grows.
 
+
+
 ## Transports
 
 - [ ] **ActiveMQ transport** (`Runax.Messaging.Transports.ActiveMq`) — publish/
   consume over ActiveMQ (Artemis / classic) via the `IMessagingTransport` SPI.
+
+
 
 ## Nice-to-have
 
@@ -41,17 +45,16 @@ observability (see [CHANGELOG.md](CHANGELOG.md)).
   to roll back on failure. The choreographed counterpart to sagas; revisit once
   sagas land.
 - [ ] **Multi-transport fan-out publish** *(tentative)* — a one-call helper
-  (`BroadcastAsync`) to send to several transports at once, layered over the
-  per-transport `IMessagePublisherFactory.ForTransport(...)` that already ships.
-  Design is deferred pending two decisions: (1) the same-contract case (one
-  message mirrored to N transports) and the different-contract case (each
-  transport gets its own topic + payload, e.g. `user.order` differing on Kafka vs
-  SQS) want different shapes — likely a per-transport builder of independent
-  `(transport, topic, message)` entries rather than a single-message overload;
-  (2) a partial-failure policy (fail-fast vs. best-effort with an aggregate),
-  since the sends are independent and at-least-once. Until then, publish to each
+  (`BroadcastAsync`) to send to several transports at once, layered over the  
+  per-transport `IMessagePublisherFactory.ForTransport(...)` that already ships.  
+  Design is deferred pending two decisions: (1) the same-contract case (one  
+  message mirrored to N transports) and the different-contract case (each  
+  transport gets its own topic + payload, e.g. `user.order` differing on Kafka vs  
+  SQS) want different shapes — likely a per-transport builder of independent  
+  `(transport, topic, message)` entries rather than a single-message overload;  
+  (2) a partial-failure policy (fail-fast vs. best-effort with an aggregate),  
+  since the sends are independent and at-least-once. Until then, publish to each  
   transport explicitly with `ForTransport(...)`.
-- [ ] **Per-topic serializer** — serializer selection per topic (global and
-  per-broker selection already ship).
 - [ ] **CloudEvents serializer** — optional serializer emitting/consuming the
   CloudEvents envelope for interop.
+

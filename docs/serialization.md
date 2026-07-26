@@ -168,3 +168,42 @@ builder.Services.AddRunaxMessaging(runax =>
 A broker's scoped `ConfigureSerialization` starts from a copy of the global options and applies your tweaks on
 top, so it inherits global settings and overrides only what it names. The `__runax` envelope is identical on
 every broker regardless of which serializer is active.
+
+### Per-topic serialization
+
+When the format is a property of the *topic* rather than the broker — one legacy topic keeps snake_case, or a
+single topic speaks Avro while everything else is JSON — scope the serializer to that topic with
+`UseSerializerForTopic<T>("<topic>")` and `ConfigureSerializationForTopic("<topic>", o => ...)`. Both exist at the
+top level (the topic on every broker) and inside a transport block (the topic on that one broker).
+
+Selection runs from most to least specific, and the first match wins:
+
+1. the topic on this transport — `AddKafka(k => k.UseSerializerForTopic<T>("orders"))`
+2. the topic on any transport — `runax.UseSerializerForTopic<T>("orders")`
+3. this transport, any topic — `AddKafka(k => k.UseSerializer<T>())`
+4. the global default — `runax.UseSerializer<T>()`
+
+A per-topic serializer therefore overrides a per-broker one for the same topic, while other topics on that broker
+keep the broker (or global) serializer.
+
+```csharp
+builder.Services.AddRunaxMessaging(runax =>
+{
+    // Global default: applies to every topic that nothing more specific overrides.
+    runax.ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
+
+    // The "orders" topic uses a different body serializer on every broker.
+    runax.UseSerializerForTopic<AvroSerializer>("orders");
+
+    runax.AddKafka(kafka =>
+    {
+        kafka.Configure(o => o.BootstrapServers = "localhost:9092");
+        kafka.AddConsumer<OrderPlacedConsumer>();
+        // On Kafka only, the "audit" topic keeps snake_case; every other Kafka topic stays camelCase.
+        kafka.ConfigureSerializationForTopic("audit", o => o.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower);
+    });
+});
+```
+
+Like the per-broker options, a per-topic `ConfigureSerializationForTopic` starts from a copy of the global options
+and applies your tweaks on top. The `__runax` envelope is identical regardless of which serializer resolves.

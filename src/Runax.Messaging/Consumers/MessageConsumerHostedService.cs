@@ -121,7 +121,7 @@ internal sealed class MessageConsumerHostedService(
 
         var startTimestamp = Stopwatch.GetTimestamp();
         var tags = MessagingDiagnostics.Tags(transport.SystemName, topic);
-        var serializer = serializerProvider.For(transport.SystemName);
+        var serializer = serializerProvider.For(transport.SystemName, topic);
 
         MessageContext context;
         try
@@ -273,7 +273,7 @@ internal sealed class MessageConsumerHostedService(
         string topic,
         CancellationToken cancellationToken)
     {
-        var retryOptions = retryOptionsProvider.For(transport.SystemName);
+        var retryOptions = retryOptionsProvider.For(transport.SystemName, topic);
 
         for (var attempt = 1; ; attempt++)
         {
@@ -331,7 +331,7 @@ internal sealed class MessageConsumerHostedService(
         int attempts,
         CancellationToken cancellationToken)
     {
-        var retryOptions = retryOptionsProvider.For(transport.SystemName);
+        var retryOptions = retryOptionsProvider.For(transport.SystemName, topic);
 
         MessagingDiagnostics.Failed.Add(1, MessagingDiagnostics.Tags(transport.SystemName, topic));
 
@@ -353,7 +353,7 @@ internal sealed class MessageConsumerHostedService(
 
         try
         {
-            var enriched = serializerProvider.For(transport.SystemName).EnrichHeaders(envelopeJson, new Dictionary<string, string>
+            var enriched = serializerProvider.For(transport.SystemName, topic).EnrichHeaders(envelopeJson, new Dictionary<string, string>
             {
                 ["x-runax-dlq-reason"] = exception.Message,
                 ["x-runax-dlq-exception"] = exception.GetType().FullName ?? exception.GetType().Name,
