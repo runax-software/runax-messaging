@@ -192,7 +192,9 @@ still write straight to their transport.
   and call `ForTransport("<system-name>")` to publish to more than one transport explicitly.
 - Scoped settings (`AddConsumer`, `WithRetry`, `OnUnroutableMessage`, `ConfigureSerialization`,
   `UseSerializer`) resolve **by `SystemName`**: the per-broker value if set inside that transport's
-  block, else the global value, else the built-in default. `PublishTo` is global-only. See
-  [Configuration & per-broker settings](configuration.md).
+  block, else the global value, else the built-in default. Serializer selection and retry additionally
+  resolve **by topic**: `UseSerializerForTopic`/`ConfigureSerializationForTopic` and `WithRetryForTopic`
+  win over the per-broker and global value for that topic (most specific first: transport+topic, topic,
+  transport, global). `PublishTo` is global-only. See [Configuration & per-broker settings](configuration.md).
 - Applications depend on `IMessagePublisher` (from Abstractions), not on any
   concrete transport.

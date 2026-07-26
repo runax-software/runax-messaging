@@ -17,10 +17,13 @@ transport's package README.
 | --- | --- | --- | --- |
 | `AddConsumer<T>()` | Yes (subscribes on every transport) | Yes (subscribes on that broker only) | — |
 | `WithRetry(o => ...)` | Yes | Yes | Global policy, else built-in `RetryOptions` defaults |
+| `WithRetryForTopic("<topic>", o => ...)` | Yes (topic on every broker) | Yes (topic on that broker) | Per-broker, then global policy, then defaults |
 | `OnUnroutableMessage(strategy)` | Yes | Yes | Global strategy, else built-in `DeadLetter` |
 | `OnUnroutableMessage<THandler>()` | Yes | Yes | Global handler, else built-in `DeadLetter` |
 | `ConfigureSerialization(o => ...)` | Yes | Yes | Global JSON options, else defaults |
 | `UseSerializer<T>()` | Yes | Yes | Global serializer, else `System.Text.Json` |
+| `ConfigureSerializationForTopic("<topic>", o => ...)` | Yes (topic on every broker) | Yes (topic on that broker) | Per-broker, then per-topic-global, then global options |
+| `UseSerializerForTopic<T>("<topic>")` | Yes (topic on every broker) | Yes (topic on that broker) | Per-broker, then global serializer |
 | `PublishTo("<system-name>")` | Yes | No (global-only) | Sole registered transport |
 | Transport options (`Configure(o => ...)`) | No | Yes (belong to one broker) | — |
 
@@ -73,6 +76,32 @@ builder.Services.AddRunaxMessaging(runax =>
 
 A scoped `RetryOptions` starts from the `RetryOptions` defaults with your action applied on top, and
 is validated with the same DataAnnotations as the global policy.
+
+Retry can also be scoped **per topic** with `WithRetryForTopic("<topic>", o => ...)` — at the top level
+(the topic on every broker) or inside a transport block (the topic on that one broker). This is useful
+when a topic's semantics, not its broker, decide how hard to retry: a `payments` command wants more
+attempts than a `telemetry` stream. Selection runs most-specific-first — transport+topic, topic,
+transport, global — so a per-topic policy overrides the per-broker one for that topic while other
+topics keep the broker (or global) policy:
+
+```csharp
+builder.Services.AddRunaxMessaging(runax =>
+{
+    runax.AddKafka(kafka =>
+    {
+        kafka.Configure(o => o.BootstrapServers = "localhost:9092");
+        kafka.AddConsumer<PaymentConsumer>();
+        kafka.WithRetry(o => o.MaxAttempts = 5);                 // Kafka default for any topic
+        kafka.WithRetryForTopic("payments", o => o.MaxAttempts = 10); // Kafka + "payments" only
+    });
+
+    runax.WithRetryForTopic("telemetry", o => o.MaxAttempts = 1); // "telemetry" on every broker
+    runax.WithRetry(o => o.MaxAttempts = 3);                      // global default
+});
+```
+
+Retry is a **consumer-side** policy: it governs how a failing `HandleAsync` is retried and dead-lettered,
+so per-topic retry keys off the topic a consumer is subscribed to. Publishing has no retry loop of its own.
 
 ## Unroutable-message strategy
 
