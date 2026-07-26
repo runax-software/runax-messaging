@@ -26,14 +26,17 @@ First stable release.
   `ForTransport("<system-name>")` to publish the same event to several transports
   explicitly (e.g. both Kafka and SQS).
 - **Reliability** — retry with exponential backoff, poison-message handling, and
-  framework-managed or broker-native dead-lettering, configurable globally or
-  per broker via `WithRetry(...)` and `OnUnroutableMessage(...)`.
+  framework-managed or broker-native dead-lettering, configurable globally,
+  per broker, or per topic via `WithRetry(...)` / `WithRetryForTopic(...)` and
+  `OnUnroutableMessage(...)`.
 - **Contract versioning** — optional `[MessageContract(version)]`; consumers
   subscribe per version, with a pluggable strategy (dead-letter/requeue/custom)
   for versions no consumer handles.
 - **Serialization** — validated options with `IConfiguration` binding, and a
-  pluggable body serializer set globally or per broker; the `__runax` envelope
-  stays framework-owned.
+  pluggable body serializer set globally, per broker, or per topic
+  (`UseSerializer<T>()` / `UseSerializerForTopic<T>()` and the matching
+  `ConfigureSerialization` / `ConfigureSerializationForTopic` options); the
+  `__runax` envelope stays framework-owned.
 - **Throughput** — batch publish (`PublishBatchAsync`) and concurrent SQS
   consumption (`MaxConcurrentMessages`).
 - **Observability** — OpenTelemetry-ready tracing and metrics via in-box
