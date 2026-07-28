@@ -24,7 +24,7 @@ jobs:
       - name: Format check
         run: dotnet format --verify-no-changes
 
-  integration-tests:
+  integration-tests-matrix:
     runs-on: ubuntu-latest
     needs: build-and-test
 
@@ -142,3 +142,18 @@ jobs:
           dotnet test
           --project tests/Runax.Messaging.Transports.${{ matrix.transport }}.Tests/Runax.Messaging.Transports.${{ matrix.transport }}.Tests.csproj
           --no-build --verbosity normal -- --filter-trait "Category=Integration"
+
+  # Aggregate gate so branch protection can require the stable context "integration-tests"
+  # instead of the per-transport matrix contexts. No name: field, so the context stays "integration-tests".
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: [integration-tests-matrix]
+    if: always()
+
+    steps:
+      - name: Verify matrix result
+        run: |
+          if [ "${{ needs.integration-tests-matrix.result }}" != "success" ]; then
+            echo "::error::integration-tests-matrix did not succeed (result: ${{ needs.integration-tests-matrix.result }})"
+            exit 1
+          fi
