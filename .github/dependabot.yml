@@ -10,8 +10,6 @@ updates:
       - chore
     assignees:
       - Katyara11
-    reviewers:
-      - Katyara11
     commit-message:
       prefix: build
     groups:
@@ -33,8 +31,6 @@ updates:
     labels:
       - chore
     assignees:
-      - Katyara11
-    reviewers:
       - Katyara11
     commit-message:
       prefix: ci
