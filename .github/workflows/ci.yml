@@ -7,8 +7,34 @@ on:
     branches: [main]
 
 jobs:
+  # Detects whether the change touches anything beyond docs, so docs-only changes
+  # skip the build and test jobs. Skipping must happen at the job level (not via
+  # workflow paths filters): the required checks would otherwise never report on
+  # docs-only PRs and block merging, whereas skipped jobs count as passing.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            code:
+              - '**'
+              - '!**/*.md'
+              - '!docs/**'
+              - '!LICENSE'
+              - '!.gitignore'
+              - '!.gitattributes'
+
   build-and-test:
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
 
     steps:
       - uses: actions/checkout@v7
@@ -152,8 +178,10 @@ jobs:
 
     steps:
       - name: Verify matrix result
+        # "skipped" is fine: it means the change was docs-only and the matrix never ran.
         run: |
-          if [ "${{ needs.integration-tests-matrix.result }}" != "success" ]; then
-            echo "::error::integration-tests-matrix did not succeed (result: ${{ needs.integration-tests-matrix.result }})"
+          result="${{ needs.integration-tests-matrix.result }}"
+          if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+            echo "::error::integration-tests-matrix did not succeed (result: $result)"
             exit 1
           fi
