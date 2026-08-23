@@ -35,6 +35,17 @@ observability (see [CHANGELOG.md](CHANGELOG.md)).
 
 - [ ] **ActiveMQ transport** (`Runax.Messaging.Transports.ActiveMq`) — publish/
   consume over ActiveMQ (Artemis / classic) via the `IMessagingTransport` SPI.
+- [ ] **BullMQ transport** (`Runax.Messaging.Transports.BullMq`) — interop with
+  BullMQ job queues over Redis: enqueue jobs that Node.js BullMQ workers pick up,
+  and consume jobs enqueued from Node. Unlike the other transports this targets a
+  library's Redis data-structure convention rather than a broker protocol, so it
+  must stay wire-compatible with BullMQ's key layout and Lua scripts (pin and
+  test against specific BullMQ versions).
+- [ ] **MQTT transport** (`Runax.Messaging.Transports.Mqtt`) — publish/consume
+  over standard MQTT (3.1.1 / 5) brokers such as Mosquitto, EMQX, or HiveMQ via
+  MQTTnet. Competing-consumer semantics need MQTT 5 shared subscriptions
+  (`$share/{group}/{topic}`); on 3.1.1 brokers each consumer group member sees
+  every message, so document that limitation up front.
 
 
 
