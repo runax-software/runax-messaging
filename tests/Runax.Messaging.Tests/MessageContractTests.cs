@@ -127,11 +127,13 @@ public class MessageContractTests
     public async Task Each_version_is_delivered_only_to_the_consumer_that_declares_it()
     {
         var recorder = new Recorder();
-        using var host = await StartAsync(recorder, m => m
-            .AddInMemory()
-            .AddConsumer<OrderV1Consumer>()
-            .AddConsumer<OrderV2Consumer>());
-        var publisher = host.Services.GetRequiredService<IMessagePublisher>();
+        using var host = await StartAsync(recorder, m => m.AddBus(bus =>
+        {
+            bus.AddTransport(new InMemoryConfig());
+            bus.AddConsumer<OrderV1Consumer>();
+            bus.AddConsumer<OrderV2Consumer>();
+        }));
+        var publisher = host.Services.GetRequiredService<IBus>();
 
         await publisher.PublishAsync(Topic, new OrderV1(1));
         await recorder.Wait("v1").WaitAsync(TimeSpan.FromSeconds(5));
@@ -151,8 +153,12 @@ public class MessageContractTests
     public async Task An_unversioned_consumer_still_receives_a_versioned_message()
     {
         var recorder = new Recorder();
-        using var host = await StartAsync(recorder, m => m.AddInMemory().AddConsumer<PlainConsumer>());
-        var publisher = host.Services.GetRequiredService<IMessagePublisher>();
+        using var host = await StartAsync(recorder, m => m.AddBus(bus =>
+        {
+            bus.AddTransport(new InMemoryConfig());
+            bus.AddConsumer<PlainConsumer>();
+        }));
+        var publisher = host.Services.GetRequiredService<IBus>();
 
         await publisher.PublishAsync(Topic, new OrderV1(5));
         await recorder.Wait("plain").WaitAsync(TimeSpan.FromSeconds(5));
@@ -166,11 +172,13 @@ public class MessageContractTests
     public async Task An_unroutable_version_is_dead_lettered_by_default()
     {
         var recorder = new Recorder();
-        using var host = await StartAsync(recorder, m => m
-            .AddInMemory()
-            .AddConsumer<OrderV2Consumer>()   // only v2 is handled
-            .AddConsumer<DlqConsumer>());     // capture the dead-letter topic
-        var publisher = host.Services.GetRequiredService<IMessagePublisher>();
+        using var host = await StartAsync(recorder, m => m.AddBus(bus =>
+        {
+            bus.AddTransport(new InMemoryConfig());
+            bus.AddConsumer<OrderV2Consumer>();   // only v2 is handled
+            bus.AddConsumer<DlqConsumer>();       // capture the dead-letter topic
+        }));
+        var publisher = host.Services.GetRequiredService<IBus>();
 
         await publisher.PublishAsync(Topic, new OrderV1(7));   // v1 has no consumer
         await recorder.Wait("dlq").WaitAsync(TimeSpan.FromSeconds(5));
@@ -185,11 +193,13 @@ public class MessageContractTests
     public async Task A_custom_unroutable_handler_receives_the_message()
     {
         var recorder = new Recorder();
-        using var host = await StartAsync(recorder, m => m
-            .AddInMemory()
-            .AddConsumer<OrderV2Consumer>()
-            .OnUnroutableMessage<RecordingUnroutableHandler>());
-        var publisher = host.Services.GetRequiredService<IMessagePublisher>();
+        using var host = await StartAsync(recorder, m => m.AddBus(bus =>
+        {
+            bus.AddTransport(new InMemoryConfig());
+            bus.AddConsumer<OrderV2Consumer>();
+            bus.OnUnroutableMessage<RecordingUnroutableHandler>();
+        }));
+        var publisher = host.Services.GetRequiredService<IBus>();
 
         await publisher.PublishAsync(Topic, new OrderV1(9));
         await recorder.Wait("unroutable").WaitAsync(TimeSpan.FromSeconds(5));
@@ -203,10 +213,14 @@ public class MessageContractTests
     public async Task A_foreign_message_with_no_envelope_is_consumed_as_a_raw_body()
     {
         var recorder = new Recorder();
-        using var host = await StartAsync(recorder, m => m.AddInMemory().AddConsumer<S3EventConsumer>());
+        using var host = await StartAsync(recorder, m => m.AddBus(bus =>
+        {
+            bus.AddTransport(new InMemoryConfig());
+            bus.AddConsumer<S3EventConsumer>();
+        }));
 
         // Deliver a payload straight to the transport as an external producer would — no __runax key.
-        var transport = host.Services.GetRequiredService<IMessagingTransport>();
+        var transport = host.Services.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
         await transport.PublishAsync("s3-events", """{"Bucket":"my-bucket"}""");
 
         await recorder.Wait("s3").WaitAsync(TimeSpan.FromSeconds(5));
@@ -221,10 +235,12 @@ public class MessageContractTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton(new Recorder());
-        services.AddRunaxMessaging(m => m
-            .AddInMemory()
-            .AddConsumer<OrderV1Consumer>()
-            .AddConsumer<OrderV2Consumer>());
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+        {
+            bus.AddTransport(new InMemoryConfig());
+            bus.AddConsumer<OrderV1Consumer>();
+            bus.AddConsumer<OrderV2Consumer>();
+        }));
         await using var provider = services.BuildServiceProvider();
 
         var catalog = provider.GetRequiredService<IMessageContractCatalog>();

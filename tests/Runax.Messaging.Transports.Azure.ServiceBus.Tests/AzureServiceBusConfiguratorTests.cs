@@ -3,8 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Runax.Messaging.Abstractions;
-using Runax.Messaging.InMemory;
-using Runax.Messaging.Transports.Azure.ServiceBus;
 
 namespace Runax.Messaging.Transports.Azure.ServiceBus.Tests;
 
@@ -14,41 +12,43 @@ public class AzureServiceBusConfiguratorTests
         "Endpoint=sb://test.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=abc123";
 
     [Fact]
-    public void Options_defaults_are_sensible()
+    public void Config_defaults_are_sensible()
     {
-        var options = new AzureServiceBusOptions();
+        var config = new AzureServiceBusConfig();
 
-        options.ConnectionString.ShouldBe(string.Empty);
-        options.TopicSubscriptionMap.ShouldBeEmpty();
-        options.MaxConcurrentCalls.ShouldBe(1);
+        config.ConnectionString.ShouldBe(string.Empty);
+        config.TopicSubscriptionMap.ShouldBeEmpty();
+        config.MaxConcurrentCalls.ShouldBe(1);
     }
 
     [Fact]
-    public void AddAzureServiceBus_registers_the_transport_and_applies_options()
+    public void AddBus_registers_the_transport()
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddAzureServiceBus(serviceBus => serviceBus.Configure(o => o.ConnectionString = ConnectionString)));
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+            bus.AddTransport(new AzureServiceBusConfig { ConnectionString = ConnectionString })));
 
         using var provider = services.BuildServiceProvider();
 
-        provider.GetRequiredService<AzureServiceBusOptions>().ConnectionString.ShouldBe(ConnectionString);
-        provider.GetRequiredService<IMessagingTransport>().ShouldBeOfType<AzureServiceBusTransport>();
+        provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default)
+            .ShouldBeOfType<AzureServiceBusTransport>();
     }
 
     [Fact]
-    public void AddAzureServiceBus_returns_the_same_configurator()
+    public void AddBus_returns_the_same_configurator()
     {
         var services = new ServiceCollection();
         var configurator = new MessagingConfigurator(services);
 
-        var result = configurator.AddAzureServiceBus(serviceBus => serviceBus.Configure(o => o.ConnectionString = ConnectionString));
+        var result = configurator.AddBus(bus =>
+            bus.AddTransport(new AzureServiceBusConfig { ConnectionString = ConnectionString }));
 
         result.ShouldBeSameAs(configurator);
     }
 
     [Fact]
-    public void Binds_options_from_configuration()
+    public void Binds_config_from_configuration()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -61,12 +61,21 @@ public class AzureServiceBusConfiguratorTests
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddAzureServiceBus(configuration.GetSection("ServiceBus")));
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+            bus.AddTransport<AzureServiceBusConfig>(configuration.GetSection("ServiceBus"))));
         using var provider = services.BuildServiceProvider();
 
-        var options = provider.GetRequiredService<AzureServiceBusOptions>();
-        options.MaxConcurrentCalls.ShouldBe(8);
-        options.TopicSubscriptionMap["orders"].ShouldBe("orders-sub");
+        // The bound ConnectionString satisfied [Required] validation and the transport resolves.
+        provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default)
+            .ShouldBeOfType<AzureServiceBusTransport>();
+
+        // The section shape binds every property onto the config type (the same binding
+        // AddTransport<TConfig>(IConfiguration) performs).
+        var config = new AzureServiceBusConfig();
+        configuration.GetSection("ServiceBus").Bind(config);
+        config.ConnectionString.ShouldBe(ConnectionString);
+        config.MaxConcurrentCalls.ShouldBe(8);
+        config.TopicSubscriptionMap["orders"].ShouldBe("orders-sub");
     }
 
     [Fact]
@@ -74,24 +83,37 @@ public class AzureServiceBusConfiguratorTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddAzureServiceBus(serviceBus => serviceBus.Configure(_ => { })));
+
+        var exception = Should.Throw<InvalidOperationException>(() =>
+            services.AddRunaxMessaging(m => m.AddBus(bus =>
+                bus.AddTransport(new AzureServiceBusConfig()))));
+
+        exception.Message.ShouldContain("transport config is invalid");
+    }
+
+    [Fact]
+    public void Health_check_is_auto_registered_for_the_bus()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+            bus.AddTransport(new AzureServiceBusConfig { ConnectionString = ConnectionString })));
         using var provider = services.BuildServiceProvider();
 
-        Should.Throw<OptionsValidationException>(() => provider.GetRequiredService<AzureServiceBusOptions>());
+        var registrations = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations;
+        registrations.ShouldContain(r => r.Name == $"runax:{BusNames.Default}");
     }
 
     [Fact]
     public async Task Health_check_reports_unhealthy_when_the_transport_is_not_service_bus()
     {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddInMemory());
-        services.AddHealthChecks().AddAzureServiceBusTransport();
-        await using var provider = services.BuildServiceProvider();
+        // The 2.0 auto-registered check is always wired to its own bus's transport, so the
+        // mismatch can only be produced by constructing the check against a foreign transport.
+        var check = new AzureServiceBusHealthCheck(Substitute.For<IMessagingTransport>());
 
-        var report = await provider.GetRequiredService<HealthCheckService>().CheckHealthAsync();
+        var result = await check.CheckHealthAsync(new HealthCheckContext());
 
-        report.Status.ShouldBe(HealthStatus.Unhealthy);
-        report.Entries["azure-servicebus"].Description.ShouldNotBeNull().ShouldContain("not Azure Service Bus");
+        result.Status.ShouldBe(HealthStatus.Unhealthy);
+        result.Description.ShouldNotBeNull().ShouldContain("not Azure Service Bus");
     }
 }

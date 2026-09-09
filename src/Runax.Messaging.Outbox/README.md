@@ -13,37 +13,56 @@ dotnet add package Runax.Messaging.Outbox
 
 ## Register
 
+An outbox belongs to **one bus** — configure both halves inside that bus's `AddBus` block:
+
 ```csharp
 using Runax.Messaging;
 using Runax.Messaging.Outbox;
 
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddRabbitMq(rabbitmq =>
+    messaging.AddBus(bus =>
     {
-        rabbitmq.Configure(o => o.HostName = "localhost");
-        rabbitmq.AddConsumer<OrderPlacedConsumer>();
-    });
+        bus.AddTransport(new RabbitMqConfig { HostName = "localhost" });
+        bus.AddConsumer<OrderPlacedConsumer>();
 
-    runax.AddOutbox(o => o.PollingInterval = TimeSpan.FromSeconds(2));
-    runax.AddInMemoryOutboxStore();   // or register your own IOutboxStore
+        bus.AddOutbox(o => o.PollingInterval = TimeSpan.FromSeconds(2));
+        bus.AddOutboxStore(new InMemoryOutboxStoreConfig());   // or your own OutboxStoreConfig
+    });
 });
 ```
 
-`AddOutbox` makes `IMessagePublisher` write to the `IOutboxStore` instead of publishing directly;
-the `OutboxDispatcher` background service drains pending entries to the transport and marks them dispatched.
-Only the default `IMessagePublisher` is wrapped — publishers obtained from
-`IMessagePublisherFactory.ForTransport("<system-name>")` write straight to their transport and skip the outbox.
+`AddOutbox` swaps the bus's publish sink: `bus.PublishAsync` writes the envelope to the
+`IOutboxStore` instead of the transport, and the per-bus `OutboxDispatcher` background service
+drains pending entries to the bus's transport and marks them dispatched. Buses without an outbox
+publish straight to their transport, so publishing on another (outbox-less) bus skips the outbox.
+`AddOutbox` on a `BusMode.ConsumeOnly` bus throws at configuration time — the outbox exists to
+publish.
 
 ## Providing a durable store
 
-`AddOutbox` registers the *pattern* only — it does **not** register a store. You must supply one:
-call `AddInMemoryOutboxStore()` (tests/single-process only) or register your own `IOutboxStore`
-(EF Core, Dapper, Mongo, ADO.NET, …). With no store registered, resolution fails at startup.
+`AddOutbox` registers the *pattern* only — it does **not** register a store. You must pair it with
+`AddOutboxStore(...)`: an outbox without a store (or a store without an outbox) throws when the
+`AddBus` block completes, and a second `AddOutboxStore` on the same bus throws like a second
+`AddTransport` does. Stores register via a config type — the same uniform pattern as
+`AddTransport`: `InMemoryOutboxStoreConfig` ships in the box (tests/single-process only), and a
+durable store (EF Core, Dapper, Mongo, ADO.NET, …) derives `OutboxStoreConfig`:
+
+```csharp
+public sealed class EfOutboxStoreConfig : OutboxStoreConfig
+{
+    // protected (not protected internal): the base member's `internal` half
+    // doesn't carry across assemblies.
+    protected override IOutboxStore CreateStore(OutboxStoreContext context) =>
+        new EfOutboxStore(context.Services.GetRequiredService<IDbContextFactory<AppDbContext>>());
+}
+```
 
 The atomicity guarantee comes from your store: implement `IOutboxStore` so that `AddAsync` **enlists in
 the caller's transaction** (e.g. adds a row to your EF Core `DbContext` without calling `SaveChanges`),
-so the outbox row commits together with your business data.
+so the outbox row commits together with your business data. Note that `GetPendingAsync` takes the
+**bus name** and `OutboxMessage` carries a `Bus` field, so one store (one table) can serve several
+buses:
 
 ```csharp
 public sealed class EfOutboxStore(AppDbContext db) : IOutboxStore
@@ -54,8 +73,9 @@ public sealed class EfOutboxStore(AppDbContext db) : IOutboxStore
         return Task.CompletedTask;
     }
 
-    public async Task<IReadOnlyList<OutboxMessage>> GetPendingAsync(int maxCount, CancellationToken ct = default) =>
-        await db.OutboxMessages.Where(m => m.DispatchedAt == null)
+    public async Task<IReadOnlyList<OutboxMessage>> GetPendingAsync(
+        string bus, int maxCount, CancellationToken ct = default) =>
+        await db.OutboxMessages.Where(m => m.Bus == bus && m.DispatchedAt == null)
             .OrderBy(m => m.CreatedAt).Take(maxCount).ToListAsync(ct);
 
     public async Task MarkDispatchedAsync(Guid id, CancellationToken ct = default) =>
@@ -66,12 +86,14 @@ public sealed class EfOutboxStore(AppDbContext db) : IOutboxStore
 
 `InMemoryOutboxStore` is provided for tests and single-process use only — it is not durable or transactional.
 
-> **Scoping.** `OutboxPublisher` and `OutboxDispatcher` are singletons, so a store that depends on a
-> scoped `DbContext` should not capture it directly. Resolve the unit of work per operation instead —
-> inject `IDbContextFactory<AppDbContext>` (or `IServiceScopeFactory`) and create a context inside each
-> `IOutboxStore` call.
+> **Scoping.** The bus's publish sink and the `OutboxDispatcher` are singletons, so a store that
+> depends on a scoped `DbContext` should not capture it directly. Resolve the unit of work per
+> operation instead — inject `IDbContextFactory<AppDbContext>` (or `IServiceScopeFactory`) and
+> create a context inside each `IOutboxStore` call.
 
 ## Options
+
+Passed to `bus.AddOutbox(o => ...)` (`OutboxOptions`):
 
 | Option | Default | Description |
 | --- | --- | --- |

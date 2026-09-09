@@ -10,10 +10,10 @@ namespace Runax.Messaging.Transports.Google.PubSub;
 
 /// <summary>
 /// Google Cloud Pub/Sub implementation of <see cref="IMessagingTransport"/>. A runax topic maps to a
-/// Pub/Sub topic for publishing and to a subscription (via <see cref="GooglePubSubOptions.TopicSubscriptionMap"/>)
+/// Pub/Sub topic for publishing and to a subscription (via <see cref="GooglePubSubConfig.TopicSubscriptionMap"/>)
 /// for consuming.
 /// </summary>
-internal sealed class GooglePubSubTransport(GooglePubSubOptions options, ILogger<GooglePubSubTransport> logger)
+internal sealed class GooglePubSubTransport(GooglePubSubConfig options, ILogger<GooglePubSubTransport> logger)
     : IMessagingTransport, IDisposable
 {
     private readonly ConcurrentDictionary<string, Task<PublisherClient>> _publishers = new();

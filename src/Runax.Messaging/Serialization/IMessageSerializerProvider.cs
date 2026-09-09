@@ -5,45 +5,43 @@ using Runax.Messaging.Abstractions;
 namespace Runax.Messaging.Serialization;
 
 /// <summary>
-/// Resolves the <see cref="IMessageSerializer"/> to use for a given transport and topic. Selection runs from
-/// most to least specific: a serializer registered for this exact <c>(transport, topic)</c> pair, then one for
-/// this topic on any transport, then one for this transport (any topic), then the global default. Each level is
-/// registered through <c>UseSerializer&lt;T&gt;()</c> / <c>ConfigureSerialization(...)</c> (transport or global)
-/// or their <c>*ForTopic</c> counterparts. The reserved <c>__runax</c> envelope is identical at every level.
+/// Resolves the <see cref="IMessageSerializer"/> to use for a given bus and topic. Selection runs
+/// from most to least specific: a serializer registered for this exact <c>(bus, topic)</c> pair
+/// (via <c>bus.UseSerializerForTopic&lt;T&gt;()</c> / <c>bus.ConfigureSerializationForTopic(...)</c>),
+/// then one for the bus (<c>bus.UseSerializer&lt;T&gt;()</c> / <c>bus.ConfigureSerialization(...)</c>),
+/// then the global default. The reserved <c>__runax</c> envelope is identical at every level.
 /// </summary>
 internal interface IMessageSerializerProvider
 {
     /// <summary>
-    /// Returns the serializer for the given topic on the transport with the given
-    /// <see cref="IMessagingTransport.SystemName"/>.
+    /// Returns the serializer for the given topic on the given bus.
     /// </summary>
-    IMessageSerializer For(string transportName, string topic);
+    IMessageSerializer For(string busName, string topic);
 }
 
-/// <summary>Keyed-service key for a body serializer scoped to a topic on any transport.</summary>
-internal readonly record struct TopicSerializerKey(string Topic);
-
-/// <summary>Keyed-service key for a body serializer scoped to a topic on one specific transport.</summary>
-internal readonly record struct TransportTopicSerializerKey(string Transport, string Topic);
+/// <summary>
+/// Keyed-service key for per-topic services scoped to one bus — the single normalized scoping key
+/// below the bus level.
+/// </summary>
+internal readonly record struct TopicKey(string Bus, string Topic);
 
 /// <summary>
-/// Default <see cref="IMessageSerializerProvider"/>. Looks up a keyed <see cref="ISerializer"/> by decreasing
-/// specificity — <c>(transport, topic)</c>, then topic, then transport — and wraps the first match in an
-/// <see cref="EnvelopeSerializer"/>; falls back to the global serializer when none is registered. Results are
-/// cached per <c>(transport, topic)</c>.
+/// Default <see cref="IMessageSerializerProvider"/>. Looks up a keyed <see cref="ISerializer"/> by
+/// decreasing specificity — <c>(bus, topic)</c>, then bus — and wraps the first match in an
+/// <see cref="EnvelopeSerializer"/>; falls back to the global serializer when none is registered.
+/// Results are cached per <c>(bus, topic)</c>.
 /// </summary>
 internal sealed class MessageSerializerProvider(IServiceProvider services, IMessageSerializer defaultSerializer)
     : IMessageSerializerProvider
 {
-    private readonly ConcurrentDictionary<(string Transport, string Topic), IMessageSerializer> _cache = new();
+    private readonly ConcurrentDictionary<TopicKey, IMessageSerializer> _cache = new();
 
-    public IMessageSerializer For(string transportName, string topic) =>
-        _cache.GetOrAdd((transportName, topic), static (key, state) =>
+    public IMessageSerializer For(string busName, string topic) =>
+        _cache.GetOrAdd(new TopicKey(busName, topic), static (key, state) =>
         {
             var body =
-                state.services.GetKeyedService<ISerializer>(new TransportTopicSerializerKey(key.Transport, key.Topic))
-                ?? state.services.GetKeyedService<ISerializer>(new TopicSerializerKey(key.Topic))
-                ?? state.services.GetKeyedService<ISerializer>(key.Transport);
+                state.services.GetKeyedService<ISerializer>(key)
+                ?? state.services.GetKeyedService<ISerializer>(key.Bus);
             return body is null ? state.defaultSerializer : new EnvelopeSerializer(body);
         }, (services, defaultSerializer));
 }

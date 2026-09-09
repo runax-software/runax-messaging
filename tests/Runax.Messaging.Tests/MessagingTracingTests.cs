@@ -41,11 +41,15 @@ public class MessagingTracingTests
         var handled = new TaskCompletionSource();
         var builder = Host.CreateApplicationBuilder();
         builder.Services.AddSingleton(handled);
-        builder.Services.AddRunaxMessaging(m => m.AddInMemory().AddConsumer<PingConsumer>());
+        builder.Services.AddRunaxMessaging(m => m.AddBus(bus =>
+        {
+            bus.AddTransport(new InMemoryConfig());
+            bus.AddConsumer<PingConsumer>();
+        }));
         using var host = builder.Build();
         await host.StartAsync();
 
-        var publisher = host.Services.GetRequiredService<IMessagePublisher>();
+        var publisher = host.Services.GetRequiredService<IBus>();
         await publisher.PublishAsync("trace-ping", new Ping("hi"));
 
         await handled.Task.WaitAsync(TimeSpan.FromSeconds(5));

@@ -39,10 +39,10 @@ public sealed class RabbitMqTransportIntegrationTests : IAsyncLifetime, IDisposa
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddRabbitMq(rabbit => rabbit.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new RabbitMqConfig
         {
-            o.HostName = HostName;
-            o.ExchangeName = _exchange;
+            HostName = HostName,
+            ExchangeName = _exchange,
         })));
         _provider = services.BuildServiceProvider();
     }
@@ -59,7 +59,7 @@ public sealed class RabbitMqTransportIntegrationTests : IAsyncLifetime, IDisposa
     [Fact]
     public async Task Publish_routes_the_envelope_to_a_bound_queue()
     {
-        var transport = _provider.GetRequiredService<IMessagingTransport>();
+        var transport = _provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
         var envelope = $$"""{"probe":"{{Guid.NewGuid():N}}"}""";
 
         await transport.PublishAsync(_topic, envelope);
@@ -79,7 +79,7 @@ public sealed class RabbitMqTransportIntegrationTests : IAsyncLifetime, IDisposa
     [Fact]
     public async Task Publish_marks_messages_persistent_and_json()
     {
-        var transport = _provider.GetRequiredService<IMessagingTransport>();
+        var transport = _provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
 
         await transport.PublishAsync(_topic, """{"x":1}""");
 
@@ -99,7 +99,7 @@ public sealed class RabbitMqTransportIntegrationTests : IAsyncLifetime, IDisposa
     [Fact]
     public async Task Concurrent_publishes_all_arrive()
     {
-        var transport = _provider.GetRequiredService<IMessagingTransport>();
+        var transport = _provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
         const int count = 50;
 
         // Fan out well beyond the channel-pool size to exercise renting/returning under contention.
@@ -122,7 +122,7 @@ public sealed class RabbitMqTransportIntegrationTests : IAsyncLifetime, IDisposa
     [Fact]
     public async Task Batch_publish_delivers_every_message()
     {
-        var transport = _provider.GetRequiredService<IMessagingTransport>();
+        var transport = _provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
         const int count = 20;
 
         await transport.PublishBatchAsync(_topic,

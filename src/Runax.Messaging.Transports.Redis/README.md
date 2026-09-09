@@ -12,35 +12,38 @@ dotnet add package Runax.Messaging.Transports.Redis
 
 ## Register
 
+Attach the transport to a bus with its config object:
+
 ```csharp
 using Runax.Messaging;
 using Runax.Messaging.Transports.Redis;
 
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddRedis(redis =>
+    messaging.AddBus(bus =>
     {
-        redis.Configure(options =>
+        bus.AddTransport(new RedisConfig
         {
-            options.Configuration = "localhost:6379";
-            options.ConsumerGroup = "orders-workers";
+            Configuration = "localhost:6379",
+            ConsumerGroup = "orders-workers",
         });
-        redis.AddConsumer<OrderPlacedConsumer>();
+        bus.AddConsumer<OrderPlacedConsumer>();
     });
 });
 ```
 
-`AddRedis` lives in the `Runax.Messaging.Transports.Redis` namespace, so add that `using`.
-Options are validated at startup; pass an `IConfiguration` section to bind them instead of a lambda:
-`AddRedis(builder.Configuration.GetSection("Redis"))`.
+`RedisConfig` lives in the `Runax.Messaging.Transports.Redis` namespace, so add that `using`.
+The config is validated at startup (DataAnnotations, when the `AddBus` block completes); bind it
+from an `IConfiguration` section instead of setting properties:
+`bus.AddTransport<RedisConfig>(builder.Configuration.GetSection("Redis"))`.
 
 `Configuration` is a [StackExchange.Redis connection string](https://stackexchange.github.io/StackExchange.Redis/Configuration).
 
-## Options
+## Config
 
-Configure these on `RedisOptions` via `redis.Configure(o => ...)`.
+Set these directly on `RedisConfig`.
 
-| Option | Meaning | Default | Required? |
+| Property | Meaning | Default | Required? |
 | --- | --- | --- | --- |
 | `Configuration` | StackExchange.Redis connection string. | (none) | Yes |
 | `ConsumerGroup` | Consumer group used to read each stream. | `runax` | No |
@@ -48,11 +51,12 @@ Configure these on `RedisOptions` via `redis.Configure(o => ...)`.
 | `ReadBatchSize` | Maximum entries read per poll. | `10` | No |
 | `PollInterval` | Wait before polling again when a stream is idle. | `1s` | No |
 | `ClaimIdleTime` | Idle time before a pending entry is reclaimed and redelivered. | `30s` | No |
+| `RegisterHealthCheck` | Auto-register the `runax:{bus}` health check (inherited from `TransportConfig`). | `true` | No |
 
-Beyond these transport options, settings from the core package can be applied to this broker
-inside the `AddRedis(...)` block — `AddConsumer<T>()`, `WithRetry(...)`, `OnUnroutableMessage(...)`,
-`ConfigureSerialization(...)`, and `UseSerializer<T>()` — each overriding the global default for
-Redis only. See [Configuration & per-broker settings](../../docs/configuration.md).
+Beyond the transport config, settings from the core package apply to the bus that runs this
+transport — `AddConsumer<T>()`, `WithRetry(...)`, `OnUnroutableMessage(...)`,
+`ConfigureSerialization(...)`, and `UseSerializer<T>()` — all inside the same `AddBus` block.
+See [Configuration & per-bus settings](../../docs/configuration.md).
 
 ## Behavior
 
@@ -67,16 +71,14 @@ Redis only. See [Configuration & per-broker settings](../../docs/configuration.m
 
 ## Health check
 
-Register a reachability check on `IHealthChecksBuilder`:
-
-```csharp
-builder.Services.AddHealthChecks().AddRedisTransport();
-```
+A reachability check named `runax:{bus}` is registered automatically for each bus that runs
+this transport (`RegisterHealthCheck = false` on the config to opt out).
 
 ## Telemetry
 
 The transport reports `messaging.system = "redis"` on the spans and metrics emitted by the core
-package (activity source / meter `"Runax.Messaging"`).
+package (activity source / meter `"Runax.Messaging"`); the `messaging.runax.bus` tag identifies
+the bus.
 
 ## License
 

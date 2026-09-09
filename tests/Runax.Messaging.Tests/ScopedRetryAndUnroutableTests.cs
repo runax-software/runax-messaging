@@ -7,7 +7,7 @@ namespace Runax.Messaging.Tests;
 
 public class ScopedRetryAndUnroutableTests
 {
-    // A second, do-nothing transport so we can prove a setting on one broker leaves the other untouched.
+    // A second, do-nothing transport so we can prove a setting on one bus leaves the other untouched.
     private sealed class FakeTransport(string systemName) : IMessagingTransport
     {
         public string SystemName { get; } = systemName;
@@ -28,66 +28,75 @@ public class ScopedRetryAndUnroutableTests
             ValueTask.FromResult(MessageDisposition.Requeue);
     }
 
+    private static void AddOtherBus(MessagingConfigurator m, Action<BusBuilder>? configure = null) =>
+        m.AddBus("other", bus =>
+        {
+            bus.AddTransport(new FakeTransportConfig(new FakeTransport("other")));
+            configure?.Invoke(bus);
+        });
+
     [Fact]
-    public void Scoped_WithRetry_applies_only_to_that_transport()
+    public void Bus_WithRetry_applies_only_to_that_bus()
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddRunaxMessaging(m =>
         {
-            m.AddInMemory(inMemory => inMemory.WithRetry(o => o.MaxAttempts = 7));
-            m.Services.AddSingleton<IMessagingTransport>(new FakeTransport("other"));
+            m.AddBus(bus =>
+            {
+                bus.AddTransport(new InMemoryConfig());
+                bus.WithRetry(o => o.MaxAttempts = 7);
+            });
+            AddOtherBus(m);
         });
         using var provider = services.BuildServiceProvider();
 
         var retry = provider.GetRequiredService<IRetryOptionsProvider>();
-        var inMemoryName = provider.GetServices<IMessagingTransport>()
-            .First(t => t.SystemName != "other").SystemName;
 
-        // The in-memory broker got its scoped policy...
-        retry.For(inMemoryName, "any").MaxAttempts.ShouldBe(7);
-        // ...but the other broker falls back to the built-in default.
+        // The default bus got its policy...
+        retry.For(BusNames.Default, "any").MaxAttempts.ShouldBe(7);
+        // ...but the other bus falls back to the built-in default.
         retry.For("other", "any").MaxAttempts.ShouldBe(3);
     }
 
     [Fact]
-    public void Scoped_WithRetry_overrides_the_global_policy_for_that_transport_only()
+    public void Each_bus_keeps_its_own_WithRetry_policy()
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddRunaxMessaging(m =>
         {
-            m.AddInMemory(inMemory => inMemory.WithRetry(o => o.MaxAttempts = 7));
-            m.Services.AddSingleton<IMessagingTransport>(new FakeTransport("other"));
-            m.WithRetry(o => o.MaxAttempts = 5); // global default
+            m.AddBus(bus =>
+            {
+                bus.AddTransport(new InMemoryConfig());
+                bus.WithRetry(o => o.MaxAttempts = 7);
+            });
+            AddOtherBus(m, bus => bus.WithRetry(o => o.MaxAttempts = 5));
         });
         using var provider = services.BuildServiceProvider();
 
         var retry = provider.GetRequiredService<IRetryOptionsProvider>();
-        var inMemoryName = provider.GetServices<IMessagingTransport>()
-            .First(t => t.SystemName != "other").SystemName;
 
-        retry.For(inMemoryName, "any").MaxAttempts.ShouldBe(7); // scoped wins
-        retry.For("other", "any").MaxAttempts.ShouldBe(5);      // global applies
+        retry.For(BusNames.Default, "any").MaxAttempts.ShouldBe(7);
+        retry.For("other", "any").MaxAttempts.ShouldBe(5);
     }
 
     [Fact]
-    public void Global_only_WithRetry_still_applies_to_every_transport()
+    public void Bus_WithRetry_applies_to_every_topic_on_that_bus()
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m =>
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
         {
-            m.AddInMemory();
-            m.Services.AddSingleton<IMessagingTransport>(new FakeTransport("other"));
-            m.WithRetry(o => o.MaxAttempts = 9);
-        });
+            bus.AddTransport(new InMemoryConfig());
+            bus.WithRetry(o => o.MaxAttempts = 9);
+        }));
         using var provider = services.BuildServiceProvider();
 
         var retry = provider.GetRequiredService<IRetryOptionsProvider>();
 
-        retry.For("in-memory", "any").MaxAttempts.ShouldBe(9);
-        retry.For("other", "any").MaxAttempts.ShouldBe(9);
+        retry.For(BusNames.Default, "payments").MaxAttempts.ShouldBe(9);
+        retry.For(BusNames.Default, "telemetry").MaxAttempts.ShouldBe(9);
     }
 
     [Fact]
@@ -95,12 +104,12 @@ public class ScopedRetryAndUnroutableTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddInMemory());
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new InMemoryConfig())));
         using var provider = services.BuildServiceProvider();
 
         var retry = provider.GetRequiredService<IRetryOptionsProvider>();
 
-        retry.For("in-memory", "any").MaxAttempts.ShouldBe(3);
+        retry.For(BusNames.Default, "any").MaxAttempts.ShouldBe(3);
     }
 
     [Fact]
@@ -108,127 +117,114 @@ public class ScopedRetryAndUnroutableTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m =>
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
         {
-            m.AddInMemory();
-            m.WithRetryForTopic("payments", o => o.MaxAttempts = 10);
-        });
+            bus.AddTransport(new InMemoryConfig());
+            bus.WithRetryForTopic("payments", o => o.MaxAttempts = 10);
+        }));
         using var provider = services.BuildServiceProvider();
 
         var retry = provider.GetRequiredService<IRetryOptionsProvider>();
 
-        // The "payments" topic gets the per-topic policy on any transport...
-        retry.For("in-memory", "payments").MaxAttempts.ShouldBe(10);
+        // The "payments" topic gets the per-topic policy...
+        retry.For(BusNames.Default, "payments").MaxAttempts.ShouldBe(10);
         // ...while every other topic keeps the built-in default.
-        retry.For("in-memory", "telemetry").MaxAttempts.ShouldBe(3);
+        retry.For(BusNames.Default, "telemetry").MaxAttempts.ShouldBe(3);
     }
 
     [Fact]
-    public void Topic_retry_policy_wins_over_broker_policy_for_the_same_topic()
+    public void Topic_retry_policy_wins_over_bus_policy_for_the_same_topic()
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddRunaxMessaging(m =>
         {
-            m.AddInMemory(inMemory =>
+            m.AddBus(bus =>
             {
-                inMemory.WithRetry(o => o.MaxAttempts = 7);              // per-broker: any topic
-                inMemory.WithRetryForTopic("payments", o => o.MaxAttempts = 10); // per-broker + topic
+                bus.AddTransport(new InMemoryConfig());
+                bus.WithRetry(o => o.MaxAttempts = 7);                       // bus-wide: any topic
+                bus.WithRetryForTopic("payments", o => o.MaxAttempts = 10);  // bus + topic
             });
-            m.WithRetryForTopic("payments", o => o.MaxAttempts = 99);    // global per-topic
+            AddOtherBus(m, bus => bus.WithRetryForTopic("payments", o => o.MaxAttempts = 99));
         });
         using var provider = services.BuildServiceProvider();
 
         var retry = provider.GetRequiredService<IRetryOptionsProvider>();
 
-        // Transport+topic is the most specific scope, so it wins over both the global per-topic and per-broker.
-        retry.For("in-memory", "payments").MaxAttempts.ShouldBe(10);
-        // A different topic on the same broker still gets the per-broker policy.
-        retry.For("in-memory", "telemetry").MaxAttempts.ShouldBe(7);
-        // The global per-topic policy applies on any other transport.
+        // Bus+topic is the most specific scope, so it wins over the bus-wide policy.
+        retry.For(BusNames.Default, "payments").MaxAttempts.ShouldBe(10);
+        // A different topic on the same bus still gets the bus-wide policy.
+        retry.For(BusNames.Default, "telemetry").MaxAttempts.ShouldBe(7);
+        // The other bus's per-topic policy is independent of the default bus.
         retry.For("other", "payments").MaxAttempts.ShouldBe(99);
     }
 
     [Fact]
-    public void Scoped_OnUnroutableMessage_strategy_applies_only_to_that_transport()
+    public void Bus_OnUnroutableMessage_strategy_applies_only_to_that_bus()
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddRunaxMessaging(m =>
         {
-            m.AddInMemory(inMemory => inMemory.OnUnroutableMessage(UnroutableStrategy.Discard));
-            m.Services.AddSingleton<IMessagingTransport>(new FakeTransport("other"));
+            m.AddBus(bus =>
+            {
+                bus.AddTransport(new InMemoryConfig());
+                bus.OnUnroutableMessage(UnroutableStrategy.Discard);
+            });
+            AddOtherBus(m);
         });
         using var provider = services.BuildServiceProvider();
 
         var handlers = provider.GetRequiredService<IUnroutableMessageHandlerProvider>();
-        var inMemoryName = provider.GetServices<IMessagingTransport>()
-            .First(t => t.SystemName != "other").SystemName;
 
-        // The in-memory broker discards (acknowledges)...
-        Handle(handlers.For(inMemoryName)).ShouldBe(MessageDisposition.Acknowledge);
-        // ...while the other broker keeps the built-in dead-letter default.
+        // The default bus discards (acknowledges)...
+        Handle(handlers.For(BusNames.Default)).ShouldBe(MessageDisposition.Acknowledge);
+        // ...while the other bus keeps the built-in dead-letter default.
         Handle(handlers.For("other")).ShouldBe(MessageDisposition.DeadLetter);
     }
 
     [Fact]
-    public void Scoped_OnUnroutableMessage_handler_applies_only_to_that_transport()
+    public void Bus_OnUnroutableMessage_handler_applies_only_to_that_bus()
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddRunaxMessaging(m =>
         {
-            m.AddInMemory(inMemory => inMemory.OnUnroutableMessage<QuarantineHandler>());
-            m.Services.AddSingleton<IMessagingTransport>(new FakeTransport("other"));
+            m.AddBus(bus =>
+            {
+                bus.AddTransport(new InMemoryConfig());
+                bus.OnUnroutableMessage<QuarantineHandler>();
+            });
+            AddOtherBus(m);
         });
         using var provider = services.BuildServiceProvider();
 
         var handlers = provider.GetRequiredService<IUnroutableMessageHandlerProvider>();
-        var inMemoryName = provider.GetServices<IMessagingTransport>()
-            .First(t => t.SystemName != "other").SystemName;
 
-        handlers.For(inMemoryName).ShouldBeOfType<QuarantineHandler>();
+        handlers.For(BusNames.Default).ShouldBeOfType<QuarantineHandler>();
         Handle(handlers.For("other")).ShouldBe(MessageDisposition.DeadLetter);
     }
 
     [Fact]
-    public void Scoped_OnUnroutableMessage_overrides_the_global_strategy_for_that_transport_only()
+    public void Each_bus_keeps_its_own_OnUnroutableMessage_strategy()
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddRunaxMessaging(m =>
         {
-            m.AddInMemory(inMemory => inMemory.OnUnroutableMessage(UnroutableStrategy.Discard));
-            m.Services.AddSingleton<IMessagingTransport>(new FakeTransport("other"));
-            m.OnUnroutableMessage(UnroutableStrategy.Requeue); // global default
-        });
-        using var provider = services.BuildServiceProvider();
-
-        var handlers = provider.GetRequiredService<IUnroutableMessageHandlerProvider>();
-        var inMemoryName = provider.GetServices<IMessagingTransport>()
-            .First(t => t.SystemName != "other").SystemName;
-
-        Handle(handlers.For(inMemoryName)).ShouldBe(MessageDisposition.Acknowledge); // scoped Discard wins
-        Handle(handlers.For("other")).ShouldBe(MessageDisposition.Requeue);          // global Requeue applies
-    }
-
-    [Fact]
-    public void Global_only_OnUnroutableMessage_still_applies_to_every_transport()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddRunaxMessaging(m =>
-        {
-            m.AddInMemory();
-            m.Services.AddSingleton<IMessagingTransport>(new FakeTransport("other"));
-            m.OnUnroutableMessage(UnroutableStrategy.Discard);
+            m.AddBus(bus =>
+            {
+                bus.AddTransport(new InMemoryConfig());
+                bus.OnUnroutableMessage(UnroutableStrategy.Discard);
+            });
+            AddOtherBus(m, bus => bus.OnUnroutableMessage(UnroutableStrategy.Requeue));
         });
         using var provider = services.BuildServiceProvider();
 
         var handlers = provider.GetRequiredService<IUnroutableMessageHandlerProvider>();
 
-        Handle(handlers.For("in-memory")).ShouldBe(MessageDisposition.Acknowledge);
-        Handle(handlers.For("other")).ShouldBe(MessageDisposition.Acknowledge);
+        Handle(handlers.For(BusNames.Default)).ShouldBe(MessageDisposition.Acknowledge); // Discard
+        Handle(handlers.For("other")).ShouldBe(MessageDisposition.Requeue);              // Requeue
     }
 
     [Fact]
@@ -236,12 +232,12 @@ public class ScopedRetryAndUnroutableTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddInMemory());
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new InMemoryConfig())));
         using var provider = services.BuildServiceProvider();
 
         var handlers = provider.GetRequiredService<IUnroutableMessageHandlerProvider>();
 
-        Handle(handlers.For("in-memory")).ShouldBe(MessageDisposition.DeadLetter);
+        Handle(handlers.For(BusNames.Default)).ShouldBe(MessageDisposition.DeadLetter);
     }
 
     private static MessageDisposition Handle(IUnroutableMessageHandler handler) =>

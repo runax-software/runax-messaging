@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Runax.Messaging.InMemory;
-using Runax.Messaging.Transports.Aws.Sqs;
+using Microsoft.Extensions.Options;
+using Runax.Messaging.Abstractions;
 
 namespace Runax.Messaging.Transports.Aws.Sqs.Tests;
 
@@ -11,18 +11,27 @@ public class SqsHealthCheckTests
     private static string Region => Environment.GetEnvironmentVariable("AWS_REGION") ?? "us-east-1";
 
     [Fact]
-    public async Task Reports_unhealthy_when_the_transport_is_not_sqs()
+    public void Health_check_is_auto_registered_for_the_bus()
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddInMemory());
-        services.AddHealthChecks().AddSqsTransport();
-        await using var provider = services.BuildServiceProvider();
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new SqsConfig())));
+        using var provider = services.BuildServiceProvider();
 
-        var report = await provider.GetRequiredService<HealthCheckService>().CheckHealthAsync();
+        var registrations = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations;
+        registrations.ShouldContain(r => r.Name == $"runax:{BusNames.Default}");
+    }
 
-        report.Status.ShouldBe(HealthStatus.Unhealthy);
-        report.Entries["sqs"].Description.ShouldNotBeNull().ShouldContain("not SQS");
+    [Fact]
+    public void Health_check_is_not_registered_when_disabled()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+            bus.AddTransport(new SqsConfig { RegisterHealthCheck = false })));
+        using var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations.ShouldBeEmpty();
     }
 
     [Fact]
@@ -31,18 +40,19 @@ public class SqsHealthCheckTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddSqs(sqs => sqs.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new SqsConfig
         {
-            o.Region = Region;
-            o.ServiceUrl = ServiceUrl;
-            o.AccessKey = "test";
-            o.SecretKey = "test";
+            Region = Region,
+            ServiceUrl = ServiceUrl,
+            AccessKey = "test",
+            SecretKey = "test",
         })));
-        services.AddHealthChecks().AddSqsTransport();
         await using var provider = services.BuildServiceProvider();
 
-        var report = await provider.GetRequiredService<HealthCheckService>().CheckHealthAsync();
+        var report = await provider.GetRequiredService<HealthCheckService>()
+            .CheckHealthAsync(r => r.Name == $"runax:{BusNames.Default}");
 
         report.Status.ShouldBe(HealthStatus.Healthy);
+        report.Entries[$"runax:{BusNames.Default}"].Status.ShouldBe(HealthStatus.Healthy);
     }
 }

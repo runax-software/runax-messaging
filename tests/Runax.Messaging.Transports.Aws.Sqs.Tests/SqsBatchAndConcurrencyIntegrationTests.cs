@@ -33,11 +33,11 @@ public sealed class SqsBatchAndConcurrencyIntegrationTests : IAsyncLifetime, IDi
 
     public void Dispose() => _reader.Dispose();
 
-    private ServiceProvider BuildProvider(Action<SqsOptions>? configure = null)
+    private ServiceProvider BuildProvider(Action<SqsConfig>? configure = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddSqs(sqs => sqs.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport<SqsConfig>(o =>
         {
             o.Region = Region;
             o.ServiceUrl = ServiceUrl;
@@ -54,7 +54,7 @@ public sealed class SqsBatchAndConcurrencyIntegrationTests : IAsyncLifetime, IDi
     public async Task PublishBatchAsync_sends_all_messages_across_chunks()
     {
         using var provider = BuildProvider();
-        var transport = provider.GetRequiredService<IMessagingTransport>();
+        var transport = provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
 
         // 12 > the SQS batch limit of 10, so this exercises chunking.
         var envelopes = Enumerable.Range(0, 12).Select(i => $$"""{"n":{{i}}}""").ToList();
@@ -85,7 +85,7 @@ public sealed class SqsBatchAndConcurrencyIntegrationTests : IAsyncLifetime, IDi
     public async Task Messages_are_processed_concurrently_up_to_the_limit()
     {
         using var provider = BuildProvider(o => o.MaxConcurrentMessages = 5);
-        var transport = provider.GetRequiredService<IMessagingTransport>();
+        var transport = provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
 
         const int total = 8;
         await transport.PublishBatchAsync(_topic,

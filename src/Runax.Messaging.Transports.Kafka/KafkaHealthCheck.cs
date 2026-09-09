@@ -4,16 +4,17 @@ using Runax.Messaging.Abstractions;
 namespace Runax.Messaging.Transports.Kafka;
 
 /// <summary>
-/// Health check that reports whether the Kafka transport can reach the cluster.
+/// Health check that reports whether one bus's Kafka transport can reach the cluster.
+/// Registered automatically per bus as <c>runax:{bus}</c>.
 /// </summary>
-internal sealed class KafkaHealthCheck(IEnumerable<IMessagingTransport> transports) : IHealthCheck
+internal sealed class KafkaHealthCheck(IMessagingTransport transport) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (transports.OfType<KafkaTransport>().FirstOrDefault() is not { } kafka)
-            return HealthCheckResult.Unhealthy("The registered messaging transport is not Kafka.");
+        if (transport is not KafkaTransport kafka)
+            return HealthCheckResult.Unhealthy("The bus's messaging transport is not Kafka.");
 
         try
         {

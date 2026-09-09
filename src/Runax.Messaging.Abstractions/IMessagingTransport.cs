@@ -9,6 +9,8 @@ public interface IMessagingTransport
     /// <summary>
     /// Gets the messaging system identifier for this transport (e.g. "rabbitmq", "sqs", "in-memory").
     /// Used as the <c>messaging.system</c> tag on telemetry, following OpenTelemetry conventions.
+    /// This is descriptive only — transports are identified by the bus that wraps them, so the
+    /// value need not be unique across the application.
     /// </summary>
     string SystemName { get; }
 

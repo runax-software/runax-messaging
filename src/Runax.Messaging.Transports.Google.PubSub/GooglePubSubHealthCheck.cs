@@ -4,16 +4,17 @@ using Runax.Messaging.Abstractions;
 namespace Runax.Messaging.Transports.Google.PubSub;
 
 /// <summary>
-/// Health check that reports whether the Google Pub/Sub transport can reach the service.
+/// Health check that reports whether one bus's Google Pub/Sub transport can reach the service.
+/// Registered automatically per bus as <c>runax:{bus}</c>.
 /// </summary>
-internal sealed class GooglePubSubHealthCheck(IEnumerable<IMessagingTransport> transports) : IHealthCheck
+internal sealed class GooglePubSubHealthCheck(IMessagingTransport transport) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (transports.OfType<GooglePubSubTransport>().FirstOrDefault() is not { } pubSub)
-            return HealthCheckResult.Unhealthy("The registered messaging transport is not Google Pub/Sub.");
+        if (transport is not GooglePubSubTransport pubSub)
+            return HealthCheckResult.Unhealthy("The bus's messaging transport is not Google Pub/Sub.");
 
         try
         {

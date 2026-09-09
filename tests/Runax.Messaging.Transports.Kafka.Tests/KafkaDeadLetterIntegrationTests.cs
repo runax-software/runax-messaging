@@ -24,11 +24,11 @@ public sealed class KafkaDeadLetterIntegrationTests : IDisposable
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddKafka(kafka => kafka.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new KafkaConfig
         {
-            o.BootstrapServers = BootstrapServers;
-            o.ConsumerGroupId = $"runax-test-{Guid.NewGuid():N}";
-            o.DeadLetterTopicSuffix = DeadLetterSuffix;
+            BootstrapServers = BootstrapServers,
+            ConsumerGroupId = $"runax-test-{Guid.NewGuid():N}",
+            DeadLetterTopicSuffix = DeadLetterSuffix,
         })));
         _provider = services.BuildServiceProvider();
     }
@@ -38,7 +38,7 @@ public sealed class KafkaDeadLetterIntegrationTests : IDisposable
     [Fact]
     public async Task Dead_lettered_message_is_produced_to_the_dead_letter_topic()
     {
-        var transport = _provider.GetRequiredService<IMessagingTransport>();
+        var transport = _provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
         var envelope = $$"""{"probe":"{{Guid.NewGuid():N}}"}""";
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(40));

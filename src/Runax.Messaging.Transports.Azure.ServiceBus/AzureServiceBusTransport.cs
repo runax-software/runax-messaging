@@ -13,12 +13,12 @@ namespace Runax.Messaging.Transports.Azure.ServiceBus;
 /// </summary>
 internal sealed class AzureServiceBusTransport : IMessagingTransport, IDisposable
 {
-    private readonly AzureServiceBusOptions _options;
+    private readonly AzureServiceBusConfig _options;
     private readonly ILogger<AzureServiceBusTransport> _logger;
     private readonly ServiceBusClient _client;
     private readonly ConcurrentDictionary<string, ServiceBusSender> _senders = new();
 
-    public AzureServiceBusTransport(AzureServiceBusOptions options, ILogger<AzureServiceBusTransport> logger)
+    public AzureServiceBusTransport(AzureServiceBusConfig options, ILogger<AzureServiceBusTransport> logger)
     {
         _options = options;
         _logger = logger;

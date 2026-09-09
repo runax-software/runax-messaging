@@ -12,45 +12,51 @@ dotnet add package Runax.Messaging.Transports.Google.PubSub
 
 ## Register
 
+Attach the transport to a bus with its config object:
+
 ```csharp
 using Runax.Messaging;
 using Runax.Messaging.Transports.Google.PubSub;
 
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddGooglePubSub(pubsub =>
+    messaging.AddBus(bus =>
     {
-        pubsub.Configure(options =>
+        bus.AddTransport(new GooglePubSubConfig
         {
-            options.ProjectId = "my-gcp-project";
-            options.TopicSubscriptionMap["orders.placed"] = "orders-worker"; // topic -> subscription id
+            ProjectId = "my-gcp-project",
+            TopicSubscriptionMap =
+            {
+                ["orders.placed"] = "orders-worker",   // topic -> subscription id
+            },
         });
-        pubsub.AddConsumer<OrderPlacedConsumer>();
+        bus.AddConsumer<OrderPlacedConsumer>();
     });
 });
 ```
 
-`AddGooglePubSub` lives in the `Runax.Messaging.Transports.Google.PubSub` namespace, so add that `using`.
-Options are validated at startup; pass an `IConfiguration` section to bind them instead of a lambda:
-`AddGooglePubSub(builder.Configuration.GetSection("PubSub"))`.
+`GooglePubSubConfig` lives in the `Runax.Messaging.Transports.Google.PubSub` namespace, so add that
+`using`. The config is validated at startup (DataAnnotations, when the `AddBus` block completes);
+bind it from an `IConfiguration` section instead of setting properties:
+`bus.AddTransport<GooglePubSubConfig>(builder.Configuration.GetSection("PubSub"))`.
 
 Authentication uses [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials).
 For local development, point at the Pub/Sub emulator with the `PUBSUB_EMULATOR_HOST` environment variable.
 
-## Options
+## Config
 
-Configure these on `GooglePubSubOptions` via `pubsub.Configure(o => ...)`.
+Set these directly on `GooglePubSubConfig`.
 
-| Option | Meaning | Default | Required? |
+| Property | Meaning | Default | Required? |
 | --- | --- | --- | --- |
 | `ProjectId` | Google Cloud project id. | (none) | Yes |
 | `TopicSubscriptionMap` | Topic → subscription id used to consume it. Topics without an entry consume from a subscription named after the topic. | empty | No |
+| `RegisterHealthCheck` | Auto-register the `runax:{bus}` health check (inherited from `TransportConfig`). | `true` | No |
 
-Beyond these transport options, settings from the core package can be applied to this broker
-inside the `AddGooglePubSub(...)` block — `AddConsumer<T>()`, `WithRetry(...)`,
-`OnUnroutableMessage(...)`, `ConfigureSerialization(...)`, and `UseSerializer<T>()` — each
-overriding the global default for Pub/Sub only. See
-[Configuration & per-broker settings](../../docs/configuration.md).
+Beyond the transport config, settings from the core package apply to the bus that runs this
+transport — `AddConsumer<T>()`, `WithRetry(...)`, `OnUnroutableMessage(...)`,
+`ConfigureSerialization(...)`, and `UseSerializer<T>()` — all inside the same `AddBus` block.
+See [Configuration & per-bus settings](../../docs/configuration.md).
 
 ## Behavior
 
@@ -66,16 +72,14 @@ policy) ahead of time.
 
 ## Health check
 
-Register a reachability check on `IHealthChecksBuilder`:
-
-```csharp
-builder.Services.AddHealthChecks().AddGooglePubSubTransport();
-```
+A reachability check named `runax:{bus}` is registered automatically for each bus that runs
+this transport (`RegisterHealthCheck = false` on the config to opt out).
 
 ## Telemetry
 
 The transport reports `messaging.system = "google_pubsub"` on the spans and metrics emitted by the
-core package (activity source / meter `"Runax.Messaging"`).
+core package (activity source / meter `"Runax.Messaging"`); the `messaging.runax.bus` tag identifies
+the bus.
 
 ## License
 

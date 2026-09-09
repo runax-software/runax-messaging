@@ -4,16 +4,17 @@ using Runax.Messaging.Abstractions;
 namespace Runax.Messaging.Transports.RabbitMq;
 
 /// <summary>
-/// Health check that reports whether the RabbitMQ transport can reach the broker.
+/// Health check that reports whether one bus's RabbitMQ transport can reach the broker.
+/// Registered automatically per bus as <c>runax:{bus}</c>.
 /// </summary>
-internal sealed class RabbitMqHealthCheck(IEnumerable<IMessagingTransport> transports) : IHealthCheck
+internal sealed class RabbitMqHealthCheck(IMessagingTransport transport) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (transports.OfType<RabbitMqTransport>().FirstOrDefault() is not { } rabbitMq)
-            return HealthCheckResult.Unhealthy("The registered messaging transport is not RabbitMQ.");
+        if (transport is not RabbitMqTransport rabbitMq)
+            return HealthCheckResult.Unhealthy("The bus's messaging transport is not RabbitMQ.");
 
         try
         {

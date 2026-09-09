@@ -4,16 +4,17 @@ using Runax.Messaging.Abstractions;
 namespace Runax.Messaging.Transports.Azure.ServiceBus;
 
 /// <summary>
-/// Health check that reports whether the Service Bus transport can reach the namespace.
+/// Health check that reports whether one bus's Service Bus transport can reach the namespace.
+/// Registered automatically per bus as <c>runax:{bus}</c>.
 /// </summary>
-internal sealed class AzureServiceBusHealthCheck(IEnumerable<IMessagingTransport> transports) : IHealthCheck
+internal sealed class AzureServiceBusHealthCheck(IMessagingTransport transport) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (transports.OfType<AzureServiceBusTransport>().FirstOrDefault() is not { } serviceBus)
-            return HealthCheckResult.Unhealthy("The registered messaging transport is not Azure Service Bus.");
+        if (transport is not AzureServiceBusTransport serviceBus)
+            return HealthCheckResult.Unhealthy("The bus's messaging transport is not Azure Service Bus.");
 
         try
         {

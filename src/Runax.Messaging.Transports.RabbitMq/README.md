@@ -14,32 +14,35 @@ dotnet add package Runax.Messaging.Transports.RabbitMq
 
 ## Register
 
+Attach the transport to a bus with its config object:
+
 ```csharp
 using Runax.Messaging;
 using Runax.Messaging.Transports.RabbitMq;
 
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddRabbitMq(rabbitmq =>
+    messaging.AddBus(bus =>
     {
-        rabbitmq.Configure(options =>
+        bus.AddTransport(new RabbitMqConfig
         {
-            options.HostName = "localhost";
+            HostName = "localhost",
         });
-        rabbitmq.AddConsumer<OrderPlacedConsumer>();
+        bus.AddConsumer<OrderPlacedConsumer>();
     });
 });
 ```
 
-`AddRabbitMq` lives in the `Runax.Messaging.Transports.RabbitMq` namespace, so add that `using`.
-Options are validated at startup; pass an `IConfiguration` section to bind them instead of a
-lambda: `AddRabbitMq(builder.Configuration.GetSection("RabbitMq"))`.
+`RabbitMqConfig` lives in the `Runax.Messaging.Transports.RabbitMq` namespace, so add that `using`.
+The config is validated at startup (DataAnnotations, when the `AddBus` block completes); bind it
+from an `IConfiguration` section instead of setting properties:
+`bus.AddTransport<RabbitMqConfig>(builder.Configuration.GetSection("RabbitMq"))`.
 
-## Options
+## Config
 
-Configure these on `RabbitMqOptions` via `rabbitmq.Configure(o => ...)`.
+Set these directly on `RabbitMqConfig`.
 
-| Option | Meaning | Default | Required? |
+| Property | Meaning | Default | Required? |
 | --- | --- | --- | --- |
 | `HostName` | RabbitMQ host. Ignored when `Uri` is set. | `localhost` | No |
 | `Port` | RabbitMQ port. Ignored when `Uri` is set. | `5672` | No |
@@ -57,19 +60,21 @@ Configure these on `RabbitMqOptions` via `rabbitmq.Configure(o => ...)`.
 | `PublishChannelPoolSize` | Size of the publish channel pool; larger allows more concurrent publishes. | `5` | No |
 | `DeadLetterExchange` | Dead-letter exchange for broker-native dead-lettering. When set, consumer queues are declared with `x-dead-letter-exchange`. | `null` | No |
 | `DeadLetterExchangeType` | Type of the declared `DeadLetterExchange`. | `topic` | No |
+| `RegisterHealthCheck` | Auto-register the `runax:{bus}` health check (inherited from `TransportConfig`). | `true` | No |
 
-Beyond these transport options, settings from the core package can be applied to this broker
-inside the `AddRabbitMq(...)` block — `AddConsumer<T>()`, `WithRetry(...)`,
-`OnUnroutableMessage(...)`, `ConfigureSerialization(...)`, and `UseSerializer<T>()` — each
-overriding the global default for RabbitMQ only. See
-[Configuration & per-broker settings](../../docs/configuration.md).
+Beyond the transport config, settings from the core package apply to the bus that runs this
+transport — `AddConsumer<T>()`, `WithRetry(...)`, `OnUnroutableMessage(...)`,
+`ConfigureSerialization(...)`, and `UseSerializer<T>()` — all inside the same `AddBus` block.
+Two RabbitMQ clusters are simply two buses, each with its own `RabbitMqConfig`. See
+[Configuration & per-bus settings](../../docs/configuration.md).
 
 ## Behavior
 
 - **Publish** sends the serialized envelope to `ExchangeName` using the topic as
   the routing key, with persistent delivery. Publishes fan out across a pool of
   channels (`PublishChannelPoolSize`) and, when `PublisherConfirms` is on, wait for
-  broker confirmation. Automatic and topology recovery are enabled.
+  broker confirmation. Automatic and topology recovery are enabled. A `ConsumeOnly`
+  bus creates no publish channel pool.
 - **Batch publish** (`PublishBatchAsync`) publishes all envelopes on one channel and
   waits for a single confirm for the whole batch instead of one per message.
 - **Subscribe** declares an exclusive, auto-delete queue (with `BasicQos` prefetch),
@@ -80,20 +85,22 @@ overriding the global default for RabbitMQ only. See
     configured (otherwise dropped by the broker)
 
 To use RabbitMQ's native dead-lettering, set `DeadLetterExchange` and configure
-`WithRetry(o => o.Strategy = DeadLetterStrategy.BrokerNative)` in the core registration.
+`bus.WithRetry(o => o.Strategy = DeadLetterStrategy.BrokerNative)` on the bus.
 
 ## Health check
 
-Register a broker-reachability check on `IHealthChecksBuilder`:
+A broker-reachability check named `runax:{bus}` is registered automatically for each bus that
+runs this transport. Opt out per bus:
 
 ```csharp
-builder.Services.AddHealthChecks().AddRabbitMqTransport();
+bus.AddTransport(new RabbitMqConfig { HostName = "localhost", RegisterHealthCheck = false });
 ```
 
 ## Telemetry
 
 The transport reports `messaging.system = "rabbitmq"` on the spans and metrics
-emitted by the core package (activity source / meter `"Runax.Messaging"`).
+emitted by the core package (activity source / meter `"Runax.Messaging"`); the
+`messaging.runax.bus` tag identifies the bus.
 
 ## License
 

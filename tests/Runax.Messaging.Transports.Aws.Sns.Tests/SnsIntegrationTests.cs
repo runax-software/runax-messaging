@@ -52,7 +52,7 @@ public sealed class SnsIntegrationTests : IAsyncLifetime
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddSns(sns => sns.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport<SnsConfig>(o =>
         {
             o.Region = Region;
             o.ServiceUrl = ServiceUrl;
@@ -70,7 +70,7 @@ public sealed class SnsIntegrationTests : IAsyncLifetime
     public async Task Publish_fans_out_through_sns_to_the_subscribed_queue()
     {
         using var provider = BuildProvider();
-        var transport = provider.GetRequiredService<IMessagingTransport>();
+        var transport = provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
 
         var received = new TaskCompletionSource<string>();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -103,18 +103,19 @@ public sealed class SnsIntegrationTests : IAsyncLifetime
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddSns(sns => sns.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new SnsConfig
         {
-            o.Region = Region;
-            o.ServiceUrl = ServiceUrl;
-            o.AccessKey = "test";
-            o.SecretKey = "test";
+            Region = Region,
+            ServiceUrl = ServiceUrl,
+            AccessKey = "test",
+            SecretKey = "test",
         })));
-        services.AddHealthChecks().AddSnsTransport();
         await using var provider = services.BuildServiceProvider();
 
-        var report = await provider.GetRequiredService<HealthCheckService>().CheckHealthAsync();
+        var report = await provider.GetRequiredService<HealthCheckService>()
+            .CheckHealthAsync(r => r.Name == $"runax:{BusNames.Default}");
 
         report.Status.ShouldBe(HealthStatus.Healthy);
+        report.Entries[$"runax:{BusNames.Default}"].Status.ShouldBe(HealthStatus.Healthy);
     }
 }

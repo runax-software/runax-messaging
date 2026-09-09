@@ -34,14 +34,14 @@ public sealed class SqsTransportIntegrationTests : IAsyncLifetime, IDisposable
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddSqs(sqs => sqs.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new SqsConfig
         {
-            o.Region = Region;
-            o.ServiceUrl = ServiceUrl;
-            o.AccessKey = "test";
-            o.SecretKey = "test";
-            o.WaitTimeSeconds = 1;
-            o.MaxNumberOfMessages = 1;
+            Region = Region,
+            ServiceUrl = ServiceUrl,
+            AccessKey = "test",
+            SecretKey = "test",
+            WaitTimeSeconds = 1,
+            MaxNumberOfMessages = 1,
         })));
         _provider = services.BuildServiceProvider();
     }
@@ -61,9 +61,9 @@ public sealed class SqsTransportIntegrationTests : IAsyncLifetime, IDisposable
     public async Task Publisher_sends_the_serialized_message_to_the_queue()
     {
         var tag = Guid.NewGuid().ToString("N");
-        var publisher = _provider.GetRequiredService<IMessagePublisher>();
+        var bus = _provider.GetRequiredService<IBus>();
 
-        await publisher.PublishAsync(_topic, new Order(1, tag));
+        await bus.PublishAsync(_topic, new Order(1, tag));
 
         var response = await _reader.ReceiveMessageAsync(new ReceiveMessageRequest
         {
@@ -80,7 +80,7 @@ public sealed class SqsTransportIntegrationTests : IAsyncLifetime, IDisposable
     [Fact]
     public async Task Transport_round_trips_publish_to_subscribe()
     {
-        var transport = _provider.GetRequiredService<IMessagingTransport>();
+        var transport = _provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
         var envelope = $$"""{"probe":"{{Guid.NewGuid():N}}"}""";
 
         await transport.PublishAsync(_topic, envelope);

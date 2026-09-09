@@ -4,16 +4,17 @@ using Runax.Messaging.Abstractions;
 namespace Runax.Messaging.Transports.Redis;
 
 /// <summary>
-/// Health check that reports whether the Redis transport can reach the server.
+/// Health check that reports whether one bus's Redis transport can reach the server.
+/// Registered automatically per bus as <c>runax:{bus}</c>.
 /// </summary>
-internal sealed class RedisHealthCheck(IEnumerable<IMessagingTransport> transports) : IHealthCheck
+internal sealed class RedisHealthCheck(IMessagingTransport transport) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (transports.OfType<RedisTransport>().FirstOrDefault() is not { } redis)
-            return HealthCheckResult.Unhealthy("The registered messaging transport is not Redis.");
+        if (transport is not RedisTransport redis)
+            return HealthCheckResult.Unhealthy("The bus's messaging transport is not Redis.");
 
         try
         {

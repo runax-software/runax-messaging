@@ -18,7 +18,8 @@ internal sealed class RecordingTransport(
     IMessagingTransport inner,
     MessageRecorder recorder,
     IMessageSerializer serializer,
-    RetryOptions retryOptions) : IMessagingTransport
+    RetryOptions retryOptions,
+    string busName) : IMessagingTransport
 {
     public string SystemName => inner.SystemName;
 
@@ -80,6 +81,6 @@ internal sealed class RecordingTransport(
             };
         }
 
-        recorder.Record(new RecordedMessage(topic, context, disposition));
+        recorder.Record(new RecordedMessage(busName, topic, context, disposition));
     }
 }

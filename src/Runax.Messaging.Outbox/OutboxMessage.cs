@@ -11,6 +11,12 @@ public sealed record OutboxMessage
     public Guid Id { get; init; } = Guid.NewGuid();
 
     /// <summary>
+    /// Gets the name of the bus the message was published on (and will be dispatched through).
+    /// Lets one store implementation serve several buses.
+    /// </summary>
+    public required string Bus { get; init; }
+
+    /// <summary>
     /// Gets the topic the message will be published to.
     /// </summary>
     public required string Topic { get; init; }

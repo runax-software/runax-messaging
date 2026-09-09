@@ -3,58 +3,55 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Runax.Messaging.Abstractions;
-using Runax.Messaging.InMemory;
-using Runax.Messaging.Transports.Redis;
 
 namespace Runax.Messaging.Transports.Redis.Tests;
 
 public class RedisConfiguratorTests
 {
     [Fact]
-    public void Options_defaults_are_sensible()
+    public void Config_defaults_are_sensible()
     {
-        var options = new RedisOptions();
+        var config = new RedisConfig();
 
-        options.Configuration.ShouldBe(string.Empty);
-        options.ConsumerGroup.ShouldBe("runax");
-        options.ConsumerName.ShouldNotBeNullOrWhiteSpace();
-        options.ReadBatchSize.ShouldBe(10);
-        options.PollInterval.ShouldBe(TimeSpan.FromSeconds(1));
-        options.ClaimIdleTime.ShouldBe(TimeSpan.FromSeconds(30));
+        config.Configuration.ShouldBe(string.Empty);
+        config.ConsumerGroup.ShouldBe("runax");
+        config.ConsumerName.ShouldNotBeNullOrWhiteSpace();
+        config.ReadBatchSize.ShouldBe(10);
+        config.PollInterval.ShouldBe(TimeSpan.FromSeconds(1));
+        config.ClaimIdleTime.ShouldBe(TimeSpan.FromSeconds(30));
     }
 
     [Fact]
-    public void AddRedis_registers_the_transport_and_applies_options()
+    public void AddBus_registers_the_transport()
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddRedis(redis => redis.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new RedisConfig
         {
-            o.Configuration = "localhost:6379";
-            o.ConsumerGroup = "workers";
+            Configuration = "localhost:6379",
+            ConsumerGroup = "workers",
         })));
 
         using var provider = services.BuildServiceProvider();
 
-        var options = provider.GetRequiredService<RedisOptions>();
-        options.Configuration.ShouldBe("localhost:6379");
-        options.ConsumerGroup.ShouldBe("workers");
-        provider.GetRequiredService<IMessagingTransport>().ShouldBeOfType<RedisTransport>();
+        provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default)
+            .ShouldBeOfType<RedisTransport>();
     }
 
     [Fact]
-    public void AddRedis_returns_the_same_configurator()
+    public void AddBus_returns_the_same_configurator()
     {
         var services = new ServiceCollection();
         var configurator = new MessagingConfigurator(services);
 
-        var result = configurator.AddRedis(redis => redis.Configure(o => o.Configuration = "localhost:6379"));
+        var result = configurator.AddBus(bus =>
+            bus.AddTransport(new RedisConfig { Configuration = "localhost:6379" }));
 
         result.ShouldBeSameAs(configurator);
     }
 
     [Fact]
-    public void Binds_options_from_configuration()
+    public void Binds_config_from_configuration()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -67,13 +64,21 @@ public class RedisConfiguratorTests
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddRedis(configuration.GetSection("Redis")));
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+            bus.AddTransport<RedisConfig>(configuration.GetSection("Redis"))));
         using var provider = services.BuildServiceProvider();
 
-        var options = provider.GetRequiredService<RedisOptions>();
-        options.Configuration.ShouldBe("redis.internal:6380");
-        options.ConsumerGroup.ShouldBe("bound-group");
-        options.ReadBatchSize.ShouldBe(25);
+        // The bound Configuration satisfied [Required] validation and the transport resolves.
+        provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default)
+            .ShouldBeOfType<RedisTransport>();
+
+        // The section shape binds every property onto the config type (the same binding
+        // AddTransport<TConfig>(IConfiguration) performs).
+        var config = new RedisConfig();
+        configuration.GetSection("Redis").Bind(config);
+        config.Configuration.ShouldBe("redis.internal:6380");
+        config.ConsumerGroup.ShouldBe("bound-group");
+        config.ReadBatchSize.ShouldBe(25);
     }
 
     [Fact]
@@ -81,24 +86,37 @@ public class RedisConfiguratorTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddRedis(redis => redis.Configure(_ => { })));
+
+        var exception = Should.Throw<InvalidOperationException>(() =>
+            services.AddRunaxMessaging(m => m.AddBus(bus =>
+                bus.AddTransport(new RedisConfig()))));
+
+        exception.Message.ShouldContain("transport config is invalid");
+    }
+
+    [Fact]
+    public void Health_check_is_auto_registered_for_the_bus()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+            bus.AddTransport(new RedisConfig { Configuration = "localhost:6379" })));
         using var provider = services.BuildServiceProvider();
 
-        Should.Throw<OptionsValidationException>(() => provider.GetRequiredService<RedisOptions>());
+        var registrations = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations;
+        registrations.ShouldContain(r => r.Name == $"runax:{BusNames.Default}");
     }
 
     [Fact]
     public async Task Health_check_reports_unhealthy_when_the_transport_is_not_redis()
     {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddInMemory());
-        services.AddHealthChecks().AddRedisTransport();
-        await using var provider = services.BuildServiceProvider();
+        // The 2.0 auto-registered check is always wired to its own bus's transport, so the
+        // mismatch can only be produced by constructing the check against a foreign transport.
+        var check = new RedisHealthCheck(Substitute.For<IMessagingTransport>());
 
-        var report = await provider.GetRequiredService<HealthCheckService>().CheckHealthAsync();
+        var result = await check.CheckHealthAsync(new HealthCheckContext());
 
-        report.Status.ShouldBe(HealthStatus.Unhealthy);
-        report.Entries["redis"].Description.ShouldNotBeNull().ShouldContain("not Redis");
+        result.Status.ShouldBe(HealthStatus.Unhealthy);
+        result.Description.ShouldNotBeNull().ShouldContain("not Redis");
     }
 }

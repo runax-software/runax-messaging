@@ -16,11 +16,11 @@ internal sealed class RedisTransport : IMessagingTransport, IDisposable
     private static readonly RedisValue UndeliveredMessages = ">"; // XREADGROUP: not-yet-delivered
     private static readonly RedisValue ClaimStartId = "0-0";
 
-    private readonly RedisOptions _options;
+    private readonly RedisConfig _options;
     private readonly ILogger<RedisTransport> _logger;
     private readonly Lazy<Task<IConnectionMultiplexer>> _connection;
 
-    public RedisTransport(RedisOptions options, ILogger<RedisTransport> logger)
+    public RedisTransport(RedisConfig options, ILogger<RedisTransport> logger)
     {
         _options = options;
         _logger = logger;

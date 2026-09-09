@@ -15,27 +15,32 @@ dotnet add package Runax.Messaging.Transports.Kafka
 
 ## Register
 
+Attach the transport to a bus with its config object:
+
 ```csharp
 using Runax.Messaging;
 using Runax.Messaging.Transports.Kafka;
 
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddKafka(kafka =>
+    messaging.AddBus(bus =>
     {
-        kafka.Configure(o => o.BootstrapServers = "localhost:9092");
-        kafka.AddConsumer<OrderPlacedConsumer>();
+        bus.AddTransport(new KafkaConfig { BootstrapServers = "localhost:9092" });
+        bus.AddConsumer<OrderPlacedConsumer>();
     });
 });
 ```
 
-`AddKafka` lives in the `Runax.Messaging.Transports.Kafka` namespace, so add that `using`.
-Options are validated at startup; pass an `IConfiguration` section to bind them instead of a
-lambda: `AddKafka(builder.Configuration.GetSection("Kafka"))`.
+`KafkaConfig` lives in the `Runax.Messaging.Transports.Kafka` namespace, so add that `using`.
+The config is validated at startup (DataAnnotations, when the `AddBus` block completes); bind it
+from an `IConfiguration` section instead of setting properties:
+`bus.AddTransport<KafkaConfig>(builder.Configuration.GetSection("Kafka"))`.
 
-## Options
+## Config
 
-| Option | Default | Description |
+Set these directly on `KafkaConfig`.
+
+| Property | Default | Description |
 | --- | --- | --- |
 | `BootstrapServers` | *(required)* | Comma-separated `host:port` bootstrap servers (e.g. `localhost:9092`). |
 | `ConsumerGroupId` | `runax` | Consumer group id used when subscribing; offsets are committed per group. |
@@ -48,12 +53,19 @@ lambda: `AddKafka(builder.Configuration.GetSection("Kafka"))`.
 | `EnableIdempotence` | `true` | Idempotent production so retries do not create duplicates. |
 | `DeadLetterTopicSuffix` | `.dead-letter` | Suffix appended to a topic to form its dead-letter topic. |
 | `PollTimeout` | `1s` | How long a single consumer poll blocks before looping. |
+| `RegisterHealthCheck` | `true` | Auto-register the `runax:{bus}` health check (inherited from `TransportConfig`). |
+
+Beyond the transport config, settings from the core package apply to the bus that runs this
+transport — `AddConsumer<T>()`, `WithRetry(...)`, `OnUnroutableMessage(...)`,
+`ConfigureSerialization(...)`, and `UseSerializer<T>()` — all inside the same `AddBus` block.
+Kafka for events and Kafka for audit are simply two buses, each with its own `KafkaConfig`. See
+[Configuration & per-bus settings](../../docs/configuration.md).
 
 ## Behavior
 
 - **Publish** produces the serialized envelope as the value of a record on the topic
   (`ProduceAsync`), awaiting the broker delivery report. Idempotent production is on
-  by default.
+  by default. A `ConsumeOnly` bus creates no producer.
 - **Batch publish** (`PublishBatchAsync`) pipelines every produce and awaits all
   delivery reports for the batch together.
 - **Subscribe** joins `ConsumerGroupId`, subscribes to each topic, and polls on a
@@ -68,18 +80,15 @@ lambda: `AddKafka(builder.Configuration.GetSection("Kafka"))`.
 
 ## Health check
 
-Register a cluster-reachability check on `IHealthChecksBuilder`:
-
-```csharp
-builder.Services.AddHealthChecks().AddKafkaTransport();
-```
-
-The check requests cluster metadata through a Kafka admin client.
+A cluster-reachability check named `runax:{bus}` is registered automatically for each bus that
+runs this transport (`RegisterHealthCheck = false` on the config to opt out). The check requests
+cluster metadata through a Kafka admin client.
 
 ## Telemetry
 
 The transport reports `messaging.system = "kafka"` on the spans and metrics
-emitted by the core package (activity source / meter `"Runax.Messaging"`).
+emitted by the core package (activity source / meter `"Runax.Messaging"`); the
+`messaging.runax.bus` tag identifies the bus.
 
 ## License
 

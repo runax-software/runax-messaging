@@ -17,13 +17,13 @@ namespace Runax.Messaging.Transports.Aws.Sns;
 /// </summary>
 internal sealed class SnsTransport : IMessagingTransport, IDisposable
 {
-    private readonly SnsOptions _options;
+    private readonly SnsConfig _options;
     private readonly ILogger<SnsTransport> _logger;
     private readonly Lazy<AmazonSimpleNotificationServiceClient> _sns;
     private readonly Lazy<AmazonSQSClient> _sqs;
     private readonly ConcurrentDictionary<string, string> _topicArns = new();
 
-    public SnsTransport(SnsOptions options, ILogger<SnsTransport> logger)
+    public SnsTransport(SnsConfig options, ILogger<SnsTransport> logger)
     {
         _options = options;
         _logger = logger;

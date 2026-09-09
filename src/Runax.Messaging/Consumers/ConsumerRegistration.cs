@@ -11,9 +11,8 @@ internal sealed class ConsumerRegistration
     public required Type ConsumerType { get; init; }
 
     /// <summary>
-    /// Gets the system names of the transports this consumer subscribes to, or <c>null</c>
-    /// to subscribe on every registered transport. Names are matched against
-    /// <see cref="Abstractions.IMessagingTransport.SystemName"/>.
+    /// Gets the name of the bus this consumer subscribes on. The same consumer type may be
+    /// registered on several buses (one registration per bus).
     /// </summary>
-    public IReadOnlyList<string>? Transports { get; init; }
+    public required string Bus { get; init; }
 }

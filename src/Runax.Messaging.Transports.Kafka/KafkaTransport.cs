@@ -14,11 +14,11 @@ namespace Runax.Messaging.Transports.Kafka;
 /// </summary>
 internal sealed class KafkaTransport : IMessagingTransport, IDisposable
 {
-    private readonly KafkaOptions _options;
+    private readonly KafkaConfig _options;
     private readonly ILogger<KafkaTransport> _logger;
     private readonly Lazy<IProducer<Null, string>> _producer;
 
-    public KafkaTransport(KafkaOptions options, ILogger<KafkaTransport> logger)
+    public KafkaTransport(KafkaConfig options, ILogger<KafkaTransport> logger)
     {
         _options = options;
         _logger = logger;

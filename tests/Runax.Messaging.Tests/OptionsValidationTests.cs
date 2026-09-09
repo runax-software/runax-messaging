@@ -1,5 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Runax.Messaging.Abstractions;
+using Runax.Messaging.Consumers;
 using Runax.Messaging.InMemory;
 
 namespace Runax.Messaging.Tests;
@@ -7,14 +10,17 @@ namespace Runax.Messaging.Tests;
 public class OptionsValidationTests
 {
     [Fact]
-    public void Invalid_retry_options_throw_when_resolved()
+    public async Task Invalid_retry_options_throw_on_host_start()
     {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddInMemory().WithRetry(o => o.MaxAttempts = 0));
-        using var provider = services.BuildServiceProvider();
+        var builder = Host.CreateApplicationBuilder();
+        builder.Services.AddRunaxMessaging(m => m.AddBus(bus =>
+        {
+            bus.AddTransport(new InMemoryConfig());
+            bus.WithRetry(o => o.MaxAttempts = 0);
+        }));
+        using var host = builder.Build();
 
-        Should.Throw<OptionsValidationException>(() => provider.GetRequiredService<RetryOptions>());
+        await Should.ThrowAsync<OptionsValidationException>(host.StartAsync());
     }
 
     [Fact]
@@ -22,10 +28,15 @@ public class OptionsValidationTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddInMemory().WithRetry(o => o.MaxAttempts = 5));
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+        {
+            bus.AddTransport(new InMemoryConfig());
+            bus.WithRetry(o => o.MaxAttempts = 5);
+        }));
         using var provider = services.BuildServiceProvider();
 
-        provider.GetRequiredService<RetryOptions>().MaxAttempts.ShouldBe(5);
+        provider.GetRequiredService<IRetryOptionsProvider>()
+            .For(BusNames.Default, "any").MaxAttempts.ShouldBe(5);
     }
 
     [Fact]
@@ -33,7 +44,7 @@ public class OptionsValidationTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddInMemory());
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new InMemoryConfig())));
         using var provider = services.BuildServiceProvider();
 
         provider.GetRequiredService<RetryOptions>().MaxAttempts.ShouldBe(3);

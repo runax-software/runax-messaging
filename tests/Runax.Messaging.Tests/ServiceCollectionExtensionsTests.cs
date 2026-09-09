@@ -18,16 +18,16 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddRunaxMessaging_registers_the_publisher_and_transport()
+    public void AddRunaxMessaging_registers_the_bus_and_transport()
     {
         var services = new ServiceCollection();
         services.AddLogging();
 
-        services.AddRunaxMessaging(m => m.AddInMemory());
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new InMemoryConfig())));
 
         using var provider = services.BuildServiceProvider();
-        provider.GetService<IMessagePublisher>().ShouldNotBeNull();
-        provider.GetService<IMessagingTransport>().ShouldNotBeNull();
+        provider.GetService<IBus>().ShouldNotBeNull();
+        provider.GetKeyedService<IMessagingTransport>(BusNames.Default).ShouldNotBeNull();
     }
 
     [Fact]
@@ -36,7 +36,7 @@ public class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddLogging();
 
-        services.AddRunaxMessaging(m => m.AddInMemory());
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new InMemoryConfig())));
 
         services.ShouldNotContain(d => d.ServiceType == typeof(IHostedService));
     }
@@ -47,7 +47,11 @@ public class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddLogging();
 
-        services.AddRunaxMessaging(m => m.AddInMemory().AddConsumer<PingConsumer>());
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+        {
+            bus.AddTransport(new InMemoryConfig());
+            bus.AddConsumer<PingConsumer>();
+        }));
 
         services.ShouldContain(d => d.ServiceType == typeof(PingConsumer));
         services.ShouldContain(d => d.ServiceType == typeof(IHostedService));
@@ -59,7 +63,7 @@ public class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddLogging();
 
-        var result = services.AddRunaxMessaging(m => m.AddInMemory());
+        var result = services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new InMemoryConfig())));
 
         result.ShouldBeSameAs(services);
     }

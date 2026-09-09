@@ -12,45 +12,51 @@ dotnet add package Runax.Messaging.Transports.Azure.ServiceBus
 
 ## Register
 
+Attach the transport to a bus with its config object:
+
 ```csharp
 using Runax.Messaging;
 using Runax.Messaging.Transports.Azure.ServiceBus;
 
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddAzureServiceBus(serviceBus =>
+    messaging.AddBus(bus =>
     {
-        serviceBus.Configure(options =>
+        bus.AddTransport(new AzureServiceBusConfig
         {
-            options.ConnectionString = "<your Service Bus connection string>";
-            options.TopicSubscriptionMap["orders.placed"] = "orders-worker"; // topic -> subscription
+            ConnectionString = "<your Service Bus connection string>",
+            TopicSubscriptionMap =
+            {
+                ["orders.placed"] = "orders-worker",   // topic -> subscription
+            },
         });
-        serviceBus.AddConsumer<OrderPlacedConsumer>();
+        bus.AddConsumer<OrderPlacedConsumer>();
     });
 });
 ```
 
-`AddAzureServiceBus` lives in the `Runax.Messaging.Transports.Azure.ServiceBus` namespace, so add that
-`using`. Options are validated at startup; pass an `IConfiguration` section to bind them instead of a
-lambda: `AddAzureServiceBus(builder.Configuration.GetSection("ServiceBus"))`.
+`AzureServiceBusConfig` lives in the `Runax.Messaging.Transports.Azure.ServiceBus` namespace, so add
+that `using`. The config is validated at startup (DataAnnotations, when the `AddBus` block
+completes); bind it from an `IConfiguration` section instead of setting properties:
+`bus.AddTransport<AzureServiceBusConfig>(builder.Configuration.GetSection("ServiceBus"))`.
 
 Provision the topics and subscriptions ahead of time.
 
-## Options
+## Config
 
-Configure these on `AzureServiceBusOptions` via `serviceBus.Configure(o => ...)`.
+Set these directly on `AzureServiceBusConfig`.
 
-| Option | Meaning | Default | Required? |
+| Property | Meaning | Default | Required? |
 | --- | --- | --- | --- |
 | `ConnectionString` | Service Bus connection string. | (none) | Yes |
 | `TopicSubscriptionMap` | Topic → subscription used to consume it. | empty | To consume a topic |
 | `MaxConcurrentCalls` | Messages processed concurrently per subscription. | `1` | No |
+| `RegisterHealthCheck` | Auto-register the `runax:{bus}` health check (inherited from `TransportConfig`). | `true` | No |
 
-Beyond these transport options, settings from the core package can be applied to this broker
-inside the `AddAzureServiceBus(...)` block — `AddConsumer<T>()`, `WithRetry(...)`,
-`OnUnroutableMessage(...)`, `ConfigureSerialization(...)`, and `UseSerializer<T>()` — each
-overriding the global default for Service Bus only. See
-[Configuration & per-broker settings](../../docs/configuration.md).
+Beyond the transport config, settings from the core package apply to the bus that runs this
+transport — `AddConsumer<T>()`, `WithRetry(...)`, `OnUnroutableMessage(...)`,
+`ConfigureSerialization(...)`, and `UseSerializer<T>()` — all inside the same `AddBus` block.
+See [Configuration & per-bus settings](../../docs/configuration.md).
 
 ## Behavior
 
@@ -63,17 +69,15 @@ overriding the global default for Service Bus only. See
 
 ## Health check
 
-```csharp
-builder.Services.AddHealthChecks().AddAzureServiceBusTransport();
-```
-
-The check fetches namespace properties through the management endpoint, so it requires management
-access to the namespace.
+A check named `runax:{bus}` is registered automatically for each bus that runs this transport
+(`RegisterHealthCheck = false` on the config to opt out). The check fetches namespace properties
+through the management endpoint, so it requires management access to the namespace.
 
 ## Telemetry
 
 The transport reports `messaging.system = "servicebus"` on the spans and metrics emitted by the core
-package (activity source / meter `"Runax.Messaging"`).
+package (activity source / meter `"Runax.Messaging"`); the `messaging.runax.bus` tag identifies
+the bus.
 
 ## License
 

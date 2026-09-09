@@ -1,41 +1,38 @@
 using Microsoft.Extensions.DependencyInjection;
 using Runax.Messaging.Abstractions;
-using Runax.Messaging.Transports.Aws.Sqs;
 
 namespace Runax.Messaging.Transports.Aws.Sqs.Tests;
 
 public class SqsConfiguratorExtensionsTests
 {
     [Fact]
-    public void AddSqs_registers_the_transport_and_applies_options()
+    public void AddBus_with_an_sqs_config_registers_the_transport()
     {
         var services = new ServiceCollection();
         services.AddLogging();
 
-        services.AddRunaxMessaging(m => m.AddSqs(sqs => sqs.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new SqsConfig
         {
-            o.Region = "eu-west-1";
-            o.ServiceUrl = "http://localhost:4566";
-            o.AccessKey = "test";
-            o.SecretKey = "test";
+            Region = "eu-west-1",
+            ServiceUrl = "http://localhost:4566",
+            AccessKey = "test",
+            SecretKey = "test",
         })));
 
         using var provider = services.BuildServiceProvider();
 
-        var options = provider.GetRequiredService<SqsOptions>();
-        options.Region.ShouldBe("eu-west-1");
-        options.ServiceUrl.ShouldBe("http://localhost:4566");
-
-        provider.GetRequiredService<IMessagingTransport>().ShouldBeOfType<SqsTransport>();
+        provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default)
+            .ShouldBeOfType<SqsTransport>();
+        provider.GetRequiredService<IBus>().Name.ShouldBe(BusNames.Default);
     }
 
     [Fact]
-    public void AddSqs_returns_the_same_configurator()
+    public void AddBus_returns_the_same_configurator()
     {
         var services = new ServiceCollection();
         var configurator = new MessagingConfigurator(services);
 
-        var result = configurator.AddSqs(sqs => sqs.Configure(_ => { }));
+        var result = configurator.AddBus(bus => bus.AddTransport(new SqsConfig()));
 
         result.ShouldBeSameAs(configurator);
     }

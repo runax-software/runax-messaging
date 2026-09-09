@@ -31,13 +31,13 @@ public sealed class RedisIntegrationTests
         {
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddRunaxMessaging(m => m.AddRedis(redis => redis.Configure(o =>
+            services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new RedisConfig
             {
-                o.Configuration = configuration;
-                o.PollInterval = TimeSpan.FromMilliseconds(100);
+                Configuration = configuration,
+                PollInterval = TimeSpan.FromMilliseconds(100),
             })));
             await using var provider = services.BuildServiceProvider();
-            var transport = provider.GetRequiredService<IMessagingTransport>();
+            var transport = provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
 
             var received = new TaskCompletionSource<string>();
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
@@ -79,12 +79,15 @@ public sealed class RedisIntegrationTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddRedis(redis => redis.Configure(o => o.Configuration = configuration)));
-        services.AddHealthChecks().AddRedisTransport();
+        // The transport config auto-registers its health check as "runax:default".
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+            bus.AddTransport(new RedisConfig { Configuration = configuration })));
         await using var provider = services.BuildServiceProvider();
 
-        var report = await provider.GetRequiredService<HealthCheckService>().CheckHealthAsync();
+        var report = await provider.GetRequiredService<HealthCheckService>()
+            .CheckHealthAsync(r => r.Name == $"runax:{BusNames.Default}");
 
         report.Status.ShouldBe(HealthStatus.Healthy);
+        report.Entries[$"runax:{BusNames.Default}"].Status.ShouldBe(HealthStatus.Healthy);
     }
 }

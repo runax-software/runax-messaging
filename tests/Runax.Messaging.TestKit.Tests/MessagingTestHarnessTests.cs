@@ -131,7 +131,7 @@ public class MessagingTestHarnessTests
         AlwaysFailsConsumer.Attempts = 0;
         await using var harness = await MessagingTestHarness.Create()
             .AddConsumer<AlwaysFailsConsumer>()
-            .ConfigureMessaging(m => m.WithRetry(o =>
+            .ConfigureBus(bus => bus.WithRetry(o =>
             {
                 o.MaxAttempts = 2;
                 o.InitialDelay = TimeSpan.FromMilliseconds(1);
@@ -156,7 +156,7 @@ public class MessagingTestHarnessTests
         await using var harness = await MessagingTestHarness.Create()
             .AddService(store)
             .AddConsumer<TransientThenSucceedsConsumer>()
-            .ConfigureMessaging(m => m.WithRetry(o =>
+            .ConfigureBus(bus => bus.WithRetry(o =>
             {
                 o.MaxAttempts = 5;
                 o.InitialDelay = TimeSpan.FromMilliseconds(1);

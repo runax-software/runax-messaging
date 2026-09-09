@@ -55,17 +55,18 @@ observability (see [CHANGELOG.md](CHANGELOG.md)).
   the message carries an itinerary of activities, each recording a compensation
   to roll back on failure. The choreographed counterpart to sagas; revisit once
   sagas land.
-- [ ] **Multi-transport fan-out publish** *(tentative)* — a one-call helper
-  (`BroadcastAsync`) to send to several transports at once, layered over the  
-  per-transport `IMessagePublisherFactory.ForTransport(...)` that already ships.  
+- [ ] **Multi-bus fan-out publish** *(tentative)* — a one-call helper
+  (`BroadcastAsync`) to send on several buses at once, layered over the  
+  `IBusProvider` / keyed `IBus` resolution that already ships.  
   Design is deferred pending two decisions: (1) the same-contract case (one  
-  message mirrored to N transports) and the different-contract case (each  
-  transport gets its own topic + payload, e.g. `user.order` differing on Kafka vs  
-  SQS) want different shapes — likely a per-transport builder of independent  
-  `(transport, topic, message)` entries rather than a single-message overload;  
+  message mirrored to N buses) and the different-contract case (each  
+  bus gets its own topic + payload, e.g. `user.order` differing on the Kafka bus  
+  vs the SQS bus) want different shapes — likely a per-bus builder of independent  
+  `(bus, topic, message)` entries rather than a single-message overload;  
   (2) a partial-failure policy (fail-fast vs. best-effort with an aggregate),  
-  since the sends are independent and at-least-once. Until then, publish to each  
-  transport explicitly with `ForTransport(...)`.
+  since the sends are independent and at-least-once. Until then, inject each  
+  bus (`[FromKeyedServices("<name>")] IBus`, or `IBusProvider.GetBus(...)`) and  
+  publish on each explicitly.
 - [ ] **CloudEvents serializer** — optional serializer emitting/consuming the
   CloudEvents envelope for interop.
 

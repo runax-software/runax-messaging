@@ -16,11 +16,14 @@ public interface IOutboxStore
     Task AddAsync(OutboxMessage message, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Returns up to <paramref name="maxCount"/> pending (not yet dispatched) messages, oldest first.
+    /// Returns up to <paramref name="maxCount"/> pending (not yet dispatched) messages for the
+    /// given bus, oldest first.
     /// </summary>
+    /// <param name="bus">The bus whose pending messages to return.</param>
     /// <param name="maxCount">The maximum number of messages to return.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    Task<IReadOnlyList<OutboxMessage>> GetPendingAsync(int maxCount, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<OutboxMessage>> GetPendingAsync(
+        string bus, int maxCount, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Marks a message as dispatched so it is not published again.

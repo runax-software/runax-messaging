@@ -9,12 +9,19 @@ namespace Runax.Messaging.TestKit;
 /// </summary>
 public sealed class RecordedMessage
 {
-    internal RecordedMessage(string topic, MessageContext context, MessageDisposition disposition)
+    internal RecordedMessage(string bus, string topic, MessageContext context, MessageDisposition disposition)
     {
+        Bus = bus;
         Topic = topic;
         Context = context;
         Disposition = disposition;
     }
+
+    /// <summary>
+    /// Gets the name of the bus the message was observed on — <c>BusNames.Default</c> for the
+    /// harness's default bus, or the name passed to <c>WithBus(...)</c> for an extra bus.
+    /// </summary>
+    public string Bus { get; }
 
     /// <summary>
     /// Gets the topic the message was delivered on. Framework-managed dead-lettered messages reappear on the

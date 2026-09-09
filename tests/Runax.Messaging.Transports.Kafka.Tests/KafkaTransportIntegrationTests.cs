@@ -23,10 +23,10 @@ public sealed class KafkaTransportIntegrationTests : IDisposable
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddKafka(kafka => kafka.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new KafkaConfig
         {
-            o.BootstrapServers = BootstrapServers;
-            o.ConsumerGroupId = $"runax-test-{Guid.NewGuid():N}";
+            BootstrapServers = BootstrapServers,
+            ConsumerGroupId = $"runax-test-{Guid.NewGuid():N}",
         })));
         _provider = services.BuildServiceProvider();
     }
@@ -36,7 +36,7 @@ public sealed class KafkaTransportIntegrationTests : IDisposable
     [Fact]
     public async Task Publish_then_subscribe_round_trips_the_envelope()
     {
-        var transport = _provider.GetRequiredService<IMessagingTransport>();
+        var transport = _provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
         var envelope = $$"""{"probe":"{{Guid.NewGuid():N}}"}""";
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -72,7 +72,7 @@ public sealed class KafkaTransportIntegrationTests : IDisposable
     [Fact]
     public async Task Batch_publish_delivers_every_message()
     {
-        var transport = _provider.GetRequiredService<IMessagingTransport>();
+        var transport = _provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
         const int count = 20;
 
         await transport.PublishBatchAsync(_topic,

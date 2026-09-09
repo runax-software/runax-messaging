@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Runax.Messaging.InMemory;
-using Runax.Messaging.Transports.Kafka;
+using Microsoft.Extensions.Options;
+using Runax.Messaging.Abstractions;
 
 namespace Runax.Messaging.Transports.Kafka.Tests;
 
@@ -11,18 +11,31 @@ public class KafkaHealthCheckTests
         Environment.GetEnvironmentVariable("KAFKA_BOOTSTRAP") ?? "localhost:9092";
 
     [Fact]
-    public async Task Reports_unhealthy_when_the_transport_is_not_kafka()
+    public void Health_check_is_auto_registered_for_the_bus()
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddInMemory());
-        services.AddHealthChecks().AddKafkaTransport();
-        await using var provider = services.BuildServiceProvider();
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+            bus.AddTransport(new KafkaConfig { BootstrapServers = "localhost:9092" })));
+        using var provider = services.BuildServiceProvider();
 
-        var report = await provider.GetRequiredService<HealthCheckService>().CheckHealthAsync();
+        var registrations = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations;
+        registrations.ShouldContain(r => r.Name == $"runax:{BusNames.Default}");
+    }
 
-        report.Status.ShouldBe(HealthStatus.Unhealthy);
-        report.Entries["kafka"].Description.ShouldNotBeNull().ShouldContain("not Kafka");
+    [Fact]
+    public void Health_check_is_not_registered_when_disabled()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new KafkaConfig
+        {
+            BootstrapServers = "localhost:9092",
+            RegisterHealthCheck = false,
+        })));
+        using var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations.ShouldBeEmpty();
     }
 
     [Fact]
@@ -31,12 +44,14 @@ public class KafkaHealthCheckTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddKafka(kafka => kafka.Configure(o => o.BootstrapServers = BootstrapServers)));
-        services.AddHealthChecks().AddKafkaTransport();
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+            bus.AddTransport(new KafkaConfig { BootstrapServers = BootstrapServers })));
         await using var provider = services.BuildServiceProvider();
 
-        var report = await provider.GetRequiredService<HealthCheckService>().CheckHealthAsync();
+        var report = await provider.GetRequiredService<HealthCheckService>()
+            .CheckHealthAsync(r => r.Name == $"runax:{BusNames.Default}");
 
         report.Status.ShouldBe(HealthStatus.Healthy);
+        report.Entries[$"runax:{BusNames.Default}"].Status.ShouldBe(HealthStatus.Healthy);
     }
 }
