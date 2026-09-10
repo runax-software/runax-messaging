@@ -67,6 +67,21 @@ observability (see [CHANGELOG.md](CHANGELOG.md)).
   since the sends are independent and at-least-once. Until then, inject each  
   bus (`[FromKeyedServices("<name>")] IBus`, or `IBusProvider.GetBus(...)`) and  
   publish on each explicitly.
+- [ ] **JSON Schema contracts** (`Runax.Messaging.Contracts.JsonSchema`) — a
+  language-neutral schema per contract, keyed by the `(contract_name,
+  contract_version)` pair that already travels in the `__runax` envelope (no
+  wire changes). Two independently adoptable pieces: (1) a **CI compatibility
+  check** — export schemas from `[MessageContract]` types (or accept
+  hand-authored schemas as the source of truth) and diff them across versions,
+  turning the additive-vs-breaking evolution rules in
+  [docs/contracts.md](docs/contracts.md) into a machine-checked gate alongside
+  the `IMessageContractCatalog` rollout check; (2) **opt-in payload
+  validation** on publish and/or consume via the pluggable `ISerializer` seam
+  — off by default, since per-message validation is not free. Also formalizes
+  the duplicated-types / cross-language story (today wire compatibility of
+  copies is by convention only). Schema-registry integrations (Confluent SR,
+  AWS Glue) stay tentative and out of the core feature: they are
+  broker-ecosystem-specific, while this must remain transport-agnostic.
 - [ ] **CloudEvents serializer** — optional serializer emitting/consuming the
   CloudEvents envelope for interop.
 
