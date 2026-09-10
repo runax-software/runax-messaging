@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All packages in the repository are versioned together.
 
-## [2.0.0] - Unreleased
+## [2.0.0] - 2026-09-10
 
 The bus release. Configuration is restructured around **buses** — a bus is a named,
 self-contained messaging context wrapping **exactly one transport**; talking to several brokers
@@ -36,6 +36,13 @@ headers, retry semantics) is unchanged — 1.x and 2.0 services interoperate on 
 - **Multi-bus TestKit** — `MessagingTestHarnessBuilder.WithBus(...)`,
   `harness.PublishOnBusAsync(...)`, and `RecordedMessage.Bus`.
 - **Telemetry** — a `messaging.runax.bus` tag on every span and metric.
+- **Documentation** — a full guide set under [docs/](docs/README.md):
+  [buses](docs/buses.md), [publishing](docs/publishing.md),
+  [consuming & reliability](docs/consuming.md),
+  [message contracts](docs/contracts.md) (including the first documentation of
+  `IMessageContractCatalog`), [transactional outbox](docs/outbox.md),
+  [testing](docs/testing.md), and [observability](docs/observability.md), plus
+  the [migration guide](docs/migrating-to-2.0.md).
 
 ### Changed (breaking)
 
@@ -95,4 +102,5 @@ First stable release.
 - **`Runax.Messaging.TestKit`** — a broker-free `MessagingTestHarness` to publish
   messages and assert what consumers handled, retried, or dead-lettered.
 
+[2.0.0]: https://github.com/runax-software/runax-messaging/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/runax-software/runax-messaging/releases/tag/v1.0.0
