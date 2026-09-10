@@ -241,6 +241,19 @@ your database in the same transaction and dispatched by a background service.
 
 ## Documentation
 
+Start at the [documentation index](docs/README.md).
+
+**Concepts & guides**
+
+- [Buses — the core model](docs/buses.md): one transport per bus, modes, multi-bus patterns, resolution rules
+- [Publishing](docs/publishing.md): `IBus`, headers, batching, fan-out, what a publish actually does
+- [Consuming & reliability](docs/consuming.md): consumers, contract versioning, retries, dead-lettering, unroutable messages
+- [Transactional outbox](docs/outbox.md): the pattern, wiring, writing a real store, delivery guarantees
+- [Testing](docs/testing.md): the TestKit harness, multi-bus tests, integration tests
+- [Observability](docs/observability.md): tracing, metrics, health checks, logging
+
+**Reference**
+
 - [Migrating from 1.x to 2.0](docs/migrating-to-2.0.md)
 - [Configuration & per-bus settings](docs/configuration.md)
 - [Architecture & message flow](docs/architecture.md)
