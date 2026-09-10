@@ -125,8 +125,9 @@ fails (both below).
 ## Contract versioning
 
 Versioning is opt-in via `[MessageContract(version)]` on the message type (see the
-[architecture page](architecture.md#contract-versioning) for the envelope format). On the
-consume side it drives step 2 of the pipeline, with one matching rule:
+[architecture page](architecture.md#contract-versioning) for the envelope format, and
+[Message contracts](contracts.md) for designing, evolving, and safely rolling out
+contracts). On the consume side it drives step 2 of the pipeline, with one matching rule:
 
 > A consumer whose message type carries `[MessageContract(v)]` accepts **only** messages whose
 > envelope carries version `v`. A consumer whose message type has no attribute is

@@ -15,6 +15,7 @@ New to the library? Read the [root README](../README.md) quick start first, then
 | [Buses](buses.md) | The core model: declaring buses, the one-transport invariant, bus modes (`PublishOnly` / `ConsumeOnly`), resolving buses from DI, multi-bus patterns, lifecycle |
 | [Publishing](publishing.md) | `IBus` — the single publishing abstraction: topics, headers, batching, fan-out across buses, the publish pipeline and its telemetry |
 | [Consuming & reliability](consuming.md) | Writing consumers, contract versioning, the dispatch pipeline, retries and backoff, poison messages, dead-lettering (framework-managed and broker-native), unroutable messages |
+| [Message contracts](contracts.md) | Designing and sharing contract types, `[MessageContract]` versioning, evolution rules, safe rollout with `IMessageContractCatalog` |
 | [Transactional outbox](outbox.md) | The dual-write problem, wiring `AddOutbox` + `AddOutboxStore`, how the publish sink and dispatcher work, writing a database-backed store, delivery guarantees |
 | [Testing](testing.md) | The broker-free TestKit harness, asserting retries and dead-letters, multi-bus tests, configuration tests, docker-based integration tests |
 | [Observability](observability.md) | OpenTelemetry-ready tracing and metrics, the `messaging.runax.bus` tag, per-bus health checks, significant log events |

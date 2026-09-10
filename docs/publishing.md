@@ -291,7 +291,8 @@ database transaction — the two envelope rows then commit atomically.
 ### Contract-versioned messages
 
 Stamp a version on the message type with `[MessageContract]`; it travels in the envelope
-and consumers route on it (see [Consuming](consuming.md)):
+and consumers route on it (see [Message contracts](contracts.md) for design and rollout
+guidance, and [Consuming](consuming.md) for the matching rules):
 
 ```csharp
 [MessageContract(2)]

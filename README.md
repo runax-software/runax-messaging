@@ -248,6 +248,7 @@ Start at the [documentation index](docs/README.md).
 - [Buses — the core model](docs/buses.md): one transport per bus, modes, multi-bus patterns, resolution rules
 - [Publishing](docs/publishing.md): `IBus`, headers, batching, fan-out, what a publish actually does
 - [Consuming & reliability](docs/consuming.md): consumers, contract versioning, retries, dead-lettering, unroutable messages
+- [Message contracts](docs/contracts.md): designing and sharing contract types, versioning, evolution, safe rollout
 - [Transactional outbox](docs/outbox.md): the pattern, wiring, writing a real store, delivery guarantees
 - [Testing](docs/testing.md): the TestKit harness, multi-bus tests, integration tests
 - [Observability](docs/observability.md): tracing, metrics, health checks, logging
