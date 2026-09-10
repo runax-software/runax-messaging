@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Runax.Messaging.Abstractions;
 using Runax.Messaging.InMemory;
 using Runax.Messaging.Serialization;
 
@@ -14,12 +15,14 @@ public class SerializationConfigurationTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m
-            .AddInMemory()
-            .ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase));
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+        {
+            bus.AddTransport(new InMemoryConfig());
+            bus.ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
+        }));
         using var provider = services.BuildServiceProvider();
 
-        var serializer = provider.GetRequiredService<IMessageSerializer>();
+        var serializer = provider.GetRequiredService<IMessageSerializerProvider>().For(BusNames.Default, "things");
 
         var envelope = serializer.Serialize(new Thing(42), headers: null);
         var context = serializer.Deserialize(envelope, "things");
@@ -35,7 +38,7 @@ public class SerializationConfigurationTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddInMemory());
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new InMemoryConfig())));
         using var provider = services.BuildServiceProvider();
 
         var serializer = provider.GetRequiredService<IMessageSerializer>();

@@ -32,15 +32,17 @@ public class InMemoryEndToEndTests
 
         var builder = Host.CreateApplicationBuilder();
         builder.Services.AddSingleton(capture);
-        builder.Services.AddRunaxMessaging(m => m
-            .AddInMemory()
-            .AddConsumer<OrderPlacedConsumer>());
+        builder.Services.AddRunaxMessaging(m => m.AddBus(bus =>
+        {
+            bus.AddTransport(new InMemoryConfig());
+            bus.AddConsumer<OrderPlacedConsumer>();
+        }));
 
         using var host = builder.Build();
         await host.StartAsync();
 
-        var publisher = host.Services.GetRequiredService<IMessagePublisher>();
-        await publisher.PublishAsync("orders.placed", new OrderPlaced(42));
+        var bus = host.Services.GetRequiredService<IBus>();
+        await bus.PublishAsync("orders.placed", new OrderPlaced(42));
 
         var received = await capture.Received.Task.WaitAsync(TimeSpan.FromSeconds(5));
         received.Id.ShouldBe(42);

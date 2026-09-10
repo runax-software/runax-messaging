@@ -64,17 +64,20 @@ public class BrokerNativeDeadLetterTests
     {
         var transport = new CapturingTransport();
         var builder = Host.CreateApplicationBuilder();
-        builder.Services.AddSingleton<IMessagingTransport>(transport);
         builder.Services.AddRunaxMessaging(m =>
         {
-            m.AddConsumer<TConsumer>()
-                .WithRetry(o =>
+            m.AddBus(bus =>
+            {
+                bus.AddTransport(new FakeTransportConfig(transport));
+                bus.AddConsumer<TConsumer>();
+                bus.WithRetry(o =>
                 {
                     o.MaxAttempts = 2;
                     o.InitialDelay = TimeSpan.FromMilliseconds(1);
                     o.MaxDelay = TimeSpan.FromMilliseconds(2);
                     o.Strategy = strategy;
                 });
+            });
         });
 
         var host = builder.Build();
@@ -85,8 +88,8 @@ public class BrokerNativeDeadLetterTests
 
     private static async Task<string> PublishAndCaptureEnvelopeAsync(IHost host, CapturingTransport transport)
     {
-        var publisher = host.Services.GetRequiredService<IMessagePublisher>();
-        await publisher.PublishAsync("work", new Work(1));
+        var bus = host.Services.GetRequiredService<IBus>();
+        await bus.PublishAsync("work", new Work(1));
 
         var envelope = transport.Published.Single(p => p.Topic == "work").Envelope;
         transport.Published.Clear();

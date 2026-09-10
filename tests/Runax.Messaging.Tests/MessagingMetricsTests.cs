@@ -53,11 +53,15 @@ public class MessagingMetricsTests
         var handled = new TaskCompletionSource();
         var builder = Host.CreateApplicationBuilder();
         builder.Services.AddSingleton(handled);
-        builder.Services.AddRunaxMessaging(m => m.AddInMemory().AddConsumer<SuccessConsumer>());
+        builder.Services.AddRunaxMessaging(m => m.AddBus(bus =>
+        {
+            bus.AddTransport(new InMemoryConfig());
+            bus.AddConsumer<SuccessConsumer>();
+        }));
         using var host = builder.Build();
         await host.StartAsync();
 
-        await host.Services.GetRequiredService<IMessagePublisher>().PublishAsync(SuccessTopic, new Ping(1));
+        await host.Services.GetRequiredService<IBus>().PublishAsync(SuccessTopic, new Ping(1));
         await handled.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await consumed.WaitForMeasurementsAsync(1).WaitAsync(TimeSpan.FromSeconds(5));
         await host.StopAsync();
@@ -80,18 +84,21 @@ public class MessagingMetricsTests
         builder.Services.AddSingleton(failed);
         builder.Services.AddRunaxMessaging(m =>
         {
-            m.AddInMemory()
-                .AddConsumer<FailingConsumer>()
-                .WithRetry(o =>
+            m.AddBus(bus =>
+            {
+                bus.AddTransport(new InMemoryConfig());
+                bus.AddConsumer<FailingConsumer>();
+                bus.WithRetry(o =>
                 {
                     o.MaxAttempts = 1;
                     o.InitialDelay = TimeSpan.FromMilliseconds(1);
                 });
+            });
         });
         using var host = builder.Build();
         await host.StartAsync();
 
-        await host.Services.GetRequiredService<IMessagePublisher>().PublishAsync(FailureTopic, new Ping(2));
+        await host.Services.GetRequiredService<IBus>().PublishAsync(FailureTopic, new Ping(2));
         await failed.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await failedCounter.WaitForMeasurementsAsync(1).WaitAsync(TimeSpan.FromSeconds(5));
         await host.StopAsync();

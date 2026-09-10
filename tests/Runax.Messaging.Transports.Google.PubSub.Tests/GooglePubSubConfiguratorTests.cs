@@ -3,48 +3,48 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Runax.Messaging.Abstractions;
-using Runax.Messaging.InMemory;
-using Runax.Messaging.Transports.Google.PubSub;
 
 namespace Runax.Messaging.Transports.Google.PubSub.Tests;
 
 public class GooglePubSubConfiguratorTests
 {
     [Fact]
-    public void Options_defaults_are_sensible()
+    public void Config_defaults_are_sensible()
     {
-        var options = new GooglePubSubOptions();
+        var config = new GooglePubSubConfig();
 
-        options.ProjectId.ShouldBe(string.Empty);
-        options.TopicSubscriptionMap.ShouldBeEmpty();
+        config.ProjectId.ShouldBe(string.Empty);
+        config.TopicSubscriptionMap.ShouldBeEmpty();
     }
 
     [Fact]
-    public void AddGooglePubSub_registers_the_transport_and_applies_options()
+    public void AddBus_registers_the_transport()
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddGooglePubSub(pubsub => pubsub.Configure(o => o.ProjectId = "my-project")));
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+            bus.AddTransport(new GooglePubSubConfig { ProjectId = "my-project" })));
 
         using var provider = services.BuildServiceProvider();
 
-        provider.GetRequiredService<GooglePubSubOptions>().ProjectId.ShouldBe("my-project");
-        provider.GetRequiredService<IMessagingTransport>().ShouldBeOfType<GooglePubSubTransport>();
+        provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default)
+            .ShouldBeOfType<GooglePubSubTransport>();
     }
 
     [Fact]
-    public void AddGooglePubSub_returns_the_same_configurator()
+    public void AddBus_returns_the_same_configurator()
     {
         var services = new ServiceCollection();
         var configurator = new MessagingConfigurator(services);
 
-        var result = configurator.AddGooglePubSub(pubsub => pubsub.Configure(o => o.ProjectId = "p"));
+        var result = configurator.AddBus(bus =>
+            bus.AddTransport(new GooglePubSubConfig { ProjectId = "p" }));
 
         result.ShouldBeSameAs(configurator);
     }
 
     [Fact]
-    public void Binds_options_from_configuration()
+    public void Binds_config_from_configuration()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -56,12 +56,20 @@ public class GooglePubSubConfiguratorTests
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddGooglePubSub(configuration.GetSection("PubSub")));
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+            bus.AddTransport<GooglePubSubConfig>(configuration.GetSection("PubSub"))));
         using var provider = services.BuildServiceProvider();
 
-        var options = provider.GetRequiredService<GooglePubSubOptions>();
-        options.ProjectId.ShouldBe("bound-project");
-        options.TopicSubscriptionMap["orders"].ShouldBe("orders-sub");
+        // The bound ProjectId satisfied [Required] validation and the transport resolves.
+        provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default)
+            .ShouldBeOfType<GooglePubSubTransport>();
+
+        // The section shape binds every property onto the config type (the same binding
+        // AddTransport<TConfig>(IConfiguration) performs).
+        var config = new GooglePubSubConfig();
+        configuration.GetSection("PubSub").Bind(config);
+        config.ProjectId.ShouldBe("bound-project");
+        config.TopicSubscriptionMap["orders"].ShouldBe("orders-sub");
     }
 
     [Fact]
@@ -69,24 +77,37 @@ public class GooglePubSubConfiguratorTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddGooglePubSub(pubsub => pubsub.Configure(_ => { })));
+
+        var exception = Should.Throw<InvalidOperationException>(() =>
+            services.AddRunaxMessaging(m => m.AddBus(bus =>
+                bus.AddTransport(new GooglePubSubConfig()))));
+
+        exception.Message.ShouldContain("transport config is invalid");
+    }
+
+    [Fact]
+    public void Health_check_is_auto_registered_for_the_bus()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+            bus.AddTransport(new GooglePubSubConfig { ProjectId = "my-project" })));
         using var provider = services.BuildServiceProvider();
 
-        Should.Throw<OptionsValidationException>(() => provider.GetRequiredService<GooglePubSubOptions>());
+        var registrations = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations;
+        registrations.ShouldContain(r => r.Name == $"runax:{BusNames.Default}");
     }
 
     [Fact]
     public async Task Health_check_reports_unhealthy_when_the_transport_is_not_pubsub()
     {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddInMemory());
-        services.AddHealthChecks().AddGooglePubSubTransport();
-        await using var provider = services.BuildServiceProvider();
+        // The 2.0 auto-registered check is always wired to its own bus's transport, so the
+        // mismatch can only be produced by constructing the check against a foreign transport.
+        var check = new GooglePubSubHealthCheck(Substitute.For<IMessagingTransport>());
 
-        var report = await provider.GetRequiredService<HealthCheckService>().CheckHealthAsync();
+        var result = await check.CheckHealthAsync(new HealthCheckContext());
 
-        report.Status.ShouldBe(HealthStatus.Unhealthy);
-        report.Entries["google-pubsub"].Description.ShouldNotBeNull().ShouldContain("not Google Pub/Sub");
+        result.Status.ShouldBe(HealthStatus.Unhealthy);
+        result.Description.ShouldNotBeNull().ShouldContain("not Google Pub/Sub");
     }
 }

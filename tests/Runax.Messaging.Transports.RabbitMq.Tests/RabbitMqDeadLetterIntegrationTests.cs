@@ -42,11 +42,11 @@ public sealed class RabbitMqDeadLetterIntegrationTests : IAsyncLifetime, IDispos
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddRabbitMq(rabbit => rabbit.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new RabbitMqConfig
         {
-            o.HostName = HostName;
-            o.ExchangeName = _exchange;
-            o.DeadLetterExchange = _deadLetterExchange;
+            HostName = HostName,
+            ExchangeName = _exchange,
+            DeadLetterExchange = _deadLetterExchange,
         })));
         _provider = services.BuildServiceProvider();
     }
@@ -63,7 +63,7 @@ public sealed class RabbitMqDeadLetterIntegrationTests : IAsyncLifetime, IDispos
     [Fact]
     public async Task Rejected_message_is_routed_to_the_dead_letter_exchange()
     {
-        var transport = _provider.GetRequiredService<IMessagingTransport>();
+        var transport = _provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
 
         var subscription = transport.SubscribeAsync(

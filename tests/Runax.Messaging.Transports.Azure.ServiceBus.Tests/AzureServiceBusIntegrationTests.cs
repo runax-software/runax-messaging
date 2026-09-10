@@ -24,13 +24,13 @@ public sealed class AzureServiceBusIntegrationTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddAzureServiceBus(serviceBus => serviceBus.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new AzureServiceBusConfig
         {
-            o.ConnectionString = ConnectionString;
-            o.TopicSubscriptionMap[Topic] = Subscription;
+            ConnectionString = ConnectionString,
+            TopicSubscriptionMap = { [Topic] = Subscription },
         })));
         await using var provider = services.BuildServiceProvider();
-        var transport = provider.GetRequiredService<IMessagingTransport>();
+        var transport = provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
 
         var envelope = $$"""{"probe":"{{Guid.NewGuid():N}}"}""";
         var received = new TaskCompletionSource<string>();

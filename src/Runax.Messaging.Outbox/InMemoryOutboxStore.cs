@@ -19,11 +19,11 @@ public sealed class InMemoryOutboxStore : IOutboxStore
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<OutboxMessage>> GetPendingAsync(int maxCount,
+    public Task<IReadOnlyList<OutboxMessage>> GetPendingAsync(string bus, int maxCount,
         CancellationToken cancellationToken = default)
     {
         IReadOnlyList<OutboxMessage> pending = _messages.Values
-            .Where(m => m.DispatchedAt is null)
+            .Where(m => m.DispatchedAt is null && m.Bus == bus)
             .OrderBy(m => m.CreatedAt)
             .Take(maxCount)
             .ToList();

@@ -13,39 +13,44 @@ dotnet add package Runax.Messaging.Transports.Aws.Sns
 
 ## Register
 
+Attach the transport to a bus with its config object:
+
 ```csharp
 using Runax.Messaging;
 using Runax.Messaging.Transports.Aws.Sns;
 
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddSns(sns =>
+    messaging.AddBus(bus =>
     {
-        sns.Configure(options =>
+        bus.AddTransport(new SnsConfig
         {
-            options.Region = "us-east-1";
+            Region = "us-east-1",
             // consume 'orders.placed' from an SQS queue subscribed to its SNS topic
-            options.TopicQueueUrlMap["orders.placed"] =
-                "https://sqs.us-east-1.amazonaws.com/123456789012/orders-worker";
+            TopicQueueUrlMap =
+            {
+                ["orders.placed"] = "https://sqs.us-east-1.amazonaws.com/123456789012/orders-worker",
+            },
         });
-        sns.AddConsumer<OrderPlacedConsumer>();
+        bus.AddConsumer<OrderPlacedConsumer>();
     });
 });
 ```
 
-`AddSns` lives in the `Runax.Messaging.Transports.Aws.Sns` namespace, so add that `using`.
-Options are validated at startup; pass an `IConfiguration` section to bind them instead of a lambda:
-`AddSns(builder.Configuration.GetSection("Sns"))`.
+`SnsConfig` lives in the `Runax.Messaging.Transports.Aws.Sns` namespace, so add that `using`.
+The config is validated at startup (DataAnnotations, when the `AddBus` block completes); bind it
+from an `IConfiguration` section instead of setting properties:
+`bus.AddTransport<SnsConfig>(builder.Configuration.GetSection("Sns"))`.
 
 You provision the SNS topics, SQS queues, and the SNS→SQS subscriptions (ideally with **raw message
 delivery** enabled). Authentication uses the default AWS credential chain unless `AccessKey`/`SecretKey`
 are set.
 
-## Options
+## Config
 
-Configure these on `SnsOptions` via `sns.Configure(o => ...)`.
+Set these directly on `SnsConfig`.
 
-| Option | Meaning | Default | Required? |
+| Property | Meaning | Default | Required? |
 | --- | --- | --- | --- |
 | `Region` | AWS region. | `us-east-1` | No |
 | `AccessKey` / `SecretKey` | Static credentials; falls back to the default credential chain. | `null` | No |
@@ -55,11 +60,12 @@ Configure these on `SnsOptions` via `sns.Configure(o => ...)`.
 | `MaxNumberOfMessages` | Messages received per SQS poll (1–10). | `10` | No |
 | `WaitTimeSeconds` | SQS long-polling wait time (0–20). | `20` | No |
 | `VisibilityTimeoutSeconds` | SQS visibility timeout per receive (0–43200). | `30` | No |
+| `RegisterHealthCheck` | Auto-register the `runax:{bus}` health check (inherited from `TransportConfig`). | `true` | No |
 
-Beyond these transport options, settings from the core package can be applied to this broker
-inside the `AddSns(...)` block — `AddConsumer<T>()`, `WithRetry(...)`, `OnUnroutableMessage(...)`,
-`ConfigureSerialization(...)`, and `UseSerializer<T>()` — each overriding the global default for
-SNS only. See [Configuration & per-broker settings](../../docs/configuration.md).
+Beyond the transport config, settings from the core package apply to the bus that runs this
+transport — `AddConsumer<T>()`, `WithRetry(...)`, `OnUnroutableMessage(...)`,
+`ConfigureSerialization(...)`, and `UseSerializer<T>()` — all inside the same `AddBus` block.
+See [Configuration & per-bus settings](../../docs/configuration.md).
 
 ## Behavior
 
@@ -70,19 +76,19 @@ SNS only. See [Configuration & per-broker settings](../../docs/configuration.md)
   - `Requeue` / `DeadLetter` → leave the message for redelivery / the queue's redrive policy
 
 For heavy fan-in consumption, consume the SQS queue directly with
-[`Runax.Messaging.Transports.Aws.Sqs`](../Runax.Messaging.Transports.Aws.Sqs/README.md), which adds
-concurrency and visibility-extension controls.
+[`Runax.Messaging.Transports.Aws.Sqs`](../Runax.Messaging.Transports.Aws.Sqs/README.md) on its own
+bus, which adds concurrency and visibility-extension controls.
 
 ## Health check
 
-```csharp
-builder.Services.AddHealthChecks().AddSnsTransport();
-```
+A reachability check named `runax:{bus}` is registered automatically for each bus that runs
+this transport (`RegisterHealthCheck = false` on the config to opt out).
 
 ## Telemetry
 
 The transport reports `messaging.system = "aws_sns"` on the spans and metrics emitted by the core
-package (activity source / meter `"Runax.Messaging"`).
+package (activity source / meter `"Runax.Messaging"`); the `messaging.runax.bus` tag identifies
+the bus.
 
 ## License
 

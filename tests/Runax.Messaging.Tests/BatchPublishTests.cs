@@ -43,12 +43,16 @@ public class BatchPublishTests
         var collector = new Collector(expected: 5);
         var builder = Host.CreateApplicationBuilder();
         builder.Services.AddSingleton(collector);
-        builder.Services.AddRunaxMessaging(m => m.AddInMemory().AddConsumer<ItemConsumer>());
+        builder.Services.AddRunaxMessaging(m => m.AddBus(bus =>
+        {
+            bus.AddTransport(new InMemoryConfig());
+            bus.AddConsumer<ItemConsumer>();
+        }));
         using var host = builder.Build();
         await host.StartAsync();
 
         var messages = Enumerable.Range(1, 5).Select(i => new Item(i)).ToList();
-        await host.Services.GetRequiredService<IMessagePublisher>().PublishBatchAsync("items", messages);
+        await host.Services.GetRequiredService<IBus>().PublishBatchAsync("items", messages);
 
         await collector.Done.WaitAsync(TimeSpan.FromSeconds(5));
         collector.Ids.OrderBy(i => i).ShouldBe([1, 2, 3, 4, 5]);
@@ -61,10 +65,10 @@ public class BatchPublishTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddInMemory());
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new InMemoryConfig())));
         using var provider = services.BuildServiceProvider();
 
         await Should.NotThrowAsync(async () =>
-            await provider.GetRequiredService<IMessagePublisher>().PublishBatchAsync("items", Array.Empty<Item>()));
+            await provider.GetRequiredService<IBus>().PublishBatchAsync("items", Array.Empty<Item>()));
     }
 }

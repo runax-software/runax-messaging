@@ -48,9 +48,10 @@ public static class MessagingDiagnostics
         unit: "ms",
         description: "Time spent processing a received message before it is acknowledged, requeued, or dead-lettered.");
 
-    internal static TagList Tags(string system, string destination) => new()
+    internal static TagList Tags(string system, string destination, string bus) => new()
     {
         { "messaging.system", system },
         { "messaging.destination.name", destination },
+        { "messaging.runax.bus", bus },
     };
 }

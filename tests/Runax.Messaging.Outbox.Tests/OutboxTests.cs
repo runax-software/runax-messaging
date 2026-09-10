@@ -27,14 +27,17 @@ public class OutboxTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddInMemory().AddOutbox().AddInMemoryOutboxStore());
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus
+            .AddTransport(new InMemoryConfig())
+            .AddOutbox()
+            .AddOutboxStore(new InMemoryOutboxStoreConfig())));
         using var provider = services.BuildServiceProvider();
 
         // No host started, so the dispatcher never runs: the publish only lands in the store.
-        await provider.GetRequiredService<IMessagePublisher>().PublishAsync("orders", new Order(1));
+        await provider.GetRequiredService<IBus>().PublishAsync("orders", new Order(1));
 
-        var store = provider.GetRequiredService<IOutboxStore>();
-        var pending = await store.GetPendingAsync(10);
+        var store = provider.GetRequiredKeyedService<IOutboxStore>(BusNames.Default);
+        var pending = await store.GetPendingAsync(BusNames.Default, 10);
         pending.Count.ShouldBe(1);
         pending[0].Topic.ShouldBe("orders");
     }
@@ -45,26 +48,26 @@ public class OutboxTests
         var received = new TaskCompletionSource<Order>();
         var builder = Host.CreateApplicationBuilder();
         builder.Services.AddSingleton(received);
-        builder.Services.AddRunaxMessaging(m => m
-            .AddInMemory()
+        builder.Services.AddRunaxMessaging(m => m.AddBus(bus => bus
+            .AddTransport(new InMemoryConfig())
             .AddConsumer<OrderConsumer>()
             .AddOutbox(o => o.PollingInterval = TimeSpan.FromMilliseconds(50))
-            .AddInMemoryOutboxStore());
+            .AddOutboxStore(new InMemoryOutboxStoreConfig())));
         using var host = builder.Build();
         await host.StartAsync();
 
-        await host.Services.GetRequiredService<IMessagePublisher>().PublishAsync("orders", new Order(7));
+        await host.Services.GetRequiredService<IBus>().PublishAsync("orders", new Order(7));
 
         var order = await received.Task.WaitAsync(TimeSpan.FromSeconds(5));
         order.Id.ShouldBe(7);
 
         // The dispatched message is marked so it is not published again.
-        var store = host.Services.GetRequiredService<IOutboxStore>();
+        var store = host.Services.GetRequiredKeyedService<IOutboxStore>(BusNames.Default);
         var deadline = DateTime.UtcNow.AddSeconds(5);
-        while ((await store.GetPendingAsync(10)).Count > 0 && DateTime.UtcNow < deadline)
+        while ((await store.GetPendingAsync(BusNames.Default, 10)).Count > 0 && DateTime.UtcNow < deadline)
             await Task.Delay(25);
 
-        (await store.GetPendingAsync(10)).ShouldBeEmpty();
+        (await store.GetPendingAsync(BusNames.Default, 10)).ShouldBeEmpty();
 
         await host.StopAsync();
     }

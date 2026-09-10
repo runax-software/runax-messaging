@@ -4,16 +4,17 @@ using Runax.Messaging.Abstractions;
 namespace Runax.Messaging.Transports.Aws.Sns;
 
 /// <summary>
-/// Health check that reports whether the SNS transport can reach the service.
+/// Health check that reports whether one bus's SNS transport can reach the service.
+/// Registered automatically per bus as <c>runax:{bus}</c>.
 /// </summary>
-internal sealed class SnsHealthCheck(IEnumerable<IMessagingTransport> transports) : IHealthCheck
+internal sealed class SnsHealthCheck(IMessagingTransport transport) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (transports.OfType<SnsTransport>().FirstOrDefault() is not { } sns)
-            return HealthCheckResult.Unhealthy("The registered messaging transport is not SNS.");
+        if (transport is not SnsTransport sns)
+            return HealthCheckResult.Unhealthy("The bus's messaging transport is not SNS.");
 
         try
         {

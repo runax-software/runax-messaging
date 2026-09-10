@@ -55,10 +55,10 @@ public sealed class GooglePubSubIntegrationTests : IAsyncLifetime
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddGooglePubSub(pubsub => pubsub.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new GooglePubSubConfig
         {
-            o.ProjectId = ProjectId;
-            o.TopicSubscriptionMap[_topicId] = _subscriptionId;
+            ProjectId = ProjectId,
+            TopicSubscriptionMap = { [_topicId] = _subscriptionId },
         })));
         return services.BuildServiceProvider();
     }
@@ -67,7 +67,7 @@ public sealed class GooglePubSubIntegrationTests : IAsyncLifetime
     public async Task Transport_round_trips_publish_to_subscribe()
     {
         await using var provider = BuildProvider();
-        var transport = provider.GetRequiredService<IMessagingTransport>();
+        var transport = provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
 
         var received = new TaskCompletionSource<string>();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -103,12 +103,15 @@ public sealed class GooglePubSubIntegrationTests : IAsyncLifetime
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddGooglePubSub(pubsub => pubsub.Configure(o => o.ProjectId = ProjectId)));
-        services.AddHealthChecks().AddGooglePubSubTransport();
+        // The transport config auto-registers its health check as "runax:default".
+        services.AddRunaxMessaging(m => m.AddBus(bus =>
+            bus.AddTransport(new GooglePubSubConfig { ProjectId = ProjectId })));
         await using var provider = services.BuildServiceProvider();
 
-        var report = await provider.GetRequiredService<HealthCheckService>().CheckHealthAsync();
+        var report = await provider.GetRequiredService<HealthCheckService>()
+            .CheckHealthAsync(r => r.Name == $"runax:{BusNames.Default}");
 
         report.Status.ShouldBe(HealthStatus.Healthy);
+        report.Entries[$"runax:{BusNames.Default}"].Status.ShouldBe(HealthStatus.Healthy);
     }
 }

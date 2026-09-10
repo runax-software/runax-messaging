@@ -34,11 +34,11 @@ public sealed class SqsVisibilityIntegrationTests : IAsyncLifetime, IDisposable
 
     public void Dispose() => _reader.Dispose();
 
-    private ServiceProvider BuildProvider(Action<SqsOptions> configure)
+    private ServiceProvider BuildProvider(Action<SqsConfig> configure)
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddRunaxMessaging(m => m.AddSqs(sqs => sqs.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport<SqsConfig>(o =>
         {
             o.Region = Region;
             o.ServiceUrl = ServiceUrl;
@@ -59,7 +59,7 @@ public sealed class SqsVisibilityIntegrationTests : IAsyncLifetime, IDisposable
             o.VisibilityTimeoutSeconds = 1;
             o.ExtendVisibilityDuringProcessing = false;
         });
-        var transport = provider.GetRequiredService<IMessagingTransport>();
+        var transport = provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
 
         var envelope = $$"""{"probe":"{{Guid.NewGuid():N}}"}""";
         await transport.PublishAsync(_topic, envelope);
@@ -100,7 +100,7 @@ public sealed class SqsVisibilityIntegrationTests : IAsyncLifetime, IDisposable
             o.VisibilityTimeoutSeconds = 2;
             o.ExtendVisibilityDuringProcessing = true;
         });
-        var transport = provider.GetRequiredService<IMessagingTransport>();
+        var transport = provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
 
         await transport.PublishAsync(_topic, $$"""{"probe":"{{Guid.NewGuid():N}}"}""");
 

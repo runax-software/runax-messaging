@@ -1,8 +1,8 @@
 # Runax.Messaging
 
 The default implementation for [Runax.Messaging](https://github.com/runax-software/runax-messaging):
-dependency-injection wiring, JSON serialization, hosted message consumers, and a
-built-in in-memory transport. Add a transport package (SQS, RabbitMQ) for
+dependency-injection wiring (`AddBus` / `BusBuilder`), JSON serialization, hosted message
+consumers, and a built-in in-memory transport. Add a transport package (SQS, RabbitMQ) for
 cross-process delivery, or use the in-memory transport for tests and
 single-process apps.
 
@@ -14,21 +14,26 @@ dotnet add package Runax.Messaging
 
 ## Register
 
+Configuration is organized around **buses** — a bus is a named messaging context wrapping
+exactly one transport, plus its consumers and policies:
+
 ```csharp
 using Runax.Messaging;
+using Runax.Messaging.InMemory;
 
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddInMemory(inMemory =>
+    messaging.AddBus(bus =>
     {
-        inMemory.AddConsumer<OrderPlacedConsumer>();
+        bus.AddTransport(new InMemoryConfig());
+        bus.AddConsumer<OrderPlacedConsumer>();
     });
 });
 ```
 
-`AddRunaxMessaging` registers the default serializer and `IMessagePublisher`, then
-invokes your configuration. Register one or more transports. If any consumers are
-added, a hosted background service is registered to dispatch them — so consuming
+`AddRunaxMessaging` registers the default serializer and the `IBus` resolution, then invokes
+your configuration. Register at least one bus, each with exactly one transport. If a bus has
+consumers, a hosted background service is registered per bus to dispatch them — so consuming
 requires a .NET Generic Host.
 
 ## Publish
@@ -36,15 +41,16 @@ requires a .NET Generic Host.
 ```csharp
 using Runax.Messaging.Abstractions;
 
-public sealed class Checkout(IMessagePublisher publisher)
+public sealed class Checkout(IBus bus)
 {
     public ValueTask PlaceOrderAsync(Order order) =>
-        publisher.PublishAsync("orders.placed", order);
+        bus.PublishAsync("orders.placed", order);
 }
 ```
 
-Publish many at once with `PublishBatchAsync(topic, messages)`, which uses the transport's
-batch API where available (SQS `SendMessageBatch`, a single RabbitMQ confirm per batch).
+An unkeyed `IBus` resolves the default bus, so single-bus apps never touch bus names. Publish
+many at once with `PublishBatchAsync(topic, messages)`, which uses the transport's batch API
+where available (SQS `SendMessageBatch`, a single RabbitMQ confirm per batch).
 
 ## Consume
 
@@ -66,73 +72,74 @@ public sealed class OrderPlacedConsumer : MessageConsumer<Order>
 }
 ```
 
-## Multiple transports
+## Multiple buses
 
-Register several transports (each identified by its `SystemName`) and a single consumer can receive its
-topic from more than one broker — even different ones:
+A bus wraps exactly one transport — a second `AddTransport` on the same bus throws at
+configuration time — so talking to several brokers (or two clusters of the same broker) means
+registering several buses:
 
 ```csharp
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddRabbitMq(rabbitmq =>
+    messaging.AddBus(bus =>                          // default bus: unkeyed IBus resolves it
     {
-        rabbitmq.Configure(o => o.HostName = "localhost");
-        rabbitmq.AddConsumer<AuditConsumer>();          // scoped: only RabbitMQ
+        bus.AddTransport(new RabbitMqConfig { HostName = "localhost" });
+        bus.AddConsumer<AuditConsumer>();
+        bus.AddConsumer<OrderPlacedConsumer>();
     });
 
-    runax.AddSqs(sqs =>
+    messaging.AddBus("audit", bus =>                 // named bus, keyed resolution
     {
-        sqs.Configure(o => o.Region = "us-east-1");
+        bus.Mode = BusMode.PublishOnly;              // optional: registering a consumer here throws
+        bus.AddTransport(new SqsConfig { Region = "us-east-1" });
     });
-
-    runax.AddConsumer<OrderPlacedConsumer>();           // top-level: every registered transport
-    runax.PublishTo("sqs");                             // IMessagePublisher target
 });
 ```
 
-A consumer registered inside a transport's block binds to that broker; a top-level `AddConsumer<T>()`
-subscribes on every registered transport. Register the same consumer under two brokers to consume from both
-(it stays a single instance). Each transport is subscribed and dispatched independently. With more than one
-transport registered, `PublishTo("<system-name>")` selects the publish target (a single transport is used
-automatically). Each transport must report a distinct `SystemName`.
+Each bus is fully isolated: its own transport connection, consumers, retry policy, serializers,
+health check (`runax:{bus}`), and hosted lifecycle. Register the same consumer type on two
+buses to consume its topic from both brokers (it stays a single instance; each bus's traffic
+flows through that bus's own pipeline). Named buses resolve via keyed DI
+(`[FromKeyedServices("audit")] IBus`) or `IBusProvider.GetBus("audit")`.
 
-To publish the same event to **several** transports, inject `IMessagePublisherFactory` and call
-`ForTransport("<system-name>")` per broker — each returns an `IMessagePublisher` pinned to that transport:
+To publish the same event to **several** brokers, inject each bus and publish on both:
 
 ```csharp
-public sealed class OrderService(IMessagePublisherFactory publishers)
+public sealed class OrderService(
+    IBus main,
+    [FromKeyedServices("audit")] IBus audit)
 {
     public async Task PlaceAsync(OrderPlaced order, CancellationToken ct)
     {
-        await publishers.ForTransport("kafka").PublishAsync("orders", order, ct);
-        await publishers.ForTransport("sqs").PublishAsync("orders", order, ct);
+        await main.PublishAsync("orders", order, ct);
+        await audit.PublishAsync("orders", order, ct);
     }
 }
 ```
 
-The two sends are independent (no atomic fan-out), and `ForTransport(...)` publishes straight to the
-transport without routing through the outbox.
+The two sends are independent (no atomic fan-out).
 
 ## Retries & dead-lettering
 
 Failed `HandleAsync` calls are retried with exponential backoff, and messages that
-cannot be handled are dead-lettered. Tune the policy with `WithRetry`:
+cannot be handled are dead-lettered. Tune the policy with `bus.WithRetry`:
 
 ```csharp
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddInMemory(inMemory =>
+    messaging.AddBus(bus =>
     {
-        inMemory.AddConsumer<OrderPlacedConsumer>();
-    });
+        bus.AddTransport(new InMemoryConfig());
+        bus.AddConsumer<OrderPlacedConsumer>();
 
-    runax.WithRetry(o =>
-    {
-        o.MaxAttempts = 5;                 // initial attempt + retries
-        o.InitialDelay = TimeSpan.FromMilliseconds(200);
-        o.BackoffFactor = 2.0;
-        o.MaxDelay = TimeSpan.FromSeconds(30);
-        // o.Strategy = DeadLetterStrategy.BrokerNative; // defer to broker DLX / redrive
+        bus.WithRetry(o =>
+        {
+            o.MaxAttempts = 5;                 // initial attempt + retries
+            o.InitialDelay = TimeSpan.FromMilliseconds(200);
+            o.BackoffFactor = 2.0;
+            o.MaxDelay = TimeSpan.FromSeconds(30);
+            // o.Strategy = DeadLetterStrategy.BrokerNative; // defer to broker DLX / redrive
+        });
     });
 });
 ```
@@ -145,21 +152,20 @@ builder.Services.AddRunaxMessaging(runax =>
   message so the transport's native DLQ handles it (pair with `MaxAttempts = 1` to
   rely purely on the broker).
 
-`WithRetry` can be set globally (on `runax`) or **per broker** — call it inside a transport
-block to give that broker its own policy, falling back to the global (or built-in) defaults
-for every other broker:
+`WithRetry` is **per bus** — each bus sets its own policy, falling back to the built-in
+defaults. Override it for a single topic with `WithRetryForTopic` (the most specific scope
+wins):
 
 ```csharp
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddRabbitMq(rabbitmq =>
+    messaging.AddBus(bus =>
     {
-        rabbitmq.Configure(o => o.HostName = "localhost");
-        rabbitmq.AddConsumer<OrderPlacedConsumer>();
-        rabbitmq.WithRetry(o => o.MaxAttempts = 8);   // per-broker: RabbitMQ retries harder
+        bus.AddTransport(new RabbitMqConfig { HostName = "localhost" });
+        bus.AddConsumer<OrderPlacedConsumer>();
+        bus.WithRetry(o => o.MaxAttempts = 8);                        // this bus's policy
+        bus.WithRetryForTopic("payments", o => o.MaxAttempts = 10);   // "payments" only
     });
-
-    runax.WithRetry(o => o.MaxAttempts = 3);          // global default for every other broker
 });
 ```
 
@@ -167,24 +173,25 @@ builder.Services.AddRunaxMessaging(runax =>
 
 Message bodies are serialized with `System.Text.Json`. Configure the options — naming policy,
 converters, or a source-generated `JsonSerializerContext` (via `TypeInfoResolver`) for a
-trim-friendly / AOT path — with `ConfigureSerialization`:
+trim-friendly / AOT path — with `bus.ConfigureSerialization`:
 
 ```csharp
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddInMemory(inMemory =>
+    messaging.AddBus(bus =>
     {
-        inMemory.AddConsumer<OrderPlacedConsumer>();
+        bus.AddTransport(new InMemoryConfig());
+        bus.AddConsumer<OrderPlacedConsumer>();
+        bus.ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
     });
-
-    runax.ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
 });
 ```
 
-The same options are applied on both publish and consume. To swap the body serializer entirely, implement
-`ISerializer` and register it with `UseSerializer<T>()`. Both `ConfigureSerialization` and `UseSerializer`
-can be set globally (on `runax`) or **per broker** (inside a transport block, like `AddConsumer<T>()`); the
-framework-owned `__runax` envelope is identical either way. See
+The same options are applied on both publish and consume; they start from a copy of the
+container's global `JsonSerializerOptions` with your action applied on top. To swap the body
+serializer entirely, implement `ISerializer` and register it with `bus.UseSerializer<T>()`.
+Both are **per bus**, with `ConfigureSerializationForTopic` / `UseSerializerForTopic<T>` for
+topic-level overrides; the framework-owned `__runax` envelope is identical either way. See
 [Serialization & custom serializers](../../docs/serialization.md).
 
 ## Contract versioning
@@ -220,13 +227,13 @@ public sealed class OrderV2Consumer : MessageConsumer<OrderV2>
     protected override ValueTask HandleAsync(OrderV2 order, CancellationToken ct) { /* ... */ }
 }
 
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddRabbitMq(rabbitmq =>
+    messaging.AddBus(bus =>
     {
-        rabbitmq.Configure(o => o.HostName = "localhost");
-        rabbitmq.AddConsumer<OrderV1Consumer>();
-        rabbitmq.AddConsumer<OrderV2Consumer>();
+        bus.AddTransport(new RabbitMqConfig { HostName = "localhost" });
+        bus.AddConsumer<OrderV1Consumer>();
+        bus.AddConsumer<OrderV2Consumer>();
     });
 });
 ```
@@ -255,15 +262,14 @@ If a message arrives whose version no consumer accepts — e.g. a `v2` order rea
 the `v1` consumer — it is **never silently dropped**. You choose the outcome:
 
 ```csharp
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddRabbitMq(rabbitmq =>
+    messaging.AddBus(bus =>
     {
-        rabbitmq.Configure(o => o.HostName = "localhost");
-        rabbitmq.AddConsumer<OrderV1Consumer>();
+        bus.AddTransport(new RabbitMqConfig { HostName = "localhost" });
+        bus.AddConsumer<OrderV1Consumer>();
+        bus.OnUnroutableMessage(UnroutableStrategy.DeadLetter);   // this is the default
     });
-
-    runax.OnUnroutableMessage(UnroutableStrategy.DeadLetter);   // this is the default
 });
 ```
 
@@ -286,22 +292,20 @@ public sealed class AlertingUnroutableHandler(ILogger<AlertingUnroutableHandler>
     }
 }
 
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddRabbitMq(rabbitmq =>
+    messaging.AddBus(bus =>
     {
-        rabbitmq.Configure(o => o.HostName = "localhost");
-        rabbitmq.AddConsumer<OrderV1Consumer>();
+        bus.AddTransport(new RabbitMqConfig { HostName = "localhost" });
+        bus.AddConsumer<OrderV1Consumer>();
+        bus.OnUnroutableMessage<AlertingUnroutableHandler>();
     });
-
-    runax.OnUnroutableMessage<AlertingUnroutableHandler>();
 });
 ```
 
-Like `WithRetry`, `OnUnroutableMessage` (both the strategy and the custom-handler form) can be set
-globally or **per broker** — call it inside a transport block to override the strategy for that
-broker only, falling back to the global (or the built-in dead-letter default) elsewhere. See
-[Configuration & per-broker settings](../../docs/configuration.md).
+Like `WithRetry`, `OnUnroutableMessage` (both the strategy and the custom-handler form) is
+**per bus** — each bus picks its own strategy, falling back to the built-in dead-letter
+default. See [Configuration & per-bus settings](../../docs/configuration.md).
 
 ### Check what you handle before switching a producer
 
@@ -327,35 +331,36 @@ meterProviderBuilder.AddMeter(MessagingDiagnostics.MeterName);
 
 - **Spans** — a producer span on publish (W3C context injected into the envelope
   headers) and a consumer span on consume, tagged per OpenTelemetry messaging
-  conventions.
+  conventions plus `messaging.runax.bus` (the bus name).
 - **Metrics** — `runax.messaging.published` / `consumed` / `failed` counters and a
-  `runax.messaging.processing.duration` histogram.
+  `runax.messaging.processing.duration` histogram, tagged by system, destination, and bus.
 
-Transport packages add broker health checks (`AddRabbitMqTransport()`,
-`AddSqsTransport()`).
+Each bus with a broker transport auto-registers a health check named `runax:{bus}`
+(opt out with `RegisterHealthCheck = false` on the transport config).
 
 ## In-memory transport
 
-`AddInMemory()` delivers messages in-process through channels, one per topic. It
-is intended for tests and single-process scenarios — messages are not persisted
+`bus.AddTransport(new InMemoryConfig())` delivers messages in-process through channels, one
+per topic. It is intended for tests and single-process scenarios — messages are not persisted
 and do not cross process boundaries.
 
-The in-memory transport has **no transport options** of its own. It still honors the per-broker
-core settings, though: pass a builder block to scope consumers or override policy for it —
+The in-memory config has **no transport settings** of its own. The bus's core settings apply
+as usual — scope consumers or override policy on the bus that runs it:
 
 ```csharp
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddInMemory(inMemory =>
+    messaging.AddBus(bus =>
     {
-        inMemory.AddConsumer<OrderPlacedConsumer>();
-        inMemory.WithRetry(o => o.MaxAttempts = 1);   // per-broker override
+        bus.AddTransport(new InMemoryConfig());
+        bus.AddConsumer<OrderPlacedConsumer>();
+        bus.WithRetry(o => o.MaxAttempts = 1);   // this bus's policy
     });
 });
 ```
 
-Its `SystemName` is `in-memory`. See
-[Configuration & per-broker settings](../../docs/configuration.md).
+Its `SystemName` is `in-memory`, and it registers no health check. See
+[Configuration & per-bus settings](../../docs/configuration.md).
 
 ## License
 

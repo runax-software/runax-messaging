@@ -14,12 +14,12 @@ namespace Runax.Messaging.Transports.Aws.Sqs;
 /// </summary>
 internal sealed class SqsTransport : IMessagingTransport, IDisposable
 {
-    private readonly SqsOptions _options;
+    private readonly SqsConfig _options;
     private readonly ILogger<SqsTransport> _logger;
     private readonly Lazy<AmazonSQSClient> _client;
     private readonly ConcurrentDictionary<string, string> _resolvedQueueUrls = new();
 
-    public SqsTransport(SqsOptions options, ILogger<SqsTransport> logger)
+    public SqsTransport(SqsConfig options, ILogger<SqsTransport> logger)
     {
         _options = options;
         _logger = logger;

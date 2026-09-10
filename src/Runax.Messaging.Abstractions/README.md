@@ -14,27 +14,32 @@ dotnet add package Runax.Messaging.Abstractions
 
 | Type | Role |
 | --- | --- |
-| `IMessagePublisher` | Publishes a strongly-typed message (or a batch via `PublishBatchAsync`) to a topic, optionally with headers. |
-| `IMessagePublisherFactory` | Resolves an `IMessagePublisher` pinned to a named transport (`ForTransport("<system-name>")`) so you can publish to several transports explicitly. |
+| `IBus` | The single application handle to messaging: publishes a strongly-typed message (or a batch via `PublishBatchAsync`) to a topic on the bus's transport, optionally with headers. Inject unkeyed for the default bus, keyed by name for a named bus. |
+| `IBusProvider` | Resolves buses dynamically (`GetBus("<name>")`) and enumerates them (`Buses`) for diagnostics and admin surfaces. |
+| `BusMode` / `BusNames` | A bus's declared mode (`PublishAndConsume` / `PublishOnly` / `ConsumeOnly`) and the well-known default bus name. |
+| `TransportConfig` / `TransportContext` | Transport SPI: a transport package derives one config type carrying its broker settings and the `CreateTransport` factory; the context hands it the bus name, mode, and service provider. |
 | `IMessagingTransport` | Provider SPI. Each transport implements broker-specific publish (single and batch) / subscribe and exposes a `SystemName` telemetry tag. |
 | `MessageContext` | A received message: topic, raw JSON body, headers, and a `Deserialize<T>()` helper. |
 | `MessageDisposition` | The verdict a transport applies after dispatch: `Acknowledge`, `Requeue`, or `DeadLetter`. |
 | `PoisonMessageException` | Thrown by a consumer to skip retries and dead-letter the message immediately. |
-| `MessagingConfigurator` | Fluent builder that transports and consumers attach to via extension methods. |
+| `MessagingConfigurator` | The `AddRunaxMessaging` surface; buses attach via the `AddBus` extensions in the `Runax.Messaging` package. |
 
 ## Usage
 
-Depend on `IMessagePublisher` wherever you publish:
+Depend on `IBus` wherever you publish:
 
 ```csharp
 using Runax.Messaging.Abstractions;
 
-public sealed class Checkout(IMessagePublisher publisher)
+public sealed class Checkout(IBus bus)
 {
     public ValueTask PlaceOrderAsync(Order order) =>
-        publisher.PublishAsync("orders.placed", order);
+        bus.PublishAsync("orders.placed", order);
 }
 ```
+
+An unkeyed `IBus` resolves the application's default bus; a named bus resolves via keyed DI
+(`[FromKeyedServices("audit")] IBus`) or `IBusProvider.GetBus("audit")`.
 
 The implementation, transports, and hosting live in
 [`Runax.Messaging`](https://www.nuget.org/packages/Runax.Messaging) and the

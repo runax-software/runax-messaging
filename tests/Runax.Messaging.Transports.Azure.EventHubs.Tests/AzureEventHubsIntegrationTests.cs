@@ -35,15 +35,15 @@ public sealed class AzureEventHubsIntegrationTests
         // runner discards Console/ILogger output, but an exception message is shown in CI).
         var logs = new CapturingLoggerProvider();
         services.AddLogging(b => { b.SetMinimumLevel(LogLevel.Debug); b.AddProvider(logs); });
-        services.AddRunaxMessaging(m => m.AddAzureEventHubs(eventHubs => eventHubs.Configure(o =>
+        services.AddRunaxMessaging(m => m.AddBus(bus => bus.AddTransport(new AzureEventHubsConfig
         {
-            o.ConnectionString = ConnectionString;
-            o.ConsumerGroup = ConsumerGroup;
-            o.BlobConnectionString = BlobConnectionString;
-            o.BlobContainerName = BlobContainer;
+            ConnectionString = ConnectionString,
+            ConsumerGroup = ConsumerGroup,
+            BlobConnectionString = BlobConnectionString,
+            BlobContainerName = BlobContainer,
         })));
         await using var provider = services.BuildServiceProvider();
-        var transport = provider.GetRequiredService<IMessagingTransport>();
+        var transport = provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
 
         var envelope = $$"""{"probe":"{{Guid.NewGuid():N}}"}""";
         var received = new TaskCompletionSource<string>();

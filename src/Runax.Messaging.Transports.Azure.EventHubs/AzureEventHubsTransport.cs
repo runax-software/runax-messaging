@@ -17,15 +17,15 @@ namespace Runax.Messaging.Transports.Azure.EventHubs;
 /// store. Event Hubs has no per-message ack or native dead-letter queue, so the disposition is mapped as:
 /// <c>Acknowledge</c> advances the checkpoint; <c>Requeue</c> skips the checkpoint so the partition is
 /// reprocessed; <c>DeadLetter</c> either republishes to a <c>{topic}.dead-letter</c> hub or is logged and
-/// checkpointed (dropped), controlled by <see cref="AzureEventHubsOptions.ProduceDeadLetterHub"/>.
+/// checkpointed (dropped), controlled by <see cref="AzureEventHubsConfig.ProduceDeadLetterHub"/>.
 /// </summary>
 internal sealed class AzureEventHubsTransport : IMessagingTransport, IDisposable
 {
-    private readonly AzureEventHubsOptions _options;
+    private readonly AzureEventHubsConfig _options;
     private readonly ILogger<AzureEventHubsTransport> _logger;
     private readonly ConcurrentDictionary<string, EventHubProducerClient> _producers = new();
 
-    public AzureEventHubsTransport(AzureEventHubsOptions options, ILogger<AzureEventHubsTransport> logger)
+    public AzureEventHubsTransport(AzureEventHubsConfig options, ILogger<AzureEventHubsTransport> logger)
     {
         _options = options;
         _logger = logger;
@@ -183,7 +183,7 @@ internal sealed class AzureEventHubsTransport : IMessagingTransport, IDisposable
     {
         if (_options.ProduceDeadLetterHub)
         {
-            var deadLetterTopic = topic + AzureEventHubsOptions.DeadLetterHubSuffix;
+            var deadLetterTopic = topic + AzureEventHubsConfig.DeadLetterHubSuffix;
             try
             {
                 var producer = GetProducer(deadLetterTopic);
@@ -219,11 +219,16 @@ internal sealed class AzureEventHubsTransport : IMessagingTransport, IDisposable
     private static DefaultAzureCredential CreateCredential() => new();
 
     /// <summary>
-    /// Verifies reachability by fetching event hub properties for the given topic.
+    /// Verifies namespace reachability by fetching event hub properties through an already-created
+    /// producer. Event Hubs has no namespace-level data-plane probe, so before the bus has produced
+    /// any client (no publishes or dead-letter republishes yet) there is nothing to check and the
+    /// ping succeeds trivially.
     /// </summary>
-    internal async Task<bool> PingAsync(string topic, CancellationToken cancellationToken = default)
+    internal async Task<bool> PingAsync(CancellationToken cancellationToken = default)
     {
-        var producer = GetProducer(topic);
+        if (_producers.Values.FirstOrDefault() is not { } producer)
+            return true;
+
         await producer.GetEventHubPropertiesAsync(cancellationToken).ConfigureAwait(false);
         return true;
     }

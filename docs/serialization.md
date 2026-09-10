@@ -62,26 +62,24 @@ how its body was encoded. There are two levels.
 
 ### Tweaking the JSON options (most cases)
 
-For a naming policy, converters, or a source-generated `JsonSerializerContext`, configure the shared
-`JsonSerializerOptions` — no custom type required:
+For a naming policy, converters, or a source-generated `JsonSerializerContext`, configure the bus's
+`JsonSerializerOptions` with `bus.ConfigureSerialization(...)` — no custom type required:
 
 ```csharp
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddInMemory(inMemory =>
+    messaging.AddBus(bus =>
     {
-        inMemory.AddConsumer<OrderPlacedConsumer>();
+        bus.AddTransport(new RabbitMqConfig { HostName = "localhost" });
+        bus.AddConsumer<OrderPlacedConsumer>();
+        bus.ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
     });
-
-    runax.AddRabbitMq(rabbitmq =>
-    {
-        rabbitmq.Configure(opt => opt.HostName = "localhost");
-        rabbitmq.AddConsumer<OrderPlacedConsumer>();
-    });
-
-    runax.ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
 });
 ```
+
+The options start from a copy of the container's global `JsonSerializerOptions` (the one your app may
+already configure for ASP.NET) with your action applied on top, so the bus inherits application-wide
+settings and overrides only what it names.
 
 ### Replacing the body serializer
 
@@ -112,23 +110,18 @@ public sealed class NewtonsoftSerializer : ISerializer
 }
 ```
 
-Register it at the top level — it applies to every transport, and the `__runax` envelope is unchanged:
+Register it on the bus with `bus.UseSerializer<T>()` — it applies to every topic on that bus, and the
+`__runax` envelope is unchanged:
 
 ```csharp
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddInMemory(inMemory =>
+    messaging.AddBus(bus =>
     {
-        inMemory.AddConsumer<OrderPlacedConsumer>();
+        bus.AddTransport(new RabbitMqConfig { HostName = "localhost" });
+        bus.AddConsumer<OrderPlacedConsumer>();
+        bus.UseSerializer<NewtonsoftSerializer>();
     });
-
-    runax.AddRabbitMq(rabbitmq =>
-    {
-        rabbitmq.Configure(opt => opt.HostName = "localhost");
-        rabbitmq.AddConsumer<OrderPlacedConsumer>();
-    });
-
-    runax.UseSerializer<NewtonsoftSerializer>();
 });
 ```
 
@@ -136,74 +129,70 @@ builder.Services.AddRunaxMessaging(runax =>
 controls the body, there is no way for a custom serializer to change or drop the `__runax` envelope — that is
 by design.
 
-### Per-broker serialization
+### Per-bus serialization
 
-Both `UseSerializer<T>()` and `ConfigureSerialization(...)` also work **inside a transport block**, scoping the
-serializer to that one broker — exactly like `AddConsumer<T>()`. A top-level call sets the global default; a
-call inside a transport block overrides it for that broker only. Useful when one broker talks to a system that
-needs a different shape (say camelCase, or Json.NET) while the rest of the app keeps the defaults.
+Serialization is a **per-bus** setting — there is no global messaging scope. Each bus picks its own
+serializer (or JSON options), so two buses can speak different shapes: one broker talks to a system that
+needs a different format (say camelCase, or Json.NET) while another bus keeps the defaults. A bus that
+configures nothing uses the default `System.Text.Json` serializer with the container's global options.
 
 ```csharp
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    // Global default: applies to every broker that doesn't override it.
-    runax.ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
-
-    runax.AddRabbitMq(rabbitmq =>
+    messaging.AddBus(bus =>
     {
-        rabbitmq.Configure(o => o.HostName = "localhost");
-        rabbitmq.AddConsumer<OrderPlacedConsumer>();
-        // RabbitMQ inherits the global camelCase options.
+        bus.AddTransport(new RabbitMqConfig { HostName = "localhost" });
+        bus.AddConsumer<OrderPlacedConsumer>();
+        bus.ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
     });
 
-    runax.AddSqs(sqs =>
+    messaging.AddBus("audit", bus =>
     {
-        sqs.Configure(o => o.Region = "us-east-1");
-        sqs.AddConsumer<OrderPlacedConsumer>();
-        sqs.UseSerializer<NewtonsoftSerializer>();   // SQS only: a different body serializer
+        bus.AddTransport(new SqsConfig { Region = "us-east-1" });
+        bus.AddConsumer<OrderPlacedConsumer>();
+        bus.UseSerializer<NewtonsoftSerializer>();   // this bus only: a different body serializer
     });
 });
 ```
 
-A broker's scoped `ConfigureSerialization` starts from a copy of the global options and applies your tweaks on
-top, so it inherits global settings and overrides only what it names. The `__runax` envelope is identical on
-every broker regardless of which serializer is active.
+Buses that want the same settings share a helper `Action<BusBuilder>` applied to each. The `__runax`
+envelope is identical on every bus regardless of which serializer is active.
 
 ### Per-topic serialization
 
-When the format is a property of the *topic* rather than the broker — one legacy topic keeps snake_case, or a
+When the format is a property of the *topic* rather than the bus — one legacy topic keeps snake_case, or a
 single topic speaks Avro while everything else is JSON — scope the serializer to that topic with
-`UseSerializerForTopic<T>("<topic>")` and `ConfigureSerializationForTopic("<topic>", o => ...)`. Both exist at the
-top level (the topic on every broker) and inside a transport block (the topic on that one broker).
+`bus.UseSerializerForTopic<T>("<topic>")` and `bus.ConfigureSerializationForTopic("<topic>", o => ...)`.
 
 Selection runs from most to least specific, and the first match wins:
 
-1. the topic on this transport — `AddKafka(k => k.UseSerializerForTopic<T>("orders"))`
-2. the topic on any transport — `runax.UseSerializerForTopic<T>("orders")`
-3. this transport, any topic — `AddKafka(k => k.UseSerializer<T>())`
-4. the global default — `runax.UseSerializer<T>()`
+1. the topic on this bus — `bus.UseSerializerForTopic<T>("orders")`
+2. this bus, any topic — `bus.UseSerializer<T>()`
+3. the built-in default — `System.Text.Json` with the container's global options
 
-A per-topic serializer therefore overrides a per-broker one for the same topic, while other topics on that broker
-keep the broker (or global) serializer.
+A per-topic serializer therefore overrides the bus serializer for the same topic, while other topics on that
+bus keep the bus (or default) serializer.
 
 ```csharp
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    // Global default: applies to every topic that nothing more specific overrides.
-    runax.ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
-
-    // The "orders" topic uses a different body serializer on every broker.
-    runax.UseSerializerForTopic<AvroSerializer>("orders");
-
-    runax.AddKafka(kafka =>
+    messaging.AddBus(bus =>
     {
-        kafka.Configure(o => o.BootstrapServers = "localhost:9092");
-        kafka.AddConsumer<OrderPlacedConsumer>();
-        // On Kafka only, the "audit" topic keeps snake_case; every other Kafka topic stays camelCase.
-        kafka.ConfigureSerializationForTopic("audit", o => o.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower);
+        bus.AddTransport<KafkaConfig>(c => c.BootstrapServers = "localhost:9092");
+        bus.AddConsumer<OrderPlacedConsumer>();
+
+        // Bus default: applies to every topic that nothing more specific overrides.
+        bus.ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
+
+        // The "orders" topic uses a different body serializer on this bus.
+        bus.UseSerializerForTopic<AvroSerializer>("orders");
+
+        // The "audit" topic keeps snake_case; every other topic stays camelCase.
+        bus.ConfigureSerializationForTopic("audit", o => o.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower);
     });
 });
 ```
 
-Like the per-broker options, a per-topic `ConfigureSerializationForTopic` starts from a copy of the global options
-and applies your tweaks on top. The `__runax` envelope is identical regardless of which serializer resolves.
+Like the bus-level options, a per-topic `ConfigureSerializationForTopic` starts from a copy of the container's
+global options and applies your tweaks on top. The `__runax` envelope is identical regardless of which
+serializer resolves.

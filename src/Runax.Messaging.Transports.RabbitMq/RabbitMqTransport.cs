@@ -13,13 +13,13 @@ namespace Runax.Messaging.Transports.RabbitMq;
 /// </summary>
 internal sealed class RabbitMqTransport : IMessagingTransport, IDisposable
 {
-    private readonly RabbitMqOptions _options;
+    private readonly RabbitMqConfig _options;
     private readonly ILogger<RabbitMqTransport> _logger;
     private readonly Lazy<Task<IConnection>> _connection;
     private readonly PublishChannelPool _publishPool;
     private IChannel? _subscribeChannel;
 
-    public RabbitMqTransport(RabbitMqOptions options, ILogger<RabbitMqTransport> logger)
+    public RabbitMqTransport(RabbitMqConfig options, ILogger<RabbitMqTransport> logger)
     {
         _options = options;
         _logger = logger;

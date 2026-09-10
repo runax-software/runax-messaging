@@ -1,17 +1,15 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Runax.Messaging.Abstractions;
-using Runax.Messaging.InMemory;
-using Runax.Messaging.Serialization;
 
 namespace Runax.Messaging.TestKit;
 
 /// <summary>
 /// A broker-free test host for Runax.Messaging consumers. It wires up a real dependency-injection container
-/// and hosted dispatch pipeline over the built-in in-memory transport, so tests can
+/// and hosted dispatch pipeline over a default bus with a recording in-memory transport, so tests can
 /// <see cref="PublishAsync{TMessage}(string, TMessage, CancellationToken)">publish</see> a message and then
 /// assert what a consumer received, how many times, and whether it was retried or dead-lettered — with no
-/// running broker.
+/// running broker. Add extra recording buses with <see cref="MessagingTestHarnessBuilder.WithBus"/>.
 /// </summary>
 /// <remarks>
 /// Build one with <see cref="MessagingTestHarness.Create"/>, register the consumers under test and their
@@ -33,8 +31,8 @@ public sealed class MessagingTestHarness : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets the running host's service provider, so tests can resolve consumers, dependencies, or the
-    /// <see cref="IMessagePublisher"/> directly.
+    /// Gets the running host's service provider, so tests can resolve consumers, dependencies, or an
+    /// <see cref="IBus"/> directly (unkeyed for the default bus, keyed by name for extra buses).
     /// </summary>
     public IServiceProvider Services => _host.Services;
 
@@ -51,7 +49,8 @@ public sealed class MessagingTestHarness : IAsyncDisposable
     public static MessagingTestHarnessBuilder Create() => new();
 
     internal static async Task<MessagingTestHarness> StartAsync(
-        IReadOnlyList<Action<MessagingConfigurator>> configureMessaging,
+        IReadOnlyList<Action<BusBuilder>> configureDefaultBus,
+        IReadOnlyList<(string Name, Action<BusBuilder>? Configure)> extraBuses,
         IReadOnlyList<Action<IServiceCollection>> configureServices,
         CancellationToken cancellationToken)
     {
@@ -65,14 +64,25 @@ public sealed class MessagingTestHarness : IAsyncDisposable
 
         builder.Services.AddRunaxMessaging(configurator =>
         {
-            // Always register the in-memory transport so a harness with only top-level consumers still works.
-            configurator.AddInMemory();
+            configurator.AddBus(bus =>
+            {
+                // Every harness bus runs a recording in-memory transport so the shared recorder
+                // observes each delivery and dead-letter publish.
+                bus.AddTransport(new RecordingTransportConfig());
 
-            foreach (var configure in configureMessaging)
-                configure(configurator);
+                foreach (var configure in configureDefaultBus)
+                    configure(bus);
+            });
+
+            foreach (var (name, configure) in extraBuses)
+            {
+                configurator.AddBus(name, bus =>
+                {
+                    bus.AddTransport(new RecordingTransportConfig());
+                    configure?.Invoke(bus);
+                });
+            }
         });
-
-        WrapTransportWithRecorder(builder.Services);
 
         var host = builder.Build();
         var harness = new MessagingTestHarness(host, recorder);
@@ -91,9 +101,9 @@ public sealed class MessagingTestHarness : IAsyncDisposable
     }
 
     /// <summary>
-    /// Publishes a message through the harness's <see cref="IMessagePublisher"/>, exactly as application code
-    /// would. Registered consumers for the topic are dispatched asynchronously; await one of the
-    /// <c>WaitFor…</c> methods to observe the result.
+    /// Publishes a message on the harness's default bus, exactly as application code publishing
+    /// through <see cref="IBus"/> would. Registered consumers for the topic are dispatched
+    /// asynchronously; await one of the <c>WaitFor…</c> methods to observe the result.
     /// </summary>
     /// <typeparam name="TMessage">The message payload type.</typeparam>
     /// <param name="topic">The topic to publish to.</param>
@@ -103,11 +113,11 @@ public sealed class MessagingTestHarness : IAsyncDisposable
     public ValueTask PublishAsync<TMessage>(string topic, TMessage message, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return Services.GetRequiredService<IMessagePublisher>().PublishAsync(topic, message, cancellationToken);
+        return Services.GetRequiredService<IBus>().PublishAsync(topic, message, cancellationToken);
     }
 
     /// <summary>
-    /// Publishes a message with custom headers through the harness's <see cref="IMessagePublisher"/>.
+    /// Publishes a message with custom headers on the harness's default bus.
     /// </summary>
     /// <typeparam name="TMessage">The message payload type.</typeparam>
     /// <param name="topic">The topic to publish to.</param>
@@ -122,7 +132,27 @@ public sealed class MessagingTestHarness : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return Services.GetRequiredService<IMessagePublisher>().PublishAsync(topic, message, headers, cancellationToken);
+        return Services.GetRequiredService<IBus>().PublishAsync(topic, message, headers, cancellationToken);
+    }
+
+    /// <summary>
+    /// Publishes a message on a named harness bus (added with
+    /// <see cref="MessagingTestHarnessBuilder.WithBus"/>).
+    /// </summary>
+    /// <typeparam name="TMessage">The message payload type.</typeparam>
+    /// <param name="bus">The bus name.</param>
+    /// <param name="topic">The topic to publish to.</param>
+    /// <param name="message">The message payload.</param>
+    /// <param name="cancellationToken">Token to cancel the publish.</param>
+    /// <returns>A task that completes once the message has been handed to the transport.</returns>
+    public ValueTask PublishOnBusAsync<TMessage>(
+        string bus,
+        string topic,
+        TMessage message,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return Services.GetRequiredService<IBusProvider>().GetBus(bus).PublishAsync(topic, message, cancellationToken);
     }
 
     /// <summary>
@@ -168,7 +198,7 @@ public sealed class MessagingTestHarness : IAsyncDisposable
     /// Waits until a message is framework-dead-lettered from <paramref name="topic"/> — that is, it reappears on
     /// <c>&lt;topic&gt;&lt;suffix&gt;</c> (the suffix defaults to <c>.dead-letter</c>) — and returns it. Requires the default
     /// framework-managed dead-letter strategy (the harness uses it unless you override it via
-    /// <see cref="MessagingTestHarnessBuilder.ConfigureMessaging"/>).
+    /// <see cref="MessagingTestHarnessBuilder.ConfigureBus"/>).
     /// </summary>
     /// <param name="topic">The original topic the message was published to.</param>
     /// <param name="deadLetterSuffix">The dead-letter topic suffix. Defaults to <c>.dead-letter</c>.</param>
@@ -227,44 +257,6 @@ public sealed class MessagingTestHarness : IAsyncDisposable
             throw new TimeoutException(
                 $"Timed out after {timeout.TotalSeconds:0.###}s waiting for {description}.");
         }
-    }
-
-    private static void WrapTransportWithRecorder(IServiceCollection services)
-    {
-        // AddInMemory registers the in-memory transport as IMessagingTransport. Replace that descriptor with a
-        // RecordingTransport that wraps the original — built from the descriptor's own type/factory, so the
-        // in-memory transport (which is internal to the core package) never has to be referenced directly.
-        for (var i = 0; i < services.Count; i++)
-        {
-            var descriptor = services[i];
-            if (descriptor.ServiceType != typeof(IMessagingTransport))
-                continue;
-
-            services[i] = ServiceDescriptor.Singleton<IMessagingTransport>(sp =>
-            {
-                var inner = CreateInner(sp, descriptor);
-                var recorder = sp.GetRequiredService<MessageRecorder>();
-                var serializer = sp.GetRequiredService<IMessageSerializer>();
-                var retryOptions = sp.GetRequiredService<RetryOptions>();
-                return new RecordingTransport(inner, recorder, serializer, retryOptions);
-            });
-
-            return;
-        }
-    }
-
-    private static IMessagingTransport CreateInner(IServiceProvider sp, ServiceDescriptor descriptor)
-    {
-        if (descriptor.ImplementationInstance is IMessagingTransport instance)
-            return instance;
-
-        if (descriptor.ImplementationFactory is not null)
-            return (IMessagingTransport)descriptor.ImplementationFactory(sp);
-
-        if (descriptor.ImplementationType is not null)
-            return (IMessagingTransport)ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType);
-
-        throw new InvalidOperationException("The in-memory transport registration could not be resolved.");
     }
 
     /// <summary>

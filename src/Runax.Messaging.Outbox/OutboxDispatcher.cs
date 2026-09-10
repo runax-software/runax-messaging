@@ -1,36 +1,37 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Runax.Messaging;
+using Microsoft.Extensions.Options;
 using Runax.Messaging.Abstractions;
 
 namespace Runax.Messaging.Outbox;
 
 /// <summary>
-/// Background service that periodically drains pending messages from the <see cref="IOutboxStore"/>
-/// and publishes them to the transport, marking each dispatched on success. When several transports
-/// are registered it publishes to the one selected with <c>PublishTo</c>, matching the publisher.
+/// Background service that periodically drains one bus's pending messages from its
+/// <see cref="IOutboxStore"/> and publishes them to the bus's transport, marking each dispatched
+/// on success. Each bus with an outbox runs its own dispatcher.
 /// </summary>
 internal sealed class OutboxDispatcher(
-    IOutboxStore store,
-    IEnumerable<IMessagingTransport> transports,
-    MessagingPublishOptions publishOptions,
-    OutboxOptions options,
+    string busName,
+    IServiceProvider serviceProvider,
+    IOptionsMonitor<OutboxOptions> optionsMonitor,
     ILogger<OutboxDispatcher> logger)
     : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var transport = PublishTargetSelector.Select(
-            transports as IReadOnlyList<IMessagingTransport> ?? transports.ToArray(),
-            publishOptions.DefaultTransport);
+        var options = optionsMonitor.Get(busName);
+        var store = serviceProvider.GetRequiredKeyedService<IOutboxStore>(busName);
+        var transport = serviceProvider.GetRequiredKeyedService<IMessagingTransport>(busName);
 
-        logger.LogInformation("Outbox dispatcher started, polling every {Interval}.", options.PollingInterval);
+        logger.LogInformation(
+            "Outbox dispatcher for bus '{Bus}' started, polling every {Interval}.", busName, options.PollingInterval);
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                var pending = await store.GetPendingAsync(options.BatchSize, stoppingToken);
+                var pending = await store.GetPendingAsync(busName, options.BatchSize, stoppingToken);
 
                 foreach (var message in pending)
                 {
@@ -47,7 +48,8 @@ internal sealed class OutboxDispatcher(
             catch (Exception ex)
             {
                 // A failed publish leaves the message pending; it is retried on the next poll.
-                logger.LogError(ex, "Outbox dispatch failed; retrying after {Interval}.", options.PollingInterval);
+                logger.LogError(ex,
+                    "Outbox dispatch for bus '{Bus}' failed; retrying after {Interval}.", busName, options.PollingInterval);
             }
 
             try
@@ -60,6 +62,6 @@ internal sealed class OutboxDispatcher(
             }
         }
 
-        logger.LogInformation("Outbox dispatcher shutting down.");
+        logger.LogInformation("Outbox dispatcher for bus '{Bus}' shutting down.", busName);
     }
 }

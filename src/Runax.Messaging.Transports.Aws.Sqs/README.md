@@ -12,32 +12,35 @@ dotnet add package Runax.Messaging.Transports.Aws.Sqs
 
 ## Register
 
+Attach the transport to a bus with its config object:
+
 ```csharp
 using Runax.Messaging;
 using Runax.Messaging.Transports.Aws.Sqs;
 
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddSqs(sqs =>
+    messaging.AddBus(bus =>
     {
-        sqs.Configure(options =>
+        bus.AddTransport(new SqsConfig
         {
-            options.Region = "us-east-1";
+            Region = "us-east-1",
         });
-        sqs.AddConsumer<OrderPlacedConsumer>();
+        bus.AddConsumer<OrderPlacedConsumer>();
     });
 });
 ```
 
-`AddSqs` lives in the `Runax.Messaging.Transports.Aws.Sqs` namespace, so add that `using`.
-Options are validated at startup; pass an `IConfiguration` section to bind them instead of a
-lambda: `AddSqs(builder.Configuration.GetSection("Sqs"))`.
+`SqsConfig` lives in the `Runax.Messaging.Transports.Aws.Sqs` namespace, so add that `using`.
+The config is validated at startup (DataAnnotations, when the `AddBus` block completes); bind it
+from an `IConfiguration` section instead of setting properties:
+`bus.AddTransport<SqsConfig>(builder.Configuration.GetSection("Sqs"))`.
 
-## Options
+## Config
 
-Configure these on `SqsOptions` via `sqs.Configure(o => ...)`.
+Set these directly on `SqsConfig`.
 
-| Option | Meaning | Default | Required? |
+| Property | Meaning | Default | Required? |
 | --- | --- | --- | --- |
 | `Region` | AWS region. | `us-east-1` | No |
 | `AccessKey` | Access key. If null (with `SecretKey`), the default AWS credential chain is used. | `null` | No |
@@ -49,11 +52,13 @@ Configure these on `SqsOptions` via `sqs.Configure(o => ...)`.
 | `VisibilityTimeoutSeconds` | Visibility timeout requested per receive (0–43200), hiding the message while it is processed. | `30` | No |
 | `ExtendVisibilityDuringProcessing` | Periodically extend visibility while a message is handled (including retry backoff) so it does not reappear and get processed twice. | `true` | No |
 | `TopicQueueUrlMap` | Explicit topic → queue-URL map. Unmapped topics are resolved by queue name via `GetQueueUrl`. | empty | No |
+| `RegisterHealthCheck` | Auto-register the `runax:{bus}` health check (inherited from `TransportConfig`). | `true` | No |
 
-Beyond these transport options, settings from the core package can be applied to this broker
-inside the `AddSqs(...)` block — `AddConsumer<T>()`, `WithRetry(...)`, `OnUnroutableMessage(...)`,
-`ConfigureSerialization(...)`, and `UseSerializer<T>()` — each overriding the global default for
-SQS only. See [Configuration & per-broker settings](../../docs/configuration.md).
+Beyond the transport config, settings from the core package apply to the bus that runs this
+transport — `AddConsumer<T>()`, `WithRetry(...)`, `OnUnroutableMessage(...)`,
+`ConfigureSerialization(...)`, and `UseSerializer<T>()` — all inside the same `AddBus` block.
+Two SQS accounts (or regions) are simply two buses, each with its own `SqsConfig`. See
+[Configuration & per-bus settings](../../docs/configuration.md).
 
 ## Behavior
 
@@ -71,20 +76,22 @@ SQS only. See [Configuration & per-broker settings](../../docs/configuration.md)
   reappear on the queue.
 
 For native dead-lettering, configure a redrive policy on the queue and set
-`WithRetry(o => o.Strategy = DeadLetterStrategy.BrokerNative)` in the core registration.
+`bus.WithRetry(o => o.Strategy = DeadLetterStrategy.BrokerNative)` on the bus.
 
 ## Health check
 
-Register a reachability check on `IHealthChecksBuilder`:
+A reachability check named `runax:{bus}` is registered automatically for each bus that runs
+this transport. Opt out per bus:
 
 ```csharp
-builder.Services.AddHealthChecks().AddSqsTransport();
+bus.AddTransport(new SqsConfig { Region = "us-east-1", RegisterHealthCheck = false });
 ```
 
 ## Telemetry
 
 The transport reports `messaging.system = "sqs"` on the spans and metrics emitted
-by the core package (activity source / meter `"Runax.Messaging"`).
+by the core package (activity source / meter `"Runax.Messaging"`); the
+`messaging.runax.bus` tag identifies the bus.
 
 ## License
 

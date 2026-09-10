@@ -1,234 +1,306 @@
-# Configuration & per-broker settings
+# Configuration & per-bus settings
 
-Runax.Messaging is configured inside a single `AddRunaxMessaging(runax => { ... })` block. Most
-settings have a **global** form applied on the `runax` configurator, and several also have a
-**per-broker** form applied inside a transport block (`AddRabbitMq(rabbitmq => { ... })`,
-`AddInMemory(inMemory => { ... })`, and so on). A per-broker setting overrides the global one for
-that broker only; every other broker keeps the global value (or the built-in default when no global
-was set).
+Runax.Messaging is configured inside a single `AddRunaxMessaging(messaging => { ... })` block.
+Everything hangs off **buses**: `messaging.AddBus(bus => { ... })` adds the default bus and
+`messaging.AddBus("name", bus => { ... })` adds a named one. Each bus wraps **exactly one
+transport** (registered with `bus.AddTransport(...)`) plus its own consumers, retry policy,
+serialization, and unroutable-message handling. Several settings also have a **per-topic** form
+applied on the same bus; a per-topic setting overrides the bus-wide one for that topic only.
 
-This page covers what can be set globally, what can be scoped per broker, and how the fallback
-works. For the options each transport exposes (host, region, connection string, ...), see that
-transport's package README.
+This page covers what can be set on a bus, what can be scoped per topic, and how the fallback
+works. For the config properties each transport exposes (host, region, connection string, ...),
+see that transport's package README.
 
 ## Setting reference
 
-| Setting | Global? | Per-broker? | Fallback when not scoped |
-| --- | --- | --- | --- |
-| `AddConsumer<T>()` | Yes (subscribes on every transport) | Yes (subscribes on that broker only) | — |
-| `WithRetry(o => ...)` | Yes | Yes | Global policy, else built-in `RetryOptions` defaults |
-| `WithRetryForTopic("<topic>", o => ...)` | Yes (topic on every broker) | Yes (topic on that broker) | Per-broker, then global policy, then defaults |
-| `OnUnroutableMessage(strategy)` | Yes | Yes | Global strategy, else built-in `DeadLetter` |
-| `OnUnroutableMessage<THandler>()` | Yes | Yes | Global handler, else built-in `DeadLetter` |
-| `ConfigureSerialization(o => ...)` | Yes | Yes | Global JSON options, else defaults |
-| `UseSerializer<T>()` | Yes | Yes | Global serializer, else `System.Text.Json` |
-| `ConfigureSerializationForTopic("<topic>", o => ...)` | Yes (topic on every broker) | Yes (topic on that broker) | Per-broker, then per-topic-global, then global options |
-| `UseSerializerForTopic<T>("<topic>")` | Yes (topic on every broker) | Yes (topic on that broker) | Per-broker, then global serializer |
-| `PublishTo("<system-name>")` | Yes | No (global-only) | Sole registered transport |
-| Transport options (`Configure(o => ...)`) | No | Yes (belong to one broker) | — |
+All of these are methods on the `BusBuilder` inside an `AddBus` block:
 
-`PublishTo` is global-only by design: `IMessagePublisher` publishes to a single target, so choosing
-that target is a global decision (a single registered transport is used automatically). To publish to
-several transports explicitly — for example the same event to both Kafka and SQS — resolve
-`IMessagePublisherFactory` and call `ForTransport("<system-name>")` per broker (see
-[Publishing to several transports](#publishing-to-several-transports-imessagepublisherfactory)).
-Transport options (`Configure`) are inherently per-broker — they describe one broker's connection.
+| Setting | Bus-wide? | Per-topic? | Fallback when not scoped |
+| --- | --- | --- | --- |
+| `AddTransport(config)` / `AddTransport<TConfig>(...)` | Yes (exactly one per bus) | — | — (required; zero or two transports throw at configuration time) |
+| `AddConsumer<T>()` | Yes (subscribes on this bus's transport) | — | — |
+| `Mode = BusMode.PublishOnly / ConsumeOnly` | Yes | — | `PublishAndConsume` |
+| `WithRetry(o => ...)` | Yes | — | Built-in `RetryOptions` defaults |
+| `WithRetryForTopic("<topic>", o => ...)` | — | Yes | Bus policy, then defaults |
+| `OnUnroutableMessage(strategy)` | Yes | No | Built-in `DeadLetter` |
+| `OnUnroutableMessage<THandler>()` | Yes | No | Built-in `DeadLetter` |
+| `ConfigureSerialization(o => ...)` | Yes | — | Container-wide JSON options, else defaults |
+| `UseSerializer<T>()` | Yes | — | `System.Text.Json` |
+| `ConfigureSerializationForTopic("<topic>", o => ...)` | — | Yes | Bus serializer, then default |
+| `UseSerializerForTopic<T>("<topic>")` | — | Yes | Bus serializer, then default |
+
+There is deliberately **no global scope**: nothing configured on one bus leaks into another. An
+application that wants shared defaults across buses writes a helper and applies it to each:
+
+```csharp
+Action<BusBuilder> defaults = bus => bus.WithRetry(o => o.MaxAttempts = 3);
+
+builder.Services.AddRunaxMessaging(messaging =>
+{
+    messaging.AddBus(bus => { bus.AddTransport(new RabbitMqConfig()); defaults(bus); });
+    messaging.AddBus("audit", bus => { bus.AddTransport(new SqsConfig()); defaults(bus); });
+});
+```
 
 ## How scoping and fallback work
 
-Every registered transport has a `SystemName` (`"rabbitmq"`, `"sqs"`, `"in-memory"`, ...). At publish
-and consume time, Runax resolves each scoped setting **by that name**:
+Settings resolve **by bus name** (the identity application code uses; the broker's `SystemName`
+is telemetry only). At publish and consume time, Runax resolves each scoped setting
+most-specific-first:
 
-1. If the setting was configured inside that broker's transport block, the scoped value is used.
-2. Otherwise the global value is used (the one set on `runax`).
+1. If the setting was configured for that topic on that bus (`*ForTopic`), the topic value is used.
+2. Otherwise the bus-wide value is used (the one set on the `BusBuilder`).
 3. Otherwise the built-in default applies.
 
-So a per-broker call never affects other brokers, and omitting it simply falls back a level. This
-mirrors how `AddConsumer<T>()` already works: inside a block it binds to that broker, at the top
-level it binds to all of them.
+Two buses never share policy state — that is the point of having buses. Registering the same
+consumer type on two buses delivers each bus's traffic through that bus's own pipeline.
+
+## Registering the transport
+
+`AddTransport` accepts a pre-built config instance, a delegate, or an `IConfiguration` section
+to bind:
+
+```csharp
+builder.Services.AddRunaxMessaging(messaging =>
+{
+    messaging.AddBus(bus =>
+    {
+        bus.AddTransport(new RabbitMqConfig { HostName = "localhost" });          // instance
+    });
+
+    messaging.AddBus("events", bus =>
+    {
+        bus.AddTransport<KafkaConfig>(c => c.BootstrapServers = "localhost:9092"); // delegate
+    });
+
+    messaging.AddBus("audit", bus =>
+    {
+        bus.AddTransport<SqsConfig>(builder.Configuration.GetSection("Messaging:AuditSqs")); // bound
+    });
+});
+```
+
+Configs are validated with their DataAnnotations when the `AddBus` block completes, so a
+misconfigured bus fails at startup with an `InvalidOperationException` naming the bus. A second
+`AddTransport` on the same bus throws — a bus wraps exactly one transport; register an
+additional bus for an additional broker.
+
+## Bus modes
+
+A bus can declare its relationship with the broker up front via `bus.Mode` (default
+`PublishAndConsume`):
+
+```csharp
+builder.Services.AddRunaxMessaging(messaging =>
+{
+    messaging.AddBus("partner-feed", bus =>
+    {
+        bus.Mode = BusMode.ConsumeOnly;    // publishing on this bus throws at runtime
+        bus.AddTransport<KafkaConfig>(builder.Configuration.GetSection("Messaging:PartnerKafka"));
+        bus.AddConsumer<PartnerEventConsumer>();
+    });
+
+    messaging.AddBus("audit", bus =>
+    {
+        bus.Mode = BusMode.PublishOnly;    // AddConsumer / consume-side policies here throw at configuration time
+        bus.AddTransport(new SqsConfig { Region = "us-east-1" });
+    });
+});
+```
+
+- `PublishOnly` — consumer registrations (and consume-side policies like `WithRetry`) throw when
+  the `AddBus` block completes, and no consumer hosted service is started for the bus.
+- `ConsumeOnly` — `PublishAsync` / `PublishBatchAsync` on the bus throw at runtime, and
+  configuring an outbox throws at configuration time. The consume pipeline's own dead-letter
+  publish still works (it is part of consuming); if your broker credentials genuinely cannot
+  write, use `DeadLetterStrategy.BrokerNative` or disable dead-lettering on that bus.
+
+Beyond guardrails, the mode drives resource allocation: transports see it via
+`TransportContext.Mode` and skip building the unused side (no publish channel pool on a
+`ConsumeOnly` RabbitMQ bus, no subscription resources on a `PublishOnly` bus).
 
 ## Retry policy
 
-`WithRetry` tunes retry backoff, poison handling, and the dead-letter strategy (`RetryOptions`). Set
-it globally, per broker, or both — the per-broker policy wins for its broker and the global policy
-covers the rest:
+`WithRetry` tunes retry backoff, poison handling, and the dead-letter strategy (`RetryOptions`)
+for this bus's consumers. Each bus sets its own policy; a bus without one uses the built-in
+defaults:
 
 ```csharp
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddRabbitMq(rabbitmq =>
+    messaging.AddBus(bus =>
     {
-        rabbitmq.Configure(o => o.HostName = "localhost");
-        rabbitmq.AddConsumer<OrderPlacedConsumer>();
-        rabbitmq.WithRetry(o => o.MaxAttempts = 8);       // RabbitMQ: retry harder
+        bus.AddTransport(new RabbitMqConfig { HostName = "localhost" });
+        bus.AddConsumer<OrderPlacedConsumer>();
+        bus.WithRetry(o => o.MaxAttempts = 8);       // this bus: retry harder
     });
 
-    runax.AddSqs(sqs =>
+    messaging.AddBus("audit", bus =>
     {
-        sqs.Configure(o => o.Region = "us-east-1");
-        sqs.AddConsumer<OrderPlacedConsumer>();
-        // no WithRetry here -> uses the global policy below
+        bus.AddTransport(new SqsConfig { Region = "us-east-1" });
+        bus.AddConsumer<OrderPlacedConsumer>();
+        // no WithRetry here -> built-in RetryOptions defaults
     });
-
-    runax.WithRetry(o => o.MaxAttempts = 3);              // global default (SQS, and any other broker)
 });
 ```
 
-A scoped `RetryOptions` starts from the `RetryOptions` defaults with your action applied on top, and
-is validated with the same DataAnnotations as the global policy.
+A scoped `RetryOptions` starts from the `RetryOptions` defaults with your action applied on top,
+and is validated with the same DataAnnotations as any other policy.
 
-Retry can also be scoped **per topic** with `WithRetryForTopic("<topic>", o => ...)` — at the top level
-(the topic on every broker) or inside a transport block (the topic on that one broker). This is useful
-when a topic's semantics, not its broker, decide how hard to retry: a `payments` command wants more
-attempts than a `telemetry` stream. Selection runs most-specific-first — transport+topic, topic,
-transport, global — so a per-topic policy overrides the per-broker one for that topic while other
-topics keep the broker (or global) policy:
+Retry can also be scoped **per topic** with `WithRetryForTopic("<topic>", o => ...)` — the most
+specific scope, winning over the bus-wide policy for that topic. This is useful when a topic's
+semantics, not its broker, decide how hard to retry: a `payments` command wants more attempts
+than a `telemetry` stream:
 
 ```csharp
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddKafka(kafka =>
+    messaging.AddBus(bus =>
     {
-        kafka.Configure(o => o.BootstrapServers = "localhost:9092");
-        kafka.AddConsumer<PaymentConsumer>();
-        kafka.WithRetry(o => o.MaxAttempts = 5);                 // Kafka default for any topic
-        kafka.WithRetryForTopic("payments", o => o.MaxAttempts = 10); // Kafka + "payments" only
+        bus.AddTransport<KafkaConfig>(c => c.BootstrapServers = "localhost:9092");
+        bus.AddConsumer<PaymentConsumer>();
+        bus.WithRetry(o => o.MaxAttempts = 5);                        // bus default for any topic
+        bus.WithRetryForTopic("payments", o => o.MaxAttempts = 10);   // "payments" on this bus only
+        bus.WithRetryForTopic("telemetry", o => o.MaxAttempts = 1);
     });
-
-    runax.WithRetryForTopic("telemetry", o => o.MaxAttempts = 1); // "telemetry" on every broker
-    runax.WithRetry(o => o.MaxAttempts = 3);                      // global default
 });
 ```
 
-Retry is a **consumer-side** policy: it governs how a failing `HandleAsync` is retried and dead-lettered,
-so per-topic retry keys off the topic a consumer is subscribed to. Publishing has no retry loop of its own.
+Like the bus policy, a per-topic policy starts from the `RetryOptions` defaults with your action
+applied on top.
+
+Retry is a **consumer-side** policy: it governs how a failing `HandleAsync` is retried and
+dead-lettered, so per-topic retry keys off the topic a consumer is subscribed to. Publishing has
+no retry loop of its own.
 
 ## Unroutable-message strategy
 
 `OnUnroutableMessage` decides the fate of a message no consumer accepts (an unhandled contract
-version). Both forms — a built-in `UnroutableStrategy` and a custom `IUnroutableMessageHandler` —
-can be global or per broker:
+version). Both forms — a built-in `UnroutableStrategy` and a custom `IUnroutableMessageHandler`
+— are bus-scoped:
 
 ```csharp
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddRabbitMq(rabbitmq =>
+    messaging.AddBus(bus =>
     {
-        rabbitmq.Configure(o => o.HostName = "localhost");
-        rabbitmq.AddConsumer<OrderV1Consumer>();
-        rabbitmq.OnUnroutableMessage(UnroutableStrategy.Requeue);   // RabbitMQ: requeue
+        bus.AddTransport(new RabbitMqConfig { HostName = "localhost" });
+        bus.AddConsumer<OrderV1Consumer>();
+        bus.OnUnroutableMessage(UnroutableStrategy.Requeue);       // this bus: requeue
     });
 
-    runax.AddSqs(sqs =>
+    messaging.AddBus("audit", bus =>
     {
-        sqs.Configure(o => o.Region = "us-east-1");
-        sqs.AddConsumer<OrderV1Consumer>();
-        sqs.OnUnroutableMessage<QuarantineUnroutableHandler>();     // SQS: custom handler
+        bus.AddTransport(new SqsConfig { Region = "us-east-1" });
+        bus.AddConsumer<OrderV1Consumer>();
+        bus.OnUnroutableMessage<QuarantineUnroutableHandler>();    // this bus: custom handler
     });
 
-    runax.OnUnroutableMessage(UnroutableStrategy.DeadLetter);       // global default (built-in default too)
+    // any bus without OnUnroutableMessage uses the built-in DeadLetter default
 });
 ```
 
 ## Serialization
 
-`ConfigureSerialization` (tweak the `JsonSerializerOptions`) and `UseSerializer<T>()` (swap the body
-serializer entirely) are global or per broker. A scoped `ConfigureSerialization` starts from a copy
-of the global options and applies your action on top, so a broker inherits global settings and
-overrides only what it needs. The framework-owned `__runax` envelope is identical regardless of the
-serializer.
+`ConfigureSerialization` (tweak the `JsonSerializerOptions`) and `UseSerializer<T>()` (swap the
+body serializer entirely) are bus-scoped, with `ConfigureSerializationForTopic` /
+`UseSerializerForTopic<T>` for topic-level overrides. A bus's `ConfigureSerialization` starts
+from a copy of the container's global `JsonSerializerOptions` and applies your action on top, so
+the bus inherits application-wide settings and overrides only what it needs. The framework-owned
+`__runax` envelope is identical regardless of the serializer.
 
 ```csharp
-builder.Services.AddRunaxMessaging(runax =>
+builder.Services.AddRunaxMessaging(messaging =>
 {
-    runax.AddRabbitMq(rabbitmq =>
+    messaging.AddBus(bus =>
     {
-        rabbitmq.Configure(o => o.HostName = "localhost");
-        rabbitmq.AddConsumer<OrderPlacedConsumer>();
-        rabbitmq.ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase); // RabbitMQ only
+        bus.AddTransport(new RabbitMqConfig { HostName = "localhost" });
+        bus.AddConsumer<OrderPlacedConsumer>();
+        bus.ConfigureSerialization(o => o.PropertyNamingPolicy = JsonNamingPolicy.CamelCase); // this bus only
     });
-
-    runax.ConfigureSerialization(o => o.WriteIndented = false);   // global default
 });
 ```
 
 See [Serialization & custom serializers](serialization.md) for details.
 
-## Choosing the publish target (global-only)
+## Choosing the bus to publish on
 
-When more than one transport is registered, `PublishTo` selects which one `IMessagePublisher`
-publishes to. It is a global setting — there is no per-broker form:
+There is no publish-target setting: **a bus always publishes to its only transport**. Which bus
+you publish on is decided at the injection site:
+
+- An **unkeyed** `IBus` resolves the default bus (the parameterless `AddBus`). If no default bus
+  exists but exactly one named bus does, that bus is the unkeyed target; with several named
+  buses and no default, unkeyed resolution throws with the registered bus names listed. A
+  single-bus app therefore never touches bus names.
+- A **named** bus resolves via keyed DI — `[FromKeyedServices("audit")] IBus` — or via
+  `IBusProvider.GetBus("audit")` for dynamic lookup.
 
 ```csharp
-builder.Services.AddRunaxMessaging(runax =>
+public sealed class OrderService(IBus bus)                              // default bus
 {
-    runax.AddRabbitMq(rabbitmq =>
+    public ValueTask PlaceAsync(OrderPlaced evt, CancellationToken ct) =>
+        bus.PublishAsync("orders.placed", evt, ct);
+}
+
+public sealed class AuditTrail([FromKeyedServices("audit")] IBus audit) // named bus
+{
+    public ValueTask RecordAsync(AuditEntry entry, CancellationToken ct) =>
+        audit.PublishAsync("audit.entry", entry, ct);
+}
+```
+
+## Publishing on several buses
+
+To send the same event to more than one broker, inject each bus and publish on both — cross-bus
+flows are always explicit; there is no implicit routing, mirroring, or fallback between buses:
+
+```csharp
+builder.Services.AddRunaxMessaging(messaging =>
+{
+    messaging.AddBus(bus =>
     {
-        rabbitmq.Configure(o => o.HostName = "localhost");
-        rabbitmq.AddConsumer<AuditConsumer>();
+        bus.AddTransport<KafkaConfig>(c => c.BootstrapServers = "localhost:9092");
     });
 
-    runax.AddSqs(sqs =>
+    messaging.AddBus("audit", bus =>
     {
-        sqs.Configure(o => o.Region = "us-east-1");
+        bus.AddTransport(new SqsConfig { Region = "us-east-1" });
     });
-
-    runax.PublishTo("sqs");   // IMessagePublisher publishes to SQS
 });
 ```
 
-## Publishing to several transports (`IMessagePublisherFactory`)
-
-`PublishTo` picks the *one* transport the default `IMessagePublisher` sends to. When you want to send
-the same event to more than one broker — the fan-out that `PublishTo` deliberately does not do —
-resolve `IMessagePublisherFactory` and call `ForTransport("<system-name>")` once per broker. Each call
-returns an `IMessagePublisher` pinned to that transport, and you publish to each explicitly:
-
 ```csharp
-builder.Services.AddRunaxMessaging(runax =>
-{
-    runax.AddKafka(kafka =>
-    {
-        kafka.Configure(o => o.BootstrapServers = "localhost:9092");
-    });
-
-    runax.AddSqs(sqs =>
-    {
-        sqs.Configure(o => o.Region = "us-east-1");
-    });
-});
-```
-
-```csharp
-public sealed class OrderService(IMessagePublisherFactory publishers)
+public sealed class OrderService(
+    IBus main,
+    [FromKeyedServices("audit")] IBus audit)
 {
     public async Task PlaceAsync(OrderPlaced order, CancellationToken cancellationToken)
     {
-        await publishers.ForTransport("kafka").PublishAsync("orders", order, cancellationToken);
-        await publishers.ForTransport("sqs").PublishAsync("orders", order, cancellationToken);
+        await main.PublishAsync("orders", order, cancellationToken);
+        await audit.PublishAsync("orders", order, cancellationToken);
     }
 }
 ```
 
 Notes:
 
-- The two publishes are independent operations — there is no built-in atomic fan-out. If sending to
-  the second broker must not be lost when the first succeeds, drive each transport from its own outbox
-  or add your own coordination.
-- `ForTransport(...)` targets a transport **directly** and does not route through the outbox, even when
-  `AddOutbox()` is configured (the outbox only wraps the default `IMessagePublisher`).
-- An unknown system name throws with the list of registered transports, so typos fail fast.
-- A single `IMessagePublisher` still works unchanged for the common one-transport case; you only reach
-  for the factory when you explicitly need more than one target.
+- The two publishes are independent operations — there is no built-in atomic fan-out. If sending
+  on the second bus must not be lost when the first succeeds, give each bus its own outbox or
+  add your own coordination.
+- `IBusProvider.GetBus("<name>")` throws for an unknown bus name, so typos fail fast;
+  `IBusProvider.Buses` enumerates every configured bus for diagnostics and admin surfaces.
+- A single unkeyed `IBus` still works unchanged for the common one-bus case; you only reach for
+  keyed injection (or the provider) when you have more than one bus.
 
 ## A note on style
 
-Every configuration example in these docs uses the full nested block form — one statement per line
-inside the `AddRunaxMessaging` and transport blocks — rather than a fluent chain. This keeps global
-and per-broker settings visually distinct and easy to diff.
+Every configuration example in these docs uses the full nested block form — one statement per
+line inside the `AddRunaxMessaging` and `AddBus` blocks — rather than a fluent chain. This keeps
+bus-wide and per-topic settings visually distinct and easy to diff.
 
 ## See also
 
 - [Architecture & message flow](architecture.md)
 - [Serialization & custom serializers](serialization.md)
-- Each transport's package README for its transport-specific options.
+- [Migrating from 1.x to 2.0](migrating-to-2.0.md)
+- Each transport's package README for its transport-specific config properties.

@@ -4,13 +4,15 @@ using Runax.Messaging.Abstractions;
 namespace Runax.Messaging.TestKit;
 
 /// <summary>
-/// Fluent builder for a <see cref="MessagingTestHarness"/>. Register the consumers under test, any services
-/// they depend on, and optional messaging tweaks, then call <see cref="StartAsync"/> to spin up a running
-/// host over the in-memory transport.
+/// Fluent builder for a <see cref="MessagingTestHarness"/>. Register the consumers under test, any
+/// services they depend on, and optional messaging tweaks, then call <see cref="StartAsync"/> to
+/// spin up a running host. The harness always creates a default bus over a recording in-memory
+/// transport; add extra recording buses with <see cref="WithBus"/> for multi-bus scenarios.
 /// </summary>
 public sealed class MessagingTestHarnessBuilder
 {
-    private readonly List<Action<MessagingConfigurator>> _configureMessaging = [];
+    private readonly List<Action<BusBuilder>> _configureDefaultBus = [];
+    private readonly List<(string Name, Action<BusBuilder>? Configure)> _extraBuses = [];
     private readonly List<Action<IServiceCollection>> _configureServices = [];
 
     internal MessagingTestHarnessBuilder()
@@ -18,17 +20,15 @@ public sealed class MessagingTestHarnessBuilder
     }
 
     /// <summary>
-    /// Registers a consumer under test. The consumer subscribes to its topic on the harness's in-memory
-    /// transport, exactly as <c>AddConsumer&lt;TConsumer&gt;()</c> inside an <c>AddInMemory</c> block would.
+    /// Registers a consumer under test on the harness's default bus, exactly as
+    /// <c>bus.AddConsumer&lt;TConsumer&gt;()</c> inside an <c>AddBus</c> block would.
     /// </summary>
     /// <typeparam name="TConsumer">The consumer type to register.</typeparam>
     /// <returns>The same builder, to allow chaining.</returns>
     public MessagingTestHarnessBuilder AddConsumer<TConsumer>()
         where TConsumer : class
     {
-        // The harness registers a single in-memory transport, so a top-level AddConsumer subscribes exactly
-        // there — without re-registering the transport (each AddInMemory call adds another one).
-        _configureMessaging.Add(configurator => configurator.AddConsumer<TConsumer>());
+        _configureDefaultBus.Add(bus => bus.AddConsumer<TConsumer>());
         return this;
     }
 
@@ -74,26 +74,42 @@ public sealed class MessagingTestHarnessBuilder
     }
 
     /// <summary>
-    /// Escape hatch for configuring messaging directly on the <see cref="MessagingConfigurator"/> — for example
-    /// <c>WithRetry(...)</c>, <c>OnUnroutableMessage&lt;T&gt;()</c>, or registering a consumer bound to the
-    /// in-memory transport with extra options. The in-memory transport is always registered by the harness.
+    /// Configures the harness's default bus directly — for example <c>bus.WithRetry(...)</c>,
+    /// <c>bus.OnUnroutableMessage&lt;T&gt;()</c>, or <c>bus.UseSerializer&lt;T&gt;()</c>. The
+    /// recording in-memory transport is always registered by the harness; do not add another.
     /// </summary>
-    /// <param name="configure">Action that configures messaging.</param>
+    /// <param name="configure">Action that configures the default bus.</param>
     /// <returns>The same builder, to allow chaining.</returns>
-    public MessagingTestHarnessBuilder ConfigureMessaging(Action<MessagingConfigurator> configure)
+    public MessagingTestHarnessBuilder ConfigureBus(Action<BusBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        _configureMessaging.Add(configure);
+        _configureDefaultBus.Add(configure);
         return this;
     }
 
     /// <summary>
-    /// Builds the container, starts dispatch over the in-memory transport, and returns a running
+    /// Adds an extra named bus to the harness, backed by its own recording in-memory transport, for
+    /// multi-bus scenarios (e.g. asserting that a consumer registered on two buses receives each
+    /// bus's traffic). Deliveries surface in the shared <see cref="MessagingTestHarness.Delivered"/>
+    /// list with <see cref="RecordedMessage.Bus"/> set to <paramref name="name"/>.
+    /// </summary>
+    /// <param name="name">The bus name.</param>
+    /// <param name="configure">Optional block that registers consumers and policies on the bus.</param>
+    /// <returns>The same builder, to allow chaining.</returns>
+    public MessagingTestHarnessBuilder WithBus(string name, Action<BusBuilder>? configure = null)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        _extraBuses.Add((name, configure));
+        return this;
+    }
+
+    /// <summary>
+    /// Builds the container, starts dispatch over the recording transports, and returns a running
     /// <see cref="MessagingTestHarness"/> ready to publish through and assert against. Dispose the harness
     /// (preferably with <c>await using</c>) to stop the host.
     /// </summary>
     /// <param name="cancellationToken">Token to cancel startup.</param>
     /// <returns>A running harness.</returns>
     public Task<MessagingTestHarness> StartAsync(CancellationToken cancellationToken = default) =>
-        MessagingTestHarness.StartAsync(_configureMessaging, _configureServices, cancellationToken);
+        MessagingTestHarness.StartAsync(_configureDefaultBus, _extraBuses, _configureServices, cancellationToken);
 }

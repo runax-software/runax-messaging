@@ -65,17 +65,20 @@ public class RetryAndDeadLetterTests
         builder.Services.AddSingleton(state);
         builder.Services.AddRunaxMessaging(m =>
         {
-            m.AddInMemory()
-                .AddConsumer<ConfigurableConsumer>()
-                .WithRetry(o =>
+            m.AddBus(bus =>
+            {
+                bus.AddTransport(new InMemoryConfig());
+                bus.AddConsumer<ConfigurableConsumer>();
+                bus.WithRetry(o =>
                 {
                     o.MaxAttempts = 3;
                     o.InitialDelay = TimeSpan.FromMilliseconds(1);
                     o.MaxDelay = TimeSpan.FromMilliseconds(5);
                 });
 
-            if (withDeadLetterConsumer)
-                m.AddConsumer<WorkDeadLetterConsumer>();
+                if (withDeadLetterConsumer)
+                    bus.AddConsumer<WorkDeadLetterConsumer>();
+            });
         });
 
         return builder.Build();
@@ -88,7 +91,7 @@ public class RetryAndDeadLetterTests
         using var host = BuildHost(state, withDeadLetterConsumer: false);
         await host.StartAsync();
 
-        var publisher = host.Services.GetRequiredService<IMessagePublisher>();
+        var publisher = host.Services.GetRequiredService<IBus>();
         await publisher.PublishAsync("work", new Work(1));
 
         var handled = await state.Handled.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -105,7 +108,7 @@ public class RetryAndDeadLetterTests
         using var host = BuildHost(state, withDeadLetterConsumer: true);
         await host.StartAsync();
 
-        var publisher = host.Services.GetRequiredService<IMessagePublisher>();
+        var publisher = host.Services.GetRequiredService<IBus>();
         await publisher.PublishAsync("work", new Work(2));
 
         var deadLettered = await state.DeadLettered.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -122,7 +125,7 @@ public class RetryAndDeadLetterTests
         using var host = BuildHost(state, withDeadLetterConsumer: true);
         await host.StartAsync();
 
-        var publisher = host.Services.GetRequiredService<IMessagePublisher>();
+        var publisher = host.Services.GetRequiredService<IBus>();
         await publisher.PublishAsync("work", new Work(3));
 
         var deadLettered = await state.DeadLettered.Task.WaitAsync(TimeSpan.FromSeconds(5));
