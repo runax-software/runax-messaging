@@ -102,5 +102,5 @@ First stable release.
 - **`Runax.Messaging.TestKit`** — a broker-free `MessagingTestHarness` to publish
   messages and assert what consumers handled, retried, or dead-lettered.
 
-[2.0.0]: https://github.com/runax-software/runax-messaging/compare/v1.0.0...v2.0.0
+[2.0.0]: https://github.com/runax-software/runax-messaging/releases/tag/v2.0.0
 [1.0.0]: https://github.com/runax-software/runax-messaging/releases/tag/v1.0.0
