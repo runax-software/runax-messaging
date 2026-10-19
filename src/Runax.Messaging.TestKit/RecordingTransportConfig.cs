@@ -20,5 +20,6 @@ internal sealed class RecordingTransportConfig : TransportConfig
             context.Services.GetRequiredService<MessageRecorder>(),
             context.Services.GetRequiredService<IMessageSerializer>(),
             context.Services.GetRequiredService<RetryOptions>(),
+            context.Services.GetKeyedService<BusHeaderSettings>(context.BusName) ?? BusHeaderSettings.Default,
             context.BusName);
 }

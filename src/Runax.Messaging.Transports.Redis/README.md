@@ -60,7 +60,9 @@ See [Configuration & per-bus settings](../../docs/configuration.md).
 
 ## Behavior
 
-- **Publish** appends the serialized envelope to the stream named after the topic (`XADD`).
+- **Publish** appends the serialized envelope to the stream named after the topic (`XADD`) as the
+  entry's `data` field. **Native headers** are the entry's other fields, so a producer in another
+  language adds them with `XADD stream * data '{...}' tenant acme`. See [Headers & interop](../../docs/headers.md).
 - **Subscribe** ensures a consumer group per stream (created with the stream via `MKSTREAM`), then per
   stream reads new messages (`XREADGROUP >`) and reclaims idle-pending ones (`XAUTOCLAIM`), mapping the
   dispatch verdict:

@@ -64,6 +64,10 @@ Two SQS accounts (or regions) are simply two buses, each with its own `SqsConfig
 
 - **Publish** sends the serialized envelope to the resolved queue. **Batch publish**
   (`PublishBatchAsync`) uses `SendMessageBatch`, chunked at the SQS limit of 10 per call.
+- **Native headers** travel as `String` message attributes. SQS allows 10 per message, so
+  the contract and trace headers go first and the rest stay in the envelope; names SQS
+  rejects are envelope-only too. Received `String` and `Number` attributes become headers.
+  See [Headers & interop](../../docs/headers.md).
 - **Subscribe** runs one pump per queue in parallel and dispatches messages continuously,
   bounded by `MaxConcurrentMessages` (so successive polls overlap rather than draining one
   batch at a time). Each message maps the dispatch verdict to the queue:

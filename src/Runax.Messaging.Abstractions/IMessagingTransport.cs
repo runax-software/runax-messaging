@@ -4,6 +4,12 @@ namespace Runax.Messaging.Abstractions;
 /// Provider SPI for messaging transports. Each transport (in-memory, RabbitMQ, SQS, ...)
 /// implements this to handle broker-specific publish and subscribe operations.
 /// </summary>
+/// <remarks>
+/// The <see cref="TransportMessage"/> overloads add native broker headers. They have default
+/// implementations that ignore headers on publish and report none on receive, which is always safe because
+/// the envelope carries the same metadata. A transport whose broker has a header model overrides them (and
+/// implements the string-based members by delegating to them).
+/// </remarks>
 public interface IMessagingTransport
 {
     /// <summary>
@@ -56,4 +62,51 @@ public interface IMessagingTransport
         string[] topics,
         Func<string, string, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Publishes a message with its native headers. The default implementation drops the headers and calls
+    /// <see cref="PublishAsync(string, string, CancellationToken)"/>; the envelope still carries them.
+    /// </summary>
+    /// <param name="message">The message to publish.</param>
+    /// <param name="cancellationToken">Token to cancel the publish operation.</param>
+    /// <returns>A task that completes once the message has been sent to the broker.</returns>
+    ValueTask PublishAsync(TransportMessage message, CancellationToken cancellationToken = default) =>
+        PublishAsync(message.Topic, message.Body, cancellationToken);
+
+    /// <summary>
+    /// Publishes several messages with their native headers. The default implementation drops the headers
+    /// and calls <see cref="PublishBatchAsync(string, IReadOnlyList{string}, CancellationToken)"/> once per topic.
+    /// </summary>
+    /// <param name="messages">The messages to publish.</param>
+    /// <param name="cancellationToken">Token to cancel the publish operation.</param>
+    /// <returns>A task that completes once every message has been sent to the broker.</returns>
+    async ValueTask PublishBatchAsync(
+        IReadOnlyList<TransportMessage> messages,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var topic in messages.GroupBy(m => m.Topic, StringComparer.Ordinal))
+        {
+            await PublishBatchAsync(topic.Key, topic.Select(m => m.Body).ToList(), cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Subscribes to topics and invokes the callback with each received message and its native headers.
+    /// Blocks until cancellation. The default implementation calls
+    /// <see cref="SubscribeAsync(string[], Func{string, string, ValueTask{MessageDisposition}}, CancellationToken)"/>
+    /// and reports no native headers.
+    /// </summary>
+    /// <param name="topics">Topics to subscribe to.</param>
+    /// <param name="onMessage">
+    /// Callback invoked for each message; the returned <see cref="MessageDisposition"/> settles it as in the
+    /// string-based overload.
+    /// </param>
+    /// <param name="cancellationToken">Token that stops the subscriptions.</param>
+    /// <returns>A task that runs until <paramref name="cancellationToken"/> is signaled.</returns>
+    Task SubscribeAsync(
+        string[] topics,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
+        CancellationToken cancellationToken = default) =>
+        SubscribeAsync(topics, (body, topic) => onMessage(new TransportMessage(topic, body)), cancellationToken);
 }

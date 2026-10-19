@@ -12,7 +12,8 @@ namespace Runax.Messaging.Transports.Azure.EventHubs;
 
 /// <summary>
 /// Azure Event Hubs implementation of <see cref="IMessagingTransport"/>. A runax topic maps to an event
-/// hub of the same name. Publishing sends the envelope through an <see cref="EventHubProducerClient"/>;
+/// hub of the same name. Publishing sends the envelope through an <see cref="EventHubProducerClient"/>, with
+/// native headers as event properties;
 /// consuming runs an <see cref="EventProcessorClient"/> over a consumer group backed by a blob checkpoint
 /// store. Event Hubs has no per-message ack or native dead-letter queue, so the disposition is mapped as:
 /// <c>Acknowledge</c> advances the checkpoint; <c>Requeue</c> skips the checkpoint so the partition is
@@ -36,33 +37,47 @@ internal sealed class AzureEventHubsTransport : IMessagingTransport, IDisposable
 
     public string SystemName => TransportName;
 
-    public async ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default)
+    public ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default) =>
+        PublishAsync(new TransportMessage(topic, envelopeJson), cancellationToken);
+
+    public async ValueTask PublishAsync(TransportMessage message, CancellationToken cancellationToken = default)
     {
-        var producer = GetProducer(topic);
+        var producer = GetProducer(message.Topic);
         using var batch = await producer.CreateBatchAsync(cancellationToken).ConfigureAwait(false);
-        if (!batch.TryAdd(new EventData(Encoding.UTF8.GetBytes(envelopeJson))))
-            throw new InvalidOperationException($"Event for topic '{topic}' is too large for an Event Hubs batch.");
+        if (!batch.TryAdd(ToEventData(message)))
+            throw new InvalidOperationException($"Event for topic '{message.Topic}' is too large for an Event Hubs batch.");
 
         await producer.SendAsync(batch, cancellationToken).ConfigureAwait(false);
     }
 
-    public async ValueTask PublishBatchAsync(
+    public ValueTask PublishBatchAsync(
         string topic,
         IReadOnlyList<string> envelopeJsons,
+        CancellationToken cancellationToken = default) =>
+        PublishBatchAsync(envelopeJsons.Select(e => new TransportMessage(topic, e)).ToList(), cancellationToken);
+
+    public async ValueTask PublishBatchAsync(
+        IReadOnlyList<TransportMessage> messages,
         CancellationToken cancellationToken = default)
     {
-        if (envelopeJsons.Count == 0)
-            return;
+        foreach (var topic in messages.GroupBy(m => m.Topic, StringComparer.Ordinal))
+            await PublishTopicBatchAsync(topic.Key, topic.ToList(), cancellationToken).ConfigureAwait(false);
+    }
 
+    private async ValueTask PublishTopicBatchAsync(
+        string topic,
+        List<TransportMessage> messages,
+        CancellationToken cancellationToken)
+    {
         var producer = GetProducer(topic);
 
         // Event Hubs batches are size-bounded; roll over to a new batch whenever an event does not fit.
         var batch = await producer.CreateBatchAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            foreach (var envelopeJson in envelopeJsons)
+            foreach (var message in messages)
             {
-                var eventData = new EventData(Encoding.UTF8.GetBytes(envelopeJson));
+                var eventData = ToEventData(message);
                 if (batch.TryAdd(eventData))
                     continue;
 
@@ -86,9 +101,15 @@ internal sealed class AzureEventHubsTransport : IMessagingTransport, IDisposable
         }
     }
 
-    public async Task SubscribeAsync(
+    public Task SubscribeAsync(
         string[] topics,
         Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        CancellationToken cancellationToken = default) =>
+        SubscribeAsync(topics, message => onMessage(message.Body, message.Topic), cancellationToken);
+
+    public async Task SubscribeAsync(
+        string[] topics,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken = default)
     {
         _options.EnsureCheckpointStoreConfigured();
@@ -145,7 +166,7 @@ internal sealed class AzureEventHubsTransport : IMessagingTransport, IDisposable
     private async Task OnEventAsync(
         ProcessEventArgs args,
         string topic,
-        Func<string, string, ValueTask<MessageDisposition>> onMessage)
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage)
     {
         if (!args.HasEvent)
             return;
@@ -154,7 +175,8 @@ internal sealed class AzureEventHubsTransport : IMessagingTransport, IDisposable
         try
         {
             var json = Encoding.UTF8.GetString(args.Data.EventBody.ToArray());
-            disposition = await onMessage(json, topic).ConfigureAwait(false);
+            disposition = await onMessage(new TransportMessage(topic, json, ReadHeaders(args.Data.Properties)))
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -188,7 +210,10 @@ internal sealed class AzureEventHubsTransport : IMessagingTransport, IDisposable
             {
                 var producer = GetProducer(deadLetterTopic);
                 using var batch = await producer.CreateBatchAsync(args.CancellationToken).ConfigureAwait(false);
-                batch.TryAdd(new EventData(args.Data.EventBody.ToArray()));
+                var deadLetter = new EventData(args.Data.EventBody.ToArray());
+                foreach (var (key, value) in args.Data.Properties)
+                    deadLetter.Properties[key] = value;
+                batch.TryAdd(deadLetter);
                 await producer.SendAsync(batch, args.CancellationToken).ConfigureAwait(false);
                 _logger.LogInformation("Dead-lettered Event Hubs message from '{Topic}' to '{DeadLetterTopic}'.",
                     topic, deadLetterTopic);
@@ -209,6 +234,30 @@ internal sealed class AzureEventHubsTransport : IMessagingTransport, IDisposable
 
         // Advance past the message in both cases so it is not reprocessed.
         await args.UpdateCheckpointAsync(args.CancellationToken).ConfigureAwait(false);
+    }
+
+    internal static EventData ToEventData(TransportMessage message)
+    {
+        var eventData = new EventData(Encoding.UTF8.GetBytes(message.Body));
+        foreach (var (key, value) in message.Headers)
+            eventData.Properties[key] = value;
+
+        return eventData;
+    }
+
+    internal static Dictionary<string, string>? ReadHeaders(IDictionary<string, object> properties)
+    {
+        if (properties.Count == 0)
+            return null;
+
+        var headers = new Dictionary<string, string>(properties.Count, StringComparer.Ordinal);
+        foreach (var (key, value) in properties)
+        {
+            if (MessageHeaders.FormatValue(value) is { } text)
+                headers[key] = text;
+        }
+
+        return headers;
     }
 
     private EventHubProducerClient GetProducer(string topic) =>

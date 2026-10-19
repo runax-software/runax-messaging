@@ -10,7 +10,8 @@ using Runax.Messaging.Abstractions;
 namespace Runax.Messaging.Transports.Aws.Sqs;
 
 /// <summary>
-/// Amazon SQS implementation of <see cref="IMessagingTransport"/>. Topics map to SQS queue names or URLs.
+/// Amazon SQS implementation of <see cref="IMessagingTransport"/>. Topics map to SQS queue names or URLs, and
+/// native headers travel as message attributes (at most 10; see <see cref="SqsMessageAttributes"/>).
 /// </summary>
 internal sealed class SqsTransport : IMessagingTransport, IDisposable
 {
@@ -44,40 +45,53 @@ internal sealed class SqsTransport : IMessagingTransport, IDisposable
 
     public string SystemName => TransportName;
 
-    public async ValueTask PublishAsync(
-        string topic,
-        string envelopeJson,
-        CancellationToken cancellationToken = default)
+    public ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default) =>
+        PublishAsync(new TransportMessage(topic, envelopeJson), cancellationToken);
+
+    public async ValueTask PublishAsync(TransportMessage message, CancellationToken cancellationToken = default)
     {
-        var queueUrl = await ResolveQueueUrlAsync(topic, cancellationToken);
+        var queueUrl = await ResolveQueueUrlAsync(message.Topic, cancellationToken);
 
         await _client.Value.SendMessageAsync(new SendMessageRequest
         {
             QueueUrl = queueUrl,
-            MessageBody = envelopeJson
+            MessageBody = message.Body,
+            MessageAttributes = SqsMessageAttributes.FromHeaders(message.Headers)
         }, cancellationToken);
     }
 
-    public async ValueTask PublishBatchAsync(
+    public ValueTask PublishBatchAsync(
         string topic,
         IReadOnlyList<string> envelopeJsons,
+        CancellationToken cancellationToken = default) =>
+        PublishBatchAsync(envelopeJsons.Select(e => new TransportMessage(topic, e)).ToList(), cancellationToken);
+
+    public async ValueTask PublishBatchAsync(
+        IReadOnlyList<TransportMessage> messages,
         CancellationToken cancellationToken = default)
     {
-        if (envelopeJsons.Count == 0)
-            return;
+        foreach (var topic in messages.GroupBy(m => m.Topic, StringComparer.Ordinal))
+            await PublishTopicBatchAsync(topic.Key, topic.ToList(), cancellationToken);
+    }
 
+    private async ValueTask PublishTopicBatchAsync(
+        string topic,
+        List<TransportMessage> messages,
+        CancellationToken cancellationToken)
+    {
         var queueUrl = await ResolveQueueUrlAsync(topic, cancellationToken);
 
         // SendMessageBatch accepts at most 10 entries per call.
-        for (var offset = 0; offset < envelopeJsons.Count; offset += 10)
+        for (var offset = 0; offset < messages.Count; offset += 10)
         {
-            var entries = new List<SendMessageBatchRequestEntry>(Math.Min(10, envelopeJsons.Count - offset));
-            for (var i = offset; i < offset + 10 && i < envelopeJsons.Count; i++)
+            var entries = new List<SendMessageBatchRequestEntry>(Math.Min(10, messages.Count - offset));
+            for (var i = offset; i < offset + 10 && i < messages.Count; i++)
             {
                 entries.Add(new SendMessageBatchRequestEntry
                 {
                     Id = (i - offset).ToString(CultureInfo.InvariantCulture),
-                    MessageBody = envelopeJsons[i]
+                    MessageBody = messages[i].Body,
+                    MessageAttributes = SqsMessageAttributes.FromHeaders(messages[i].Headers)
                 });
             }
 
@@ -96,9 +110,15 @@ internal sealed class SqsTransport : IMessagingTransport, IDisposable
         }
     }
 
-    public async Task SubscribeAsync(
+    public Task SubscribeAsync(
         string[] topics,
         Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        CancellationToken cancellationToken = default) =>
+        SubscribeAsync(topics, message => onMessage(message.Body, message.Topic), cancellationToken);
+
+    public async Task SubscribeAsync(
+        string[] topics,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken = default)
     {
         var topicQueueMap = new Dictionary<string, string>();
@@ -132,7 +152,7 @@ internal sealed class SqsTransport : IMessagingTransport, IDisposable
     private async Task PumpQueueAsync(
         string topic,
         string queueUrl,
-        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         SemaphoreSlim concurrencyLimiter,
         CancellationToken cancellationToken)
     {
@@ -147,7 +167,8 @@ internal sealed class SqsTransport : IMessagingTransport, IDisposable
                     QueueUrl = queueUrl,
                     MaxNumberOfMessages = _options.MaxNumberOfMessages,
                     WaitTimeSeconds = _options.WaitTimeSeconds,
-                    VisibilityTimeout = _options.VisibilityTimeoutSeconds
+                    VisibilityTimeout = _options.VisibilityTimeoutSeconds,
+                    MessageAttributeNames = ["All"]
                 }, cancellationToken);
 
                 foreach (var message in response.Messages ?? [])
@@ -178,7 +199,7 @@ internal sealed class SqsTransport : IMessagingTransport, IDisposable
         Message message,
         string topic,
         string queueUrl,
-        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         SemaphoreSlim concurrencyLimiter,
         CancellationToken cancellationToken)
     {
@@ -216,7 +237,7 @@ internal sealed class SqsTransport : IMessagingTransport, IDisposable
         Message message,
         string topic,
         string queueUrl,
-        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken)
     {
         // Keep renewing the message's visibility while the pipeline (including in-process retry backoff)
@@ -228,7 +249,8 @@ internal sealed class SqsTransport : IMessagingTransport, IDisposable
 
         try
         {
-            return await onMessage(message.Body, topic);
+            return await onMessage(
+                new TransportMessage(topic, message.Body, SqsMessageAttributes.ToHeaders(message.MessageAttributes)));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

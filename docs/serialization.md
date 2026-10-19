@@ -20,12 +20,14 @@ attached under a single reserved key, `__runax`:
 }
 ```
 
-Two consequences fall out of this shape:
+Three consequences fall out of this shape:
 
-- **The envelope is self-identifying.** Presence of `__runax` means "a Runax message"; absence means "not
-  ours." There's no guessing.
+- **The key appears only when there is metadata.** A message with no contract, no headers, and no active trace
+  is published as plain JSON. Missing and empty `__runax` read identically.
 - **Interop works both ways.** A consumer outside this library sees a normal object and ignores `__runax`; and
   a message produced *outside* this library (which has no `__runax`) is read as a plain body — see below.
+- **Metadata is also sent natively.** The same headers and contract metadata are written as native broker
+  headers as well, and on receive the two copies are merged. See [Headers & interop](headers.md).
 
 Two rules for the default serializer:
 

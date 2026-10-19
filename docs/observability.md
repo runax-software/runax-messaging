@@ -62,16 +62,19 @@ deserialized at all (a span is still started so the failure is visible in traces
 
 ### Trace-context propagation
 
-Runax.Messaging propagates W3C trace context **through the envelope headers**, so a
+Runax.Messaging propagates W3C trace context **through the message headers**, so a
 publish in one service and its processing in another land in the same distributed
 trace:
 
 - **Publish** — the producer span's context is injected into the outgoing headers via
   `DistributedContextPropagator.Current` (the standard `traceparent` / `tracestate`
-  fields), which then travel inside the envelope's `__runax.headers`.
+  fields), which then travel inside the envelope's `__runax.headers` and as native broker
+  headers.
 - **Process** — the consumer side extracts `traceparent` / `tracestate` from the
-  received headers and starts the `{topic} process` span as a **child of the
-  producer span**, carrying the trace state across.
+  received headers (native and envelope, merged per the bus's `HeaderPrecedence`) and
+  starts the `{topic} process` span as a **child of the producer span**, carrying the trace
+  state across. A producer in another language whose OpenTelemetry instrumentation sets
+  native `traceparent` joins the same trace.
 
 The result: `HTTP request → orders publish → orders process → downstream work` shows
 up as one trace across services, on every transport, with no broker-specific

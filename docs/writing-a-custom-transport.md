@@ -101,6 +101,44 @@ Contract notes:
 - `PublishBatchAsync` is a **default interface method** that publishes one at a time, so you get
   it for free. Override it only if your broker has a native batch API (as SQS and RabbitMQ do).
 
+### Optional: native headers
+
+Message metadata (headers, trace context, contract name and version) always travels in the
+envelope, so the transport above already works. If your broker has a header model, also carry
+that metadata natively by implementing the `TransportMessage` overloads, which have defaults
+that ignore headers:
+
+```csharp
+public ValueTask PublishAsync(TransportMessage message, CancellationToken cancellationToken = default)
+{
+    // send message.Body to message.Topic, with message.Headers as broker headers
+    return ValueTask.CompletedTask;
+}
+
+public ValueTask PublishBatchAsync(IReadOnlyList<TransportMessage> messages, CancellationToken cancellationToken = default)
+{
+    // as above, for each message (or with a native batch API)
+    return ValueTask.CompletedTask;
+}
+
+public Task SubscribeAsync(
+    string[] topics,
+    Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
+    CancellationToken cancellationToken = default)
+{
+    // for each received message:
+    //   var disposition = await onMessage(new TransportMessage(topic, body, brokerHeaders));
+    ...
+}
+```
+
+Then have the string-based members delegate to them (for example
+`PublishAsync(topic, envelopeJson)` → `PublishAsync(new TransportMessage(topic, envelopeJson))`),
+so there is one code path. Implement **both** publish overloads: the default batch drops headers.
+`MessageHeaders.InPriorityOrder` orders headers for brokers that cap how many a message may carry,
+and `MessageHeaders.FormatValue` turns typed broker values into strings. Headers that don't fit
+can simply be skipped, because the envelope still carries them. See [Headers & interop](headers.md).
+
 ## 3. Derive `TransportConfig`
 
 This is how callers select your transport — instead of shipping an `Add<Broker>` extension

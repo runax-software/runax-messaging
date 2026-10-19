@@ -11,7 +11,7 @@ namespace Runax.Messaging.Transports.Google.PubSub;
 /// <summary>
 /// Google Cloud Pub/Sub implementation of <see cref="IMessagingTransport"/>. A runax topic maps to a
 /// Pub/Sub topic for publishing and to a subscription (via <see cref="GooglePubSubConfig.TopicSubscriptionMap"/>)
-/// for consuming.
+/// for consuming. Native headers travel as message attributes (see <see cref="GooglePubSubAttributes"/>).
 /// </summary>
 internal sealed class GooglePubSubTransport(GooglePubSubConfig options, ILogger<GooglePubSubTransport> logger)
     : IMessagingTransport, IDisposable
@@ -22,10 +22,23 @@ internal sealed class GooglePubSubTransport(GooglePubSubConfig options, ILogger<
 
     public string SystemName => TransportName;
 
-    public async ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default)
+    public ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default) =>
+        PublishAsync(new TransportMessage(topic, envelopeJson), cancellationToken);
+
+    public async ValueTask PublishAsync(TransportMessage message, CancellationToken cancellationToken = default)
     {
-        var publisher = await GetPublisherAsync(topic).ConfigureAwait(false);
-        await publisher.PublishAsync(new PubsubMessage { Data = ByteString.CopyFromUtf8(envelopeJson) }).ConfigureAwait(false);
+        var publisher = await GetPublisherAsync(message.Topic).ConfigureAwait(false);
+        var pubsubMessage = new PubsubMessage { Data = ByteString.CopyFromUtf8(message.Body) };
+        GooglePubSubAttributes.Write(message.Headers, pubsubMessage.Attributes);
+        await publisher.PublishAsync(pubsubMessage).ConfigureAwait(false);
+    }
+
+    public async ValueTask PublishBatchAsync(
+        IReadOnlyList<TransportMessage> messages,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var message in messages)
+            await PublishAsync(message, cancellationToken).ConfigureAwait(false);
     }
 
     private Task<PublisherClient> GetPublisherAsync(string topic) =>
@@ -35,9 +48,15 @@ internal sealed class GooglePubSubTransport(GooglePubSubConfig options, ILogger<
             EmulatorDetection = EmulatorDetection.EmulatorOrProduction
         }.BuildAsync());
 
-    public async Task SubscribeAsync(
+    public Task SubscribeAsync(
         string[] topics,
         Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        CancellationToken cancellationToken = default) =>
+        SubscribeAsync(topics, message => onMessage(message.Body, message.Topic), cancellationToken);
+
+    public async Task SubscribeAsync(
+        string[] topics,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken = default)
     {
         var subscribers = new List<SubscriberClient>();
@@ -61,7 +80,10 @@ internal sealed class GooglePubSubTransport(GooglePubSubConfig options, ILogger<
                 MessageDisposition disposition;
                 try
                 {
-                    disposition = await onMessage(message.Data.ToStringUtf8(), subscriptionTopic).ConfigureAwait(false);
+                    disposition = await onMessage(new TransportMessage(
+                        subscriptionTopic,
+                        message.Data.ToStringUtf8(),
+                        GooglePubSubAttributes.Read(message.Attributes))).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {

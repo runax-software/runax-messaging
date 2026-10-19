@@ -13,7 +13,8 @@ namespace Runax.Messaging.Transports.Aws.Sns;
 
 /// <summary>
 /// Amazon SNS implementation of <see cref="IMessagingTransport"/>. Publishing goes to an SNS topic;
-/// consuming polls an SQS queue subscribed to that topic and unwraps the SNS notification envelope.
+/// consuming polls an SQS queue subscribed to that topic and unwraps the SNS notification envelope. Native
+/// headers travel as message attributes (at most 10; see <see cref="SnsMessageAttributes"/>).
 /// </summary>
 internal sealed class SnsTransport : IMessagingTransport, IDisposable
 {
@@ -57,15 +58,37 @@ internal sealed class SnsTransport : IMessagingTransport, IDisposable
 
     private AWSCredentials Credentials => new BasicAWSCredentials(_options.AccessKey, _options.SecretKey);
 
-    public async ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default)
+    public ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default) =>
+        PublishAsync(new TransportMessage(topic, envelopeJson), cancellationToken);
+
+    public async ValueTask PublishAsync(TransportMessage message, CancellationToken cancellationToken = default)
     {
-        var topicArn = await ResolveTopicArnAsync(topic, cancellationToken).ConfigureAwait(false);
-        await _sns.Value.PublishAsync(topicArn, envelopeJson, cancellationToken).ConfigureAwait(false);
+        var topicArn = await ResolveTopicArnAsync(message.Topic, cancellationToken).ConfigureAwait(false);
+        await _sns.Value.PublishAsync(new PublishRequest
+        {
+            TopicArn = topicArn,
+            Message = message.Body,
+            MessageAttributes = SnsMessageAttributes.FromHeaders(message.Headers)
+        }, cancellationToken).ConfigureAwait(false);
     }
+
+    public async ValueTask PublishBatchAsync(
+        IReadOnlyList<TransportMessage> messages,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var message in messages)
+            await PublishAsync(message, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task SubscribeAsync(
+        string[] topics,
+        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        CancellationToken cancellationToken = default) =>
+        SubscribeAsync(topics, message => onMessage(message.Body, message.Topic), cancellationToken);
 
     public async Task SubscribeAsync(
         string[] topics,
-        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken = default)
     {
         var pumps = new List<Task>();
@@ -98,7 +121,7 @@ internal sealed class SnsTransport : IMessagingTransport, IDisposable
     private async Task PumpQueueAsync(
         string topic,
         string queueUrl,
-        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
@@ -110,7 +133,8 @@ internal sealed class SnsTransport : IMessagingTransport, IDisposable
                     QueueUrl = queueUrl,
                     MaxNumberOfMessages = _options.MaxNumberOfMessages,
                     WaitTimeSeconds = _options.WaitTimeSeconds,
-                    VisibilityTimeout = _options.VisibilityTimeoutSeconds
+                    VisibilityTimeout = _options.VisibilityTimeoutSeconds,
+                    MessageAttributeNames = ["All"]
                 }, cancellationToken).ConfigureAwait(false);
 
                 foreach (var message in (response.Messages ?? []).TakeWhile(_ => !cancellationToken.IsCancellationRequested))
@@ -118,7 +142,7 @@ internal sealed class SnsTransport : IMessagingTransport, IDisposable
                     MessageDisposition disposition;
                     try
                     {
-                        disposition = await onMessage(UnwrapSnsBody(message.Body), topic).ConfigureAwait(false);
+                        disposition = await onMessage(ToTransportMessage(message, topic)).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -150,9 +174,19 @@ internal sealed class SnsTransport : IMessagingTransport, IDisposable
         }
     }
 
-    // SNS→SQS without raw message delivery wraps the payload in a notification envelope; unwrap it.
-    // With raw delivery (or an already-unwrapped body) the body is returned unchanged.
-    private static string UnwrapSnsBody(string body)
+    // With raw message delivery, SNS attributes arrive as SQS message attributes; without it, they ride in the
+    // notification envelope, which UnwrapSnsBody reads.
+    internal static TransportMessage ToTransportMessage(Amazon.SQS.Model.Message message, string topic)
+    {
+        var headers = SnsMessageAttributes.ToHeaders(message.MessageAttributes)
+            ?? new Dictionary<string, string>(StringComparer.Ordinal);
+        var body = UnwrapSnsBody(message.Body, headers);
+        return new TransportMessage(topic, body, headers);
+    }
+
+    // SNS→SQS without raw message delivery wraps the payload in a notification envelope; unwrap it and collect
+    // its message attributes. With raw delivery (or an already-unwrapped body) the body is returned unchanged.
+    private static string UnwrapSnsBody(string body, Dictionary<string, string> headers)
     {
         try
         {
@@ -163,6 +197,7 @@ internal sealed class SnsTransport : IMessagingTransport, IDisposable
                 && document.RootElement.TryGetProperty("Message", out var message)
                 && message.ValueKind == JsonValueKind.String)
             {
+                SnsMessageAttributes.ReadNotificationAttributes(document.RootElement, headers);
                 return message.GetString()!;
             }
         }

@@ -20,9 +20,15 @@ public sealed class RedisIntegrationTests
         Environment.GetEnvironmentVariable("REDIS_HOST") ?? "localhost:6380",
     ];
 
+    private static readonly Dictionary<string, string> ProbeHeaders = new()
+    {
+        ["tenant"] = "acme",
+        [MessageHeaders.TraceParent] = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+    };
+
     [Theory]
     [MemberData(nameof(Engines))]
-    public async Task Transport_round_trips_publish_to_subscribe(string configuration)
+    public async Task Transport_round_trips_the_envelope_and_native_headers(string configuration)
     {
         await using var connection = await ConnectionMultiplexer.ConnectAsync(configuration);
         var topic = $"runax-test-{Guid.NewGuid():N}";
@@ -39,12 +45,12 @@ public sealed class RedisIntegrationTests
             await using var provider = services.BuildServiceProvider();
             var transport = provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
 
-            var received = new TaskCompletionSource<string>();
+            var received = new TaskCompletionSource<TransportMessage>();
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
 
-            var subscription = transport.SubscribeAsync([topic], (json, _) =>
+            var subscription = transport.SubscribeAsync([topic], message =>
             {
-                received.TrySetResult(json);
+                received.TrySetResult(message);
                 return ValueTask.FromResult(MessageDisposition.Acknowledge);
             }, cts.Token);
 
@@ -52,10 +58,12 @@ public sealed class RedisIntegrationTests
             await Task.Delay(500);
 
             var envelope = $$"""{"probe":"{{Guid.NewGuid():N}}"}""";
-            await transport.PublishAsync(topic, envelope);
+            await transport.PublishAsync(new TransportMessage(topic, envelope, ProbeHeaders));
 
             var result = await received.Task.WaitAsync(TimeSpan.FromSeconds(15));
-            result.ShouldBe(envelope);
+            result.Body.ShouldBe(envelope);
+            result.Headers.ShouldContainKeyAndValue("tenant", "acme");
+            result.Headers.ShouldContainKeyAndValue(MessageHeaders.TraceParent, ProbeHeaders[MessageHeaders.TraceParent]);
 
             await cts.CancelAsync();
             try
