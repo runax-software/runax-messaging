@@ -16,6 +16,10 @@
   the existing name and version slots, so transports don't change.
 - **Matching.** Consumers match the `$id` exactly. Compatibility is proven in CI, not worked
   out at runtime. A consumer type can list extra `$id`s it can read, and CI checks that claim.
+- **Identity is optional on the wire.** A message that carries neither a `$id` nor an
+  integer is routed by validating its body against the schemas its topic's consumers
+  declare. If several lines that reach different consumers accept it, it's unroutable
+  rather than guessed. A bus can require identity instead.
 - **Source of truth.** A committed schema file per `$id`. .NET-owned contracts export it from
   the C# type with `JsonSchemaExporter`, which is AOT-clean (verified below), and CI fails if
   the file drifts from the type. Go, Java and Node teams either author the file by hand or
@@ -166,12 +170,16 @@ The header is merged with the envelope copy like the existing contract headers: 
 with `HeaderPrecedence` deciding conflicts, and it isn't repeated in `MessageContext.Headers`.
 `MessageContext` gains `string? ContractSchema`.
 
-A producer in another language just sets the header:
+A producer in another language can set the header, or send nothing at all. **Identity on
+the wire is optional.** A message with no `$id` and no integer is routed by validating its
+body against the schemas its topic's consumers declare (§4).
 
 ```go
 producer.Produce(&kafka.Message{
     TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
     Value:          body,
+    // Optional. Without these headers, a Runax consumer routes the message by validating the
+    // body against the schemas it declares (§4). Setting them is cheaper, and unambiguous.
     Headers: []kafka.Header{
         {Key: "runax-contract-schema", Value: []byte("https://contracts.acme.dev/orders/order-placed/v2")},
         {Key: "runax-contract-version", Value: []byte("2")}, // only while 2.x consumers remain (§8)
@@ -210,10 +218,13 @@ never something the runtime infers.
 ### The rule
 
 For each consumer, let *S* be its type's `Schema` plus `Reads` (empty without `Schema`), and
-*V* its legacy integer (possibly absent). The dispatcher accepts the consumer when:
+*V* its legacy integer (possibly absent). *Inferred* is the set of `$id`s the body validated
+against when the message carried no identity (next section), and is empty otherwise. The
+dispatcher accepts the consumer when:
 
 ```csharp
-static bool Accepts(IReadOnlySet<string> s, int? v, string? wireSchema, int? wireVersion)
+static bool Accepts(IReadOnlySet<string> s, int? v, string? wireSchema, int? wireVersion,
+    IReadOnlySet<string> inferred)
 {
     if (s.Count == 0 && v is null)
         return true;                              // unversioned: accepts everything, as today
@@ -221,9 +232,15 @@ static bool Accepts(IReadOnlySet<string> s, int? v, string? wireSchema, int? wir
     if (wireSchema is not null && s.Count > 0)
         return s.Contains(wireSchema);            // both sides have schema ids: they decide
 
-    return wireVersion is not null && v == wireVersion;   // otherwise fall back to the integer
+    if (wireVersion is not null)
+        return v == wireVersion;                  // otherwise fall back to the integer
+
+    return wireSchema is null && inferred.Overlaps(s);   // no identity at all: route by validation
 }
 ```
+
+The precedence is: a wire `$id` decides when present, from the envelope or a header. Without
+one, the integer decides. Only a message that carries neither is routed by validation.
 
 | Consumer declares | Wire carries | Result |
 | --- | --- | --- |
@@ -232,12 +249,72 @@ static bool Accepts(IReadOnlySet<string> s, int? v, string? wireSchema, int? wir
 | `Schema` (+ int) | A `$id` in `Reads` | Delivered |
 | `Schema` + int 2 | Different `$id`, int 2 | **Not delivered.** A mismatched `$id` is exactly the drift this feature exists to catch, so there's no fallback to the integer here. |
 | `Schema` + int 2 | No `$id`, int 2 (2.x or foreign producer) | Delivered by the integer |
-| `Schema` only (3.0) | No `$id`, int 2 | Not delivered |
+| `Schema` only (3.0) | No `$id`, int 2 | Not delivered. The message claims an identity, just not one this consumer declares, so it isn't validated (open question 27). |
+| `Schema` (+ int) | **No `$id`, no int** | **Delivered if the body validates against one of the consumer's lines, and the match isn't ambiguous** (next section) |
 | int 2 only (legacy) | `$id` + int 2 (dual-writing producer) | Delivered by the integer |
 | int 2 only (legacy) | `$id` only | Not delivered |
+| int 2 only (legacy) | No `$id`, no int | Not delivered: there's no schema to validate against (unchanged) |
 
 Because `$id`s are globally unique, several message types can share a topic and still route
 correctly, which today's integer can't do.
+
+### Messages without identity: routing by validation
+
+A producer doesn't have to say which contract it sent. A message whose envelope and headers
+carry neither a `$id` nor an integer is routed by validating it against what the consumers
+declare. That covers foreign producers that send plain JSON, and Runax producers of types
+without `[MessageContract]`.
+
+1. **Candidates.** The candidate lines are the `$id`s in the *S* sets of the topic's
+   consumers on this bus. Each candidate's canonical document comes from the embedded schema
+   provider (§5).
+2. **Validate once per line.** Core parses the body once, with `__runax` already removed,
+   and evaluates it against each candidate. *Inferred* is the set of lines that accept it.
+3. **Resolve ambiguity.** Readers ignore unknown properties (§6), so a v2 body often also
+   validates against the v1 schema. *Inferred* is ambiguous when two of its lines would
+   reach different consumers, meaning some consumer declares one line but not the other. An
+   ambiguous message is unroutable **as a whole**: it isn't delivered to anyone, including
+   accept-all consumers, so that it can be replayed once identity is added (open
+   question 25).
+   - Lines whose consumers are the same don't conflict. That happens with a type that
+     declares v3 with `Reads` v2, or when every consumer reads both lines.
+   - With one line per topic, which is the common case, ambiguity never arises.
+4. **No match.** If no candidate accepts the body and no unversioned consumer exists, the
+   message is unroutable.
+
+More rules:
+
+- **Routing validation is separate from `ValidateContracts`.** It runs whenever a message
+  has no identity and the topic has schema-declaring consumers, even when the bus's
+  `Report`/`Enforce` validation is off, or when library validation is off in favor of the
+  broker (§7). Routing needs an answer in-process. The cost only applies to unidentified
+  messages, and a small number of lines per topic.
+- **The result doubles as consume-side validation.** A message delivered this way has
+  already passed its consumer's line, so the §6 consume check is skipped for it.
+- **Inferred identity stays separate from claimed identity.** `MessageContext.ContractSchema`
+  keeps reporting only what the wire carried, which here is nothing. The lines the body
+  matched go on a new `MessageContext.InferredContractSchemas` and the process span
+  (`messaging.runax.contract.inferred`), so handlers and logs can tell a claim from a guess.
+- **Dead-letter copies don't get the inferred `$id` stamped on them.** A replay goes through
+  inference again, against whatever consumers exist then.
+- **Strict buses can opt out** with `bus.RequireContractIdentity = true`. Unidentified
+  messages then never reach schema consumers, as today, and the default is open question 24.
+- **The machinery lives in the JSON Schema package.** Core can't validate on its own: it has
+  no JSON Schema evaluator, by design. `Runax.Messaging.Contracts.JsonSchema` registers a
+  matcher that core calls only for unidentified messages. Without the package, unidentified
+  messages behave as they do today.
+
+**Spotting overlap early.** Ambiguity is a property of the schemas a topic's consumers
+declare, so it can be found before any message arrives:
+
+- **At startup**, the catalog knows every consumer and line per topic on a bus. It warns when
+  two lines reach different consumers and could both accept the same message.
+- **In CI**, `runax-contracts` runs the same check over consumer manifests (open question 10).
+
+General schema overlap is hard to decide, so the check is conservative. Two lines count as
+disjoint only when they share a required property whose `const`, `enum` or `type` values
+don't intersect, such as a `type` discriminator. Every other pair gets a warning, and adding
+a discriminator property clears it (open question 26).
 
 ### Unroutable messages
 
@@ -246,6 +323,14 @@ correctly, which today's integer can't do.
 - The unroutable reason names the `$id` when there is one, for example "No registered
   consumer accepts contract schema 'https://…/order-placed/v3' on topic 'order.placed'." It
   appears in `x-runax-dlq-reason` and in the warning log.
+- For an unidentified message, the reason lists the first failing JSON pointers per
+  candidate line, for example "No consumer's schema accepts this unidentified message:
+  …/order-placed/v2 at /currency (required)". An ambiguous message's reason names the
+  conflicting lines instead.
+  - The header copy is truncated to 512 bytes so it fits every broker's limits (Pub/Sub
+    allows 1 KB values). The warning log carries the full list.
+  - `UnroutableMessage` gains `UnroutableReason` (`NoMatchingContract`, `NoMatchingSchema`,
+    `AmbiguousSchema`) so custom handlers can tell the cases apart.
 - Dead-letter copies keep `runax-contract-schema` natively and `contract_schema` in the
   envelope. `NativeHeaders.Build` / `FromEnvelope` gain the field, so a replayed message
   routes exactly like the original, and so does an outbox entry.
@@ -393,7 +478,8 @@ time. That's open question 3.
 
 ### Schemas at runtime
 
-Validation and the self-check need the documents in-process. The
+Validation, the self-check, and routing messages that carry no identity (§4) need the
+documents in-process. The
 `Runax.Messaging.Contracts.JsonSchema` package embeds the committed files as
 `EmbeddedResource`s through an MSBuild item glob, and an `IContractSchemaProvider` looks
 them up by `$id`. That means no network and no file system, and manifest resource streams
@@ -522,10 +608,13 @@ messaging.AddBus(bus =>
   `runax.messaging.contract.validation_failures` (`direction=publish`). `Enforce` throws
   `ContractValidationException` from `PublishAsync`, before anything reaches the transport
   or the outbox store, since the outbox serializes at enqueue time.
-- **Consume.** Before the inner `Deserialize<T>`, the decorator validates against `T`'s
-  schema. That's the consumer's own type, which is what has to be readable, so a `Reads`
-  alias is validated against the reader's schema. `Enforce` treats a failure as poison: it
-  dead-letters immediately without retries, because validation is deterministic.
+- **Consume.** Before the inner `Deserialize<T>`, the decorator validates against each of
+  `T`'s lines, `Schema` first and then `Reads`, and the message passes if any one accepts it.
+  CI's conformance check guarantees that every one of those lines is readable by `T`.
+  Validating against `Schema` alone would reject the v2 messages that a `Reads` v2 consumer
+  exists to accept. A message routed by validation (§4) has already passed this check and
+  isn't validated again. `Enforce` treats a failure as poison: it dead-letters immediately
+  without retries, because validation is deterministic.
   `x-runax-dlq-exception` names `ContractValidationException`, and the reason lists the
   first few failing JSON pointers.
 - Types without `Schema` pass through. A consumer that reads `MessageContext.Body` raw is
@@ -863,6 +952,11 @@ installed, it adds the registry header and strips foreign prefixes on receive.
 | 3.0, `Schema` only | ✗ unroutable | ✓ `$id` | ✓ `$id` |
 | Foreign, `runax-contract-version` only | ✓ int | ✓ int | ✗ unroutable |
 | Foreign, `runax-contract-schema` (+ version) | ✓ int if the version is set | ✓ `$id` | ✓ `$id` |
+| Foreign or untyped, **no identity** | ✗ unroutable (as today) | ✓ by validation, if unambiguous | ✓ by validation, if unambiguous |
+
+Producers that never set identity, such as plain-JSON services in other languages, only need
+their consumers to declare `Schema`. Validation-based routing (§4) then works the same
+before and after 3.0.
 
 The ✗ cells are the reason for the "drop the integer last" rule. They fail safe: the message
 is unroutable and dead-lettered with its headers, so it can be replayed once the consumer
@@ -889,7 +983,8 @@ non-routing label.
 1. **Abstractions:**
    - `MessageContractAttribute.Schema` / `Reads`, `MessageHeaders.ContractSchema` and the
      priority order.
-   - `MessageContext.ContractSchema`, `UnroutableMessage.ContractSchema`, and
+   - `MessageContext.ContractSchema` and `InferredContractSchemas`,
+     `UnroutableMessage.ContractSchema` and `UnroutableReason`, and
      `TransportMessage.ContractSchema`.
    - Unseal `PoisonMessageException`, and add `ContractValidationException`.
    - The optional `IContractValidatingTransport` interface and its level enum (§7).
@@ -901,11 +996,15 @@ non-routing label.
    - The validation scope: a messaging-level default copied into each bus, the bus
      override, the §7 resolution table with its startup errors, and calls into a validating
      transport.
+   - The unidentified-message path: the matcher hook that the JSON Schema package
+     implements, the ambiguity rule, `RequireContractIdentity`, and the unroutable reasons
+     (§4).
 3. **Outbox:** no store change. The envelope already carries the new key, and the dispatcher
    rebuilds native headers through `FromEnvelope`.
 4. **`Runax.Messaging.Contracts.JsonSchema`:** export profile and `ContractSerialization`
-   attribute, embedded schema provider, profile evaluator, `ValidateContracts`, and
-   `VerifyContractSchemas`.
+   attribute, embedded schema provider, profile evaluator, `ValidateContracts`,
+   `VerifyContractSchemas`, and the matcher for unidentified messages, including the
+   startup overlap warning (§4).
 5. **`runax-contracts`:** lint, check, conform, export. Shipped as a .NET tool, native
    binaries, and a container image. Optionally, a `register` command that publishes
    committed files to a Confluent Schema Registry (§7).
@@ -916,7 +1015,10 @@ non-routing label.
    - Mapping broker `INVALID_RECORD` errors.
    - The startup check of `confluent.value.schema.validation`.
 7. **Tests:**
-   - The §4 matching table as data-driven tests.
+   - The §4 matching table as data-driven tests, including unidentified messages. Cover
+     one line per topic, overlapping lines with the same consumers, overlapping lines with
+     different consumers (ambiguous), no match with and without an unversioned consumer,
+     and `RequireContractIdentity`.
    - 2.x wire fixtures: envelopes with and without the new key, a native-only schema header,
      and a non-integer version.
    - Every row of the evolution table, and every row of the §7 resolution table.
@@ -933,7 +1035,7 @@ non-routing label.
 | --- | --- |
 | Put the `$id` in `contract_version` | 2.x readers throw and dead-letter (§2) |
 | Fingerprint or semver as the identity | §3 |
-| Runtime compatibility matching or registry lookup | §4. It adds a network dependency to routing, and decides compatibility too late |
+| Runtime compatibility matching or registry lookup | §4. It adds a network dependency to routing, and decides compatibility too late. Routing unidentified messages by validation (§4) is different: it checks against the consumer's own embedded schemas, needs no producer schema or network, and only runs when the wire carries no identity. |
 | A new `[JsonSchemaContract]` attribute | Two places to declare a contract, and a harder migration. Extending `[MessageContract]` keeps one place. |
 | Declare readable ids on the consumer class instead of the type | Invisible to the CLI, which reads types and schemas, not DI registrations. Could be added later as an override. |
 | Confluent Schema Registry or AWS Glue in core | Tied to a broker ecosystem. Native validation goes through a transport capability instead, with Confluent as a Kafka add-on (§7). |
@@ -1014,3 +1116,25 @@ Broker-native validation (§7):
 23. **Other brokers.** Pub/Sub would need translation to Avro or Protobuf, and Event Hubs has
     no .NET JSON Schema serializer. Defer native validation for both? *Recommend deferring.
     Library validation already covers them.*
+
+Optional identity and routing by validation (§4):
+
+24. **Default.** Should validation-based routing be on by default, with a per-bus
+    `RequireContractIdentity = true` opt-out for strict setups, or opt-in per bus? Today an
+    unidentified message never reaches a versioned consumer, so turning it on only turns
+    some unroutable messages into deliveries of valid ones. *Recommend on by default,
+    whenever the JSON Schema package is installed.*
+25. **Ambiguity.** When lines that reach different consumers all accept a message, options
+    are: refuse it as unroutable, including for accept-all consumers; deliver it to every
+    accepting line; or pick the newest line. *Recommend refusing. Guessing or
+    double-delivering is how mismatches go unnoticed.*
+26. **The overlap check.** Should two lines on one topic that could accept the same message,
+    and that reach different consumers, be a warning or an error, at startup and in CI? The
+    check counts lines as disjoint only when a shared required property has disjoint
+    `const`/`enum`/`type` values. *Recommend a warning, and documenting a discriminator
+    property as the fix.*
+27. **Int-only messages and schema-only consumers.** A message with an integer but no `$id`
+    stays unroutable for a consumer that declares only `Schema`, because the integer is an
+    identity claim. Should it be validated against that consumer's schemas instead? It would
+    smooth the move to 3.0 for 2.x producers that can't add `$id`s. *Recommend keeping the
+    precedence. An integer that maps to nothing the consumer declares is a real mismatch.*

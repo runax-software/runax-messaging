@@ -72,9 +72,12 @@ observability (see [CHANGELOG.md](CHANGELOG.md)).
   (draft, open questions pending).** In short: the schema's `$id` becomes the
   wire identity, in a new `__runax.contract_schema` key and
   `runax-contract-schema` native header next to the existing slots, so no
-  transport changes. Consumers match the `$id` exactly. A `runax-contracts`
-  CI gate checks that revisions under one `$id` stay compatible and that each
-  service's types conform to the committed schema, in any language. Opt-in
+  transport changes. Consumers match the `$id` exactly. Identity on the wire
+  is optional: a message without it is routed by validating its body against
+  the schemas its consumers declare, and is refused when that's ambiguous. A
+  `runax-contracts` CI gate checks that revisions under one `$id` stay
+  compatible and that each service's types conform to the committed schema,
+  in any language. Opt-in
   publish/consume validation goes through the `ISerializer` seam, off by
   default. When it's on, the library validates on every bus by default. A
   bus whose broker validates natively can rely on the broker alone. That's a
