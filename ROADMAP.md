@@ -65,20 +65,20 @@ observability (see [CHANGELOG.md](CHANGELOG.md)).
   since the sends are independent and at-least-once. Until then, inject each  
   bus (`[FromKeyedServices("<name>")] IBus`, or `IBusProvider.GetBus(...)`) and  
   publish on each explicitly.
-- [ ] **JSON Schema contracts** (`Runax.Messaging.Contracts.JsonSchema`) — a
-  language-neutral schema per contract, keyed by the `(contract_name,
-  contract_version)` pair that already travels in the `__runax` envelope (no
-  wire changes). Two independently adoptable pieces: (1) a **CI compatibility
-  check** — export schemas from `[MessageContract]` types (or accept
-  hand-authored schemas as the source of truth) and diff them across versions,
-  turning the additive-vs-breaking evolution rules in
-  [docs/contracts.md](docs/contracts.md) into a machine-checked gate alongside
-  the `IMessageContractCatalog` rollout check; (2) **opt-in payload
-  validation** on publish and/or consume via the pluggable `ISerializer` seam
-  — off by default, since per-message validation is not free. Also formalizes
-  the duplicated-types / cross-language story (today wire compatibility of
-  copies is by convention only). Schema-registry integrations (Confluent SR,
-  AWS Glue) stay tentative and out of the core feature: they are
+- [ ] **JSON Schema contracts** (`Runax.Messaging.Contracts.JsonSchema`) —
+  replace integer contract versions with schema-based contracts, because an
+  integer doesn't check that producer and consumer shapes match. **Design:
+  [docs/specs/json-schema-contracts.md](docs/specs/json-schema-contracts.md)
+  (draft, open questions pending).** In short: the schema's `$id` becomes the
+  wire identity, in a new `__runax.contract_schema` key and
+  `runax-contract-schema` native header next to the existing slots, so no
+  transport changes. Consumers match the `$id` exactly. A `runax-contracts`
+  CI gate checks that revisions under one `$id` stay compatible and that each
+  service's types conform to the committed schema, in any language. Opt-in
+  publish/consume validation goes through the `ISerializer` seam, off by
+  default. Integers stay written alongside the `$id` while 2.x services
+  remain, and are deprecated in 3.0. Schema-registry integrations (Confluent
+  SR, AWS Glue) stay out of the core feature: they are
   broker-ecosystem-specific, while this must remain transport-agnostic.
 - [ ] **CloudEvents serializer** — optional serializer emitting/consuming the
   CloudEvents envelope for interop.
