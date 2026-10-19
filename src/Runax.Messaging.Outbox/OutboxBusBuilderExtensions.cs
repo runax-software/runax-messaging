@@ -1,6 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Runax.Messaging.Abstractions;
 
 namespace Runax.Messaging.Outbox;
@@ -37,9 +40,11 @@ public static class OutboxBusBuilderExtensions
 
         bus.Properties[OutboxEnabledKey] = true;
 
+        // Source-generated DataAnnotations validation (trim-safe, unlike ValidateDataAnnotations()).
+        bus.Services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IValidateOptions<OutboxOptions>, OutboxOptionsValidator>());
         var options = bus.Services
             .AddOptions<OutboxOptions>(bus.BusName)
-            .ValidateDataAnnotations()
             .ValidateOnStart();
         if (configure is not null) options.Configure(configure);
 
@@ -129,10 +134,18 @@ public static class OutboxBusBuilderExtensions
     /// <summary>
     /// Creates the store config type and binds it from a configuration section.
     /// </summary>
+    /// <remarks>
+    /// Binding is reflection-based, so this overload is not trim- or native-AOT-safe. In those apps,
+    /// bind the config in your own code — where the configuration binding source generator
+    /// (<c>EnableConfigurationBindingGenerator</c>) intercepts it — and pass the instance to
+    /// <see cref="AddOutboxStore(BusBuilder, OutboxStoreConfig)"/>.
+    /// </remarks>
     /// <typeparam name="TConfig">The store config type.</typeparam>
     /// <param name="bus">The bus builder.</param>
     /// <param name="section">The configuration section to bind the config from.</param>
     /// <returns>The same builder, to allow chaining.</returns>
+    [RequiresUnreferencedCode(ConfigurationBindingMessage)]
+    [RequiresDynamicCode(ConfigurationBindingMessage)]
     public static BusBuilder AddOutboxStore<TConfig>(this BusBuilder bus, IConfiguration section)
         where TConfig : OutboxStoreConfig, new()
     {
@@ -142,4 +155,9 @@ public static class OutboxBusBuilderExtensions
         section.Bind(config);
         return AddOutboxStore(bus, config);
     }
+
+    private const string ConfigurationBindingMessage =
+        "Binding a store config from IConfiguration is reflection-based and not trim- or native-AOT-safe. Bind " +
+        "the config in your own code with the configuration binding source generator, then pass the instance to " +
+        "AddOutboxStore(OutboxStoreConfig).";
 }

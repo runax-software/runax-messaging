@@ -14,6 +14,8 @@
     <!-- CS1591: XML docs are generated, but missing member docs shouldn't fail the build.
          CA1848/CA1873: high-performance LoggerMessage delegates are not required here. -->
     <NoWarn>$(NoWarn);CS1591;CA1848;CA1873</NoWarn>
+    <!-- Marks every library trimmable and runs the trim/AOT analyzers on it (see docs/aot.md). -->
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <PropertyGroup Label="Packaging">

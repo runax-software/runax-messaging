@@ -22,6 +22,8 @@ strongly-typed messages without coupling your application to a specific broker.
 - **Contract versioning** — optional `[MessageContract(version)]`; consumers subscribe per version, with a
   pluggable strategy (dead-letter/requeue/custom) for versions no consumer handles.
 - **Transactional outbox** — optional package for atomic database-write + publish.
+- **Native AOT & trimming** — the core, outbox, TestKit, and most transports are AOT-compatible
+  and verified with a native AOT publish in CI.
 - **Transports** — RabbitMQ, Apache Kafka, Amazon SQS, Amazon SNS, Azure Service Bus, Azure Event Hubs,
   Google Cloud Pub/Sub, Redis Streams (Redis/Valkey), and a built-in in-memory transport.
 
@@ -260,6 +262,7 @@ Start at the [documentation index](docs/README.md).
 - [Architecture & message flow](docs/architecture.md)
 - [Serialization & custom serializers](docs/serialization.md)
 - [Writing a custom transport](docs/writing-a-custom-transport.md)
+- [Native AOT & trimming](docs/aot.md)
 
 ## Contributing
 

@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All packages in the repository are versioned together.
 
+## [Unreleased]
+
+### Added
+
+- **Native AOT & trimming support** — every shipped package is built with `IsAotCompatible`,
+  so the trim and AOT analyzers check it on every build. The core, outbox, TestKit, and the
+  RabbitMQ, SQS, SNS, Service Bus, Event Hubs, and Redis transports are verified by a native
+  AOT smoke test in CI (`tests/Runax.Messaging.AotSmoke`). The Kafka and Google Pub/Sub
+  transports remain JIT-only because their broker SDKs aren't AOT-compatible. Guide:
+  [docs/aot.md](docs/aot.md).
+
+### Changed
+
+- The default System.Text.Json serializer resolves metadata through the options'
+  `TypeInfoResolver`, so a source-generated `JsonSerializerContext` is all a native AOT app
+  needs. Options without a resolver still fall back to reflection under the JIT. The
+  serializer now copies the `JsonSerializerOptions` it is given instead of locking them.
+- `bus.AddTransport<TConfig>(IConfiguration)` and `bus.AddOutboxStore<TConfig>(IConfiguration)`
+  are marked `[RequiresUnreferencedCode]` / `[RequiresDynamicCode]`: in trimmed or AOT apps,
+  bind the config yourself and pass the instance.
+- `RetryOptions` and `OutboxOptions` are validated by source-generated options validators
+  instead of `ValidateDataAnnotations()`. The rules are the same, but the
+  `OptionsValidationException` message is worded differently.
+
 ## [2.0.0] - 2026-09-10
 
 The bus release. Configuration is restructured around **buses** — a bus is a named,
@@ -102,5 +126,6 @@ First stable release.
 - **`Runax.Messaging.TestKit`** — a broker-free `MessagingTestHarness` to publish
   messages and assert what consumers handled, retried, or dead-lettered.
 
+[Unreleased]: https://github.com/runax-software/runax-messaging/compare/v2.0.0...HEAD
 [2.0.0]: https://github.com/runax-software/runax-messaging/releases/tag/v2.0.0
 [1.0.0]: https://github.com/runax-software/runax-messaging/releases/tag/v1.0.0

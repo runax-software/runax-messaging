@@ -1,8 +1,10 @@
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Runax.Messaging.Abstractions;
 using Runax.Messaging.Consumers;
 using Runax.Messaging.Serialization;
@@ -102,10 +104,18 @@ public sealed class BusBuilder
     /// <summary>
     /// Creates the config type and binds it from a configuration section.
     /// </summary>
+    /// <remarks>
+    /// Binding is reflection-based, so this overload is not trim- or native-AOT-safe. In those apps,
+    /// bind the config in your own code — where the configuration binding source generator
+    /// (<c>EnableConfigurationBindingGenerator</c>) intercepts it — and pass the instance to
+    /// <see cref="AddTransport(TransportConfig)"/>.
+    /// </remarks>
     /// <typeparam name="TConfig">The transport config type.</typeparam>
     /// <param name="section">The configuration section to bind the config from.</param>
     /// <returns>The same builder, to allow chaining.</returns>
     /// <exception cref="InvalidOperationException">The bus already has a transport.</exception>
+    [RequiresUnreferencedCode(ConfigurationBindingMessage)]
+    [RequiresDynamicCode(ConfigurationBindingMessage)]
     public BusBuilder AddTransport<TConfig>(IConfiguration section)
         where TConfig : TransportConfig, new()
     {
@@ -124,7 +134,7 @@ public sealed class BusBuilder
     /// </summary>
     /// <typeparam name="TConsumer">The consumer type to register.</typeparam>
     /// <returns>The same builder, to allow chaining.</returns>
-    public BusBuilder AddConsumer<TConsumer>()
+    public BusBuilder AddConsumer<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer>()
         where TConsumer : class
     {
         Services.TryAddSingleton<TConsumer>();
@@ -144,10 +154,10 @@ public sealed class BusBuilder
     {
         _consumeSidePolicies.Add(nameof(WithRetry));
 
+        AddRetryOptionsValidator();
         Services
             .AddOptions<RetryOptions>(BusName)
             .Configure(configure)
-            .ValidateDataAnnotations()
             .ValidateOnStart();
 
         Services.AddSingleton(new ScopedRetryMarker { Bus = BusName, OptionsName = BusName });
@@ -169,15 +179,19 @@ public sealed class BusBuilder
         _consumeSidePolicies.Add(nameof(WithRetryForTopic));
 
         var optionsName = RetryOptionsName.Topic(BusName, topic);
+        AddRetryOptionsValidator();
         Services
             .AddOptions<RetryOptions>(optionsName)
             .Configure(configure)
-            .ValidateDataAnnotations()
             .ValidateOnStart();
 
         Services.AddSingleton(new ScopedRetryMarker { Bus = BusName, Topic = topic, OptionsName = optionsName });
         return this;
     }
+
+    // Source-generated DataAnnotations validation (trim-safe, unlike ValidateDataAnnotations()).
+    private void AddRetryOptionsValidator() =>
+        Services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<RetryOptions>, RetryOptionsValidator>());
 
     // --- Unroutable messages ------------------------------------------------------------------
 
@@ -207,7 +221,7 @@ public sealed class BusBuilder
     /// </summary>
     /// <typeparam name="THandler">The handler implementation.</typeparam>
     /// <returns>The same builder, to allow chaining.</returns>
-    public BusBuilder OnUnroutableMessage<THandler>()
+    public BusBuilder OnUnroutableMessage<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] THandler>()
         where THandler : class, IUnroutableMessageHandler
     {
         _consumeSidePolicies.Add(nameof(OnUnroutableMessage));
@@ -243,7 +257,7 @@ public sealed class BusBuilder
     /// </summary>
     /// <typeparam name="TSerializer">The body serializer implementation.</typeparam>
     /// <returns>The same builder, to allow chaining.</returns>
-    public BusBuilder UseSerializer<TSerializer>()
+    public BusBuilder UseSerializer<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TSerializer>()
         where TSerializer : class, ISerializer
     {
         Services.AddKeyedSingleton<ISerializer, TSerializer>(BusName);
@@ -278,7 +292,8 @@ public sealed class BusBuilder
     /// <typeparam name="TSerializer">The body serializer implementation.</typeparam>
     /// <param name="topic">The topic whose messages use this serializer.</param>
     /// <returns>The same builder, to allow chaining.</returns>
-    public BusBuilder UseSerializerForTopic<TSerializer>(string topic)
+    public BusBuilder UseSerializerForTopic<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TSerializer>(
+        string topic)
         where TSerializer : class, ISerializer
     {
         ArgumentException.ThrowIfNullOrEmpty(topic);
@@ -314,8 +329,7 @@ public sealed class BusBuilder
         }
 
         var validationResults = new List<ValidationResult>();
-        if (!Validator.TryValidateObject(
-                _transportConfig, new ValidationContext(_transportConfig), validationResults, validateAllProperties: true))
+        if (!TryValidateTransportConfig(_transportConfig, validationResults))
         {
             var errors = string.Join("; ", validationResults.Select(r => r.ErrorMessage));
             throw new InvalidOperationException(
@@ -327,4 +341,22 @@ public sealed class BusBuilder
 
         return _transportConfig;
     }
+
+    [UnconditionalSuppressMessage(
+        "Trimming",
+        "IL2026:RequiresUnreferencedCode",
+        Justification = "TransportConfig is annotated [DynamicallyAccessedMembers(PublicProperties)], so the trimmer " +
+            "keeps the public properties (and their validation attributes) of every config type, which is all " +
+            "the validator reflects over.")]
+    private static bool TryValidateTransportConfig(TransportConfig config, List<ValidationResult> results) =>
+        Validator.TryValidateObject(
+            config,
+            new ValidationContext(config, config.GetType().Name, serviceProvider: null, items: null),
+            results,
+            validateAllProperties: true);
+
+    private const string ConfigurationBindingMessage =
+        "Binding a config from IConfiguration is reflection-based and not trim- or native-AOT-safe. Bind the " +
+        "config in your own code with the configuration binding source generator, then pass the instance to " +
+        "AddTransport(TransportConfig).";
 }

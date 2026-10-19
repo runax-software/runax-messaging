@@ -29,6 +29,7 @@ New to the library? Read the [root README](../README.md) quick start first, then
 | [Architecture](architecture.md) | Package layering, key types, publish and consume flows, design rules |
 | [Serialization](serialization.md) | The `__runax` envelope, body serializers, per-bus and per-topic configuration, AOT/source-gen |
 | [Writing a custom transport](writing-a-custom-transport.md) | The `IMessagingTransport` SPI and `TransportConfig` pattern for new brokers |
+| [Native AOT & trimming](aot.md) | Supported packages, source-generated JSON, configuration binding, how support is verified |
 
 ## Per-package READMEs
 

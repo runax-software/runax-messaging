@@ -5,6 +5,9 @@ A topic maps directly to a Kafka topic; publishing produces the envelope as the 
 consuming uses a consumer group with manual offset commits.
 
 > Built against `Confluent.Kafka` 2.x.
+>
+> Not supported in native AOT or trimmed apps: `Confluent.Kafka` itself produces trim/AOT warnings.
+> See [Native AOT & trimming](../../docs/aot.md).
 
 ## Install
 

@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Native AOT smoke test for the shippable libraries. `dotnet publish` compiles every package (and its
+       dependencies) with the AOT compiler; any trim or AOT warning fails the publish. Running the published
+       binary then exercises a real publish/consume round trip. See docs/aot.md. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Report each trim warning inside a dependency instead of one IL2104 per assembly. -->
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+  </PropertyGroup>
+
+  <!-- Every shippable package except the Kafka and Google Pub/Sub transports, whose broker SDKs
+       (Confluent.Kafka; Google.Cloud.PubSub.V1 via Gax, Protobuf and Newtonsoft.Json) emit trim and AOT
+       warnings of their own. -->
+  <ItemGroup>
+    <ProjectReference Include="../../src/Runax.Messaging/Runax.Messaging.csproj" />
+    <ProjectReference Include="../../src/Runax.Messaging.Outbox/Runax.Messaging.Outbox.csproj" />
+    <ProjectReference Include="../../src/Runax.Messaging.TestKit/Runax.Messaging.TestKit.csproj" />
+    <ProjectReference Include="../../src/Runax.Messaging.Transports.Aws.Sns/Runax.Messaging.Transports.Aws.Sns.csproj" />
+    <ProjectReference Include="../../src/Runax.Messaging.Transports.Aws.Sqs/Runax.Messaging.Transports.Aws.Sqs.csproj" />
+    <ProjectReference Include="../../src/Runax.Messaging.Transports.Azure.EventHubs/Runax.Messaging.Transports.Azure.EventHubs.csproj" />
+    <ProjectReference Include="../../src/Runax.Messaging.Transports.Azure.ServiceBus/Runax.Messaging.Transports.Azure.ServiceBus.csproj" />
+    <ProjectReference Include="../../src/Runax.Messaging.Transports.RabbitMq/Runax.Messaging.Transports.RabbitMq.csproj" />
+    <ProjectReference Include="../../src/Runax.Messaging.Transports.Redis/Runax.Messaging.Transports.Redis.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+</Project>

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Runax.Messaging.Abstractions;
@@ -9,6 +10,11 @@ namespace Runax.Messaging.Abstractions;
 /// configuration time), and implements <see cref="CreateTransport"/>. Applications attach the
 /// config to a bus with <c>bus.AddTransport(...)</c>; a bus wraps exactly one transport.
 /// </summary>
+/// <remarks>
+/// The public properties of every derived config are preserved for trimming and native AOT, so the
+/// DataAnnotations validation the bus runs over them keeps working in trimmed apps.
+/// </remarks>
+[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)]
 public abstract class TransportConfig
 {
     /// <summary>

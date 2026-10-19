@@ -50,6 +50,13 @@ jobs:
       - name: Format check
         run: dotnet format --verify-no-changes
 
+      # Publishing with native AOT fails on any trim/AOT warning, in our packages or in the broker SDKs they
+      # pull in; running the binary then exercises a real publish/consume round trip. See docs/aot.md.
+      - name: Native AOT smoke test
+        run: |
+          dotnet publish tests/Runax.Messaging.AotSmoke -c Release -o artifacts/aot-smoke
+          ./artifacts/aot-smoke/Runax.Messaging.AotSmoke
+
   integration-tests-matrix:
     runs-on: ubuntu-latest
     needs: build-and-test

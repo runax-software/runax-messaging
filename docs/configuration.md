@@ -80,6 +80,9 @@ builder.Services.AddRunaxMessaging(messaging =>
 });
 ```
 
+The `IConfiguration` overload binds through reflection, so it isn't trim- or AOT-safe; in those
+apps bind the config yourself and pass the instance (see [Native AOT & trimming](aot.md#configuration-binding)).
+
 Configs are validated with their DataAnnotations when the `AddBus` block completes, so a
 misconfigured bus fails at startup with an `InvalidOperationException` naming the bus. A second
 `AddTransport` on the same bus throws — a bus wraps exactly one transport; register an

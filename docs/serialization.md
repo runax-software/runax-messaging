@@ -81,6 +81,10 @@ The options start from a copy of the container's global `JsonSerializerOptions` 
 already configure for ASP.NET) with your action applied on top, so the bus inherits application-wide
 settings and overrides only what it names.
 
+In a trimmed or native AOT app, reflection-based System.Text.Json is off, so register a source-generated
+context that lists every message type (`o.TypeInfoResolver = AppJsonContext.Default`). Once you set a
+resolver, only the types it knows serialize, even under the JIT. See [Native AOT & trimming](aot.md).
+
 ### Replacing the body serializer
 
 To use a different serialization mechanism entirely (a source-generated path, or a third-party library such as

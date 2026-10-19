@@ -96,6 +96,9 @@ bus.AddOutboxStore<MyOutboxStoreConfig>(c => c.ConnectionString = "...");
 bus.AddOutboxStore<MyOutboxStoreConfig>(builder.Configuration.GetSection("Messaging:Outbox"));
 ```
 
+Overload 3 binds through reflection and is not trim/AOT-safe; in those apps bind the config
+yourself and use overload 1 (see [Native AOT & trimming](aot.md#configuration-binding)).
+
 `MyOutboxStoreConfig` stands for any `OutboxStoreConfig`-derived type with a
 parameterless constructor (overloads 2 and 3 require `new()`); the package
 ships `InMemoryOutboxStoreConfig` (tests and single-process use only), and
