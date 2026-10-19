@@ -76,10 +76,12 @@ observability (see [CHANGELOG.md](CHANGELOG.md)).
   CI gate checks that revisions under one `$id` stay compatible and that each
   service's types conform to the committed schema, in any language. Opt-in
   publish/consume validation goes through the `ISerializer` seam, off by
-  default. Integers stay written alongside the `$id` while 2.x services
-  remain, and are deprecated in 3.0. Schema-registry integrations (Confluent
-  SR, AWS Glue) stay out of the core feature: they are
-  broker-ecosystem-specific, while this must remain transport-agnostic.
+  default. When it's on, the library validates on every bus by default. A
+  bus whose broker validates natively can rely on the broker alone. That's a
+  per-transport capability, with Confluent Schema Registry as the first one,
+  shipped as a Kafka add-on. Integers stay written alongside the `$id` while
+  2.x services remain, and are deprecated in 3.0. Registry integrations live
+  in transport packages, never in core, which must remain transport-agnostic.
 - [ ] **CloudEvents serializer** — optional serializer emitting/consuming the
   CloudEvents envelope for interop.
 

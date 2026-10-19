@@ -25,6 +25,14 @@
   earlier ones, and that each service's types conform to the committed file.
 - **Validation.** An optional `ISerializer` decorator validates on publish and/or consume.
   It's off by default and can either report or enforce.
+- **Broker-native validation.** When validation is on, the library validates on every bus by
+  default. A messaging-level default sets this, and each bus copies and can override it. A
+  transport whose broker ecosystem validates natively advertises that as a capability. On
+  such a bus, library validation can be turned off so the broker validates alone. Kafka with
+  Confluent Schema Registry comes first, as an add-on. Confluent's broker-side check only
+  confirms that a registered schema ID is attached, so the add-on also validates payloads
+  client-side. It carries the registry ID in a header, never as a payload prefix, so the body
+  stays plain JSON.
 - **Migration.** Producers write both the integer and the `$id` while they coexist. 2.x
   services keep routing by the integer. The integer constructor is deprecated in 3.0.
 
@@ -50,16 +58,22 @@ property silently arrives as its default. In practice:
   service's types and the contract.
 - Wire compatibility with 2.x (and 1.x) services through a coexistence period.
 - Runtime pieces that are trim- and native-AOT-safe, like every `src/` project.
-- No transport changes.
+- No transport changes for identity and routing.
+- **Reuse a broker's own schema validation where it exists, with library validation layered
+  on top** (§7). When validation is turned on, the library validates by default. A bus whose
+  broker ecosystem validates natively (Kafka with Confluent Schema Registry first) can turn
+  library validation off and leave validation to the broker alone. Core models this as a
+  per-transport capability, not as anything Kafka-specific.
 
 ### Non-goals
 
-- Running or depending on a schema registry service, or fetching schemas over the network
-  at runtime.
+- A dependency on a schema registry in core, or fetching schemas over the network from core
+  or the library validator. A transport that integrates its broker's registry (§7) does
+  that inside its own package.
 - Avro, Protobuf, or validating non-JSON bodies.
-- Integrations with Confluent Schema Registry or AWS Glue. These stay out of the core
-  feature, as the roadmap already says: they're tied to one broker ecosystem, and this
-  feature has to stay transport-agnostic.
+- Registry integrations in core. Confluent Schema Registry, Azure Schema Registry and AWS
+  Glue are tied to one broker ecosystem, so they plug in through a transport capability
+  (§7) and live in transport packages. Core stays transport-agnostic.
 
 ## 2. Today's behavior (baseline)
 
@@ -126,7 +140,7 @@ JSON Schema tool understands. And it can't go in `contract_version` anyway (see 
 | --- | --- | --- | --- |
 | Contract schema (`$id`) | `__runax.contract_schema` | `runax-contract-schema` | **New**, used for routing |
 | Contract name | `__runax.contract_name` | `runax-contract-name` | Unchanged, label only |
-| Contract version (`int`) | `__runax.contract_version` | `runax-contract-version` | Legacy, written during coexistence (§7) |
+| Contract version (`int`) | `__runax.contract_version` | `runax-contract-version` | Legacy, written during coexistence (§8) |
 
 ```json
 {
@@ -160,7 +174,7 @@ producer.Produce(&kafka.Message{
     Value:          body,
     Headers: []kafka.Header{
         {Key: "runax-contract-schema", Value: []byte("https://contracts.acme.dev/orders/order-placed/v2")},
-        {Key: "runax-contract-version", Value: []byte("2")}, // only while 2.x consumers remain (§7)
+        {Key: "runax-contract-version", Value: []byte("2")}, // only while 2.x consumers remain (§8)
     },
 }, nil)
 ```
@@ -310,7 +324,7 @@ schemas/orders/order-placed/v2.schema.json   # $id …/orders/order-placed/v2; t
 `x-runax-legacy-version` keeps the coexistence-period integer next to the `$id` in a
 language-neutral place. Foreign producers read it to set `runax-contract-version`, .NET
 conformance checks that the attribute's integer matches it, and the linter checks that a
-`$id` never changes its integer and that two `$id`s of one contract never share one (§7).
+`$id` never changes its integer and that two `$id`s of one contract never share one (§8).
 
 ### .NET-owned contracts: export and commit
 
@@ -402,7 +416,7 @@ don't need the .NET SDK. Apart from `export`, it only reads schema files.
 
 | Command | Checks |
 | --- | --- |
-| `lint <dir>` | Profile rules: absolute `$id` ≤ 256 bytes, file path matches `$id`, `$schema` is 2020-12, only supported keywords, `x-runax-legacy-version` consistent |
+| `lint <dir>` | Profile rules: absolute `$id` ≤ 256 bytes, file path matches `$id`, `$schema` is 2020-12, only supported keywords, no closed root object (§7), `x-runax-legacy-version` consistent |
 | `check <dir> --history git` | **Evolution:** each changed file against every earlier revision of the same `$id`, read from the file's git history (needs `fetch-depth: 0`). `--baseline <dir>` is an alternative. |
 | `conform --canonical <file> --writer <schema>` / `--reader <schema>` | **Conformance:** a service's own types against the canonical file |
 | `export --assembly <dll>` | .NET only: writes schema files from `[MessageContract(Schema = …)]` types |
@@ -483,6 +497,10 @@ approximation that errs on the safe side for readers.
 
 ### Runtime validation (optional, off by default)
 
+This section covers **library validation**, which works the same on every transport. §7
+adds the broker's own validation where a transport has one, and covers turning validation
+on for every bus at once.
+
 `Runax.Messaging.Contracts.JsonSchema` provides a validating `ISerializer` decorator over
 whatever serializer the bus or topic resolves:
 
@@ -516,7 +534,7 @@ messaging.AddBus(bus =>
   evaluates it. That's why it's off by default. Suggested use: `Enforce` on publish in tests
   and staging, `Report` on consume in production (sampling is open question 13).
 
-Core needs two small, generic changes for this:
+Core needs three small, generic changes for this:
 
 - A serializer decoration hook (`bus.DecorateSerializer(Func<ISerializer, ISerializer>)`),
   applied to whatever the per-topic → per-bus → default resolution picks. Without it, users
@@ -524,6 +542,9 @@ Core needs two small, generic changes for this:
 - Unsealing `PoisonMessageException`, which is binary-compatible, so that
   `ContractValidationException` can derive from it and reuse the existing
   "dead-letter immediately" path.
+- Defining `ContractValidationException` in Abstractions rather than in the JSON Schema
+  package. Transports that validate natively (§7) then throw the same type, so a failure
+  behaves the same whichever layer caught it.
 
 **Validator engine (open question 6).** The recommendation is a small in-house evaluator
 for the contract profile only, the same code the CLI uses. That gives CI and runtime one set
@@ -536,7 +557,256 @@ of semantics, no dependency, and AOT safety by construction. The alternatives:
 - **Corvus.JsonSchema** generates code per schema: fast and AOT-friendly, but adds a codegen
   step.
 
-## 7. Migration from integer versions
+## 7. Broker-native validation
+
+The goal from §1: reuse a broker's own schema validation where it exists, with library
+validation on top. When validation is turned on, the library validates on every bus by
+default. A bus whose broker ecosystem validates natively can turn library validation off and
+leave validation to the broker.
+
+Two facts make this harder than it sounds:
+
+- What brokers call "schema validation" often doesn't look at the payload.
+- The usual way to tell a broker which schema a record uses changes the payload.
+
+This section settles both, then describes how core models native validation without
+becoming Kafka-specific.
+
+### Validation levels
+
+Core describes a transport's native validation, per direction, as one of three levels:
+
+| Level | Meaning |
+| --- | --- |
+| `Payload` | The body is checked against the contract's schema. |
+| `Reference` | The broker checks that the message references a schema registered for its topic. The body isn't looked at. |
+| `None` | No native validation. |
+
+### What "Kafka's own validator" can mean
+
+| Mechanism | Runs in | Checks | Availability | Notes |
+| --- | --- | --- | --- | --- |
+| Broker-side schema ID validation | The broker, at produce time | That the record's schema ID is registered under the subject for its topic. Confluent's docs say it does no data introspection. Level: `Reference`. | Confluent Server with a Confluent Enterprise license (Confluent Platform 5.4+), or Confluent Cloud **Dedicated** clusters with the hosted registry. Not other Confluent Cloud cluster types, and not Apache Kafka. | Turned on per topic with `confluent.value.schema.validation=true`. A failing record returns `INVALID_RECORD` to the producer, and **the whole batch is discarded**. Null values pass. |
+| Schema Registry JSON Schema serializer | The producing client | The payload against the registered schema. Level: `Payload`. | Any Kafka cluster with a Schema Registry | Java validates only with `json.fail.invalid.schema=true`, and **the default is `false`**. In .NET, `JsonSerializerConfig.Validate` defaults to `true`, but the serializer only accepts typed objects, serializes them with Newtonsoft.Json, and validates with NJsonSchema. |
+| Schema Registry JSON Schema deserializer | The consuming client | The payload, when configured | Same as above | Java uses the same `json.fail.invalid.schema` flag. .NET's docs contradict each other: `JsonDeserializerConfig.Validate` defaults to `true`, but the class remarks say no validation against the registered schema is done. This needs a test. |
+| Registry compatibility check | The registry, when a schema is registered | A new schema version against earlier ones, per the subject's compatibility level | Same as above | A CI-time check, not a runtime one. See "Reusing the registry in CI" below. |
+
+What this means for "only Kafka validates":
+
+- **Broker-side validation alone never checks a payload.** A record is only as valid as its
+  producer's serializer made it.
+- **Leaving validation to Kafka is sound only under two conditions.** Every producer on those
+  topics validates with its registry serializer, which for Java teams means setting
+  `json.fail.invalid.schema=true`. And broker-side validation is on, so a producer that skips
+  the registry is rejected.
+- **Runax's own producers must validate too.** In Kafka-only mode, the Kafka integration
+  validates each outgoing payload against the registered schema itself (below). Turning
+  library validation off therefore never means Runax publishes unchecked messages.
+- **Broker-side validation always enforces.** `Report` mode can log a library failure and
+  still publish, but it can't stop the broker from rejecting a record.
+- **Broker-side validation only covers publishing.** On consume, native validation means the
+  integration validating client-side.
+
+### The wire-format conflict
+
+A registry serializer has to tell consumers which schema a record uses. Confluent supports
+two forms:
+
+| Form | Layout | Fit with Runax |
+| --- | --- | --- |
+| Payload prefix (the default) | Byte 0 is `0`, bytes 1–4 are the schema ID (big-endian), then the UTF-8 JSON | **Doesn't fit.** The body stops being JSON. 2.x and 1.x Runax consumers would treat every record as a malformed envelope and dead-letter it. Plain-JSON consumers in other languages break. Outbox entries and dead-letter copies would carry binary bodies across transports. |
+| Record header | The header value is a version byte `1` followed by the 16-byte schema GUID. The body stays the original JSON. | **Fits.** It sits next to the `runax-*` headers from #71 and leaves the envelope alone. |
+
+Runax-produced records therefore use the header form only. The implementation has to handle
+or verify these points:
+
+- **The header value is binary.** `TransportMessage.Headers` carries strings, and the Kafka
+  transport writes them as UTF-8. So the Kafka integration writes and reads this header
+  itself, outside the generic header slots, and keeps it out of `MessageContext.Headers`. A
+  2.x consumer with #71 would show it as a garbled string header, which is harmless.
+- **Confluent's docs don't name the header.** Third-party clients use `__value_schema_id` and
+  `__key_schema_id`. That needs confirming against confluent-kafka-dotnet, which exposes the
+  header form as `JsonSerializerConfig.SchemaIdStrategy = Header` (the default is `Prefix`).
+- **It needs recent versions.** Header IDs need Confluent Cloud or Confluent Platform 8.1.1+
+  (Confluent's blog says 8.2). Clients need 2.13.0+ for .NET, Go and Python, 8.1.1+ for Java,
+  and 1.8.0+ for JavaScript. Since 8.1.1, Confluent's deserializers look for the header first
+  and fall back to the prefix.
+- **Broker-side validation of header IDs is unverified.** The broker docs only mention the
+  schema ID in the wire format. Confluent's blog lists broker-side validation as supported
+  with header IDs, but gives no details. Until that's tested on a Dedicated cluster, Runax
+  can't claim `Reference` for header-form records. If the broker reads only the prefix,
+  broker-side validation can't be combined with Runax's wire format (open question 18).
+- **Some tools drop headers.** Kafka Streams state stores (Confluent Platform 8.2 and
+  earlier), ksqlDB, and Kafka Connect unless configured otherwise. Records that pass through
+  them lose the schema ID.
+- **Foreign prefix-form records can still be consumed.** On receive, the Kafka integration
+  can recognize a leading `0` byte plus a 4-byte ID, strip them, and keep the ID. Today such a
+  record fails as a malformed envelope. This only applies to reading: Runax never writes the
+  prefix.
+
+The registry's GUID and the `$id` are different identifiers:
+
+- The GUID is a fingerprint of the registered schema document, so it changes with every
+  revision. It's what the registry looks schemas up by.
+- The `$id` is the routing identity (§3).
+
+CI registers each committed file, and the file's body contains its `$id`. That lets the
+integration map `$id` → subject → registered version → GUID at startup and cache the result.
+The reverse mapping helps too: when a foreign producer used a plain registry serializer and
+set no `runax-contract-schema` header, a Kafka consumer can derive `ContractSchema` from the
+GUID (open question 20).
+
+**Subjects.** Broker-side validation looks schemas up by subject, which is `<topic>-value` by
+default (`TopicNameStrategy`). That gives each topic one compatibility line. A topic that
+carries several `$id`s, such as v2 and v3 during a migration or several message types, needs
+`RecordNameStrategy` or `TopicRecordNameStrategy`. The strategy has to be set on the broker
+topic and in the clients alike, because the broker's setting doesn't propagate to clients
+(open question 19).
+
+**Schemas must stay open.** Native validators see the whole body, `__runax` included. A
+schema that closes its root object (`additionalProperties: false`) would reject every Runax
+message that carries metadata. The Kafka integration strips `__runax` before validating, but
+a foreign consumer with a validating deserializer doesn't. So `lint` rejects closed root
+objects outright.
+
+### How core models it: a transport capability
+
+Core stays Kafka-agnostic. A transport that can validate natively implements an optional
+interface. It's the same approach #71 used to add native headers to `IMessagingTransport`
+without breaking custom transports. A sketch; names are to be decided:
+
+```csharp
+public enum NativeContractValidation { None, Reference, Payload }
+
+public interface IContractValidatingTransport
+{
+    // What the transport, and the broker behind it as configured, guarantees per direction.
+    NativeContractValidation OnPublish { get; }
+    NativeContractValidation OnConsume { get; }
+
+    // Client-side checks. Core calls these when native validation is on for that direction.
+    ValueTask<ContractValidationResult> ValidatePublishAsync(TransportMessage message, CancellationToken cancellationToken);
+    ValueTask<ContractValidationResult> ValidateReceivedAsync(TransportMessage message, CancellationToken cancellationToken);
+}
+```
+
+- **Core orchestrates, and the transport only answers.** Core decides between `Report` and
+  `Enforce`, records `runax.messaging.contract.validation_failures` with a tag for the layer,
+  and throws `ContractValidationException` or dead-letters as poison, exactly as for library
+  validation (§6). When a broker rejection surfaces from `PublishAsync`, like Confluent's
+  `INVALID_RECORD`, the transport maps it to `ContractValidationException` too.
+- **The transport needs the contract even without native headers.** Today a transport only
+  sees the `$id` through `runax-contract-schema` in `TransportMessage.Headers`, and that's
+  empty when `WriteNativeHeaders = false`. `TransportMessage` gains a `ContractSchema`
+  property, so native validation works either way.
+- **Levels describe configuration, not hope.** The Kafka integration reports `Payload` on
+  publish when it validates client-side. It reports `Reference` only when the user declares
+  that broker-side validation is on for the bus's topics, and it can confirm that at startup
+  by reading the topic config `confluent.value.schema.validation` through the admin API.
+- **Packaging.** The Kafka integration ships as an add-on,
+  `Runax.Messaging.Transports.Kafka.SchemaRegistry`, so the plain Kafka transport doesn't
+  pull in the registry client, Newtonsoft.Json and NJsonSchema.
+  - It isn't AOT-safe, but neither is the Kafka transport today ([aot.md](../aot.md)), so
+    nothing regresses.
+  - Confluent's .NET serializer only accepts typed objects, so the add-on can't hand it the
+    JSON Runax has already produced. Instead it fetches the schema with the registry client
+    and validates that JSON with NJsonSchema, the engine Confluent's .NET serializer uses
+    (open question 17).
+
+### Configuration: turning validation on everywhere
+
+"Enabled globally" needs a decision, because [configuration.md](../configuration.md) says
+there's deliberately no global scope: every setting is per bus.
+
+The recommendation is a **messaging-level default that each bus copies and can override**.
+Buses already work this way for JSON options, which start from a copy of the container's
+global `JsonSerializerOptions`. Nothing set on one bus leaks into another, so the
+configuration.md rule still holds, with this one documented default added.
+
+```csharp
+builder.Services.AddRunaxMessaging(messaging =>
+{
+    // The default for every bus: library validation on.
+    messaging.ValidateContracts(v =>
+    {
+        v.OnPublish = ContractValidation.Enforce;
+        v.OnConsume = ContractValidation.Report;
+    });
+
+    // Inherits the default. RabbitMQ has no native validation, so the library validates.
+    messaging.AddBus(bus => bus.AddTransport(new RabbitMqConfig { HostName = "rabbit" }));
+
+    // Kafka with Schema Registry: leave validation to Kafka alone.
+    messaging.AddBus("events", bus =>
+    {
+        bus.AddTransport(new KafkaConfig { BootstrapServers = "kafka:9092" });
+        bus.UseSchemaRegistry(new SchemaRegistryOptions { Url = "https://registry.acme.dev" });
+        bus.ValidateContracts(v => v.Library = false);
+    });
+});
+```
+
+Two switches pick the layers. `v.Library` (default `true`) controls library validation.
+`v.Native` (default `true`) uses the transport's validation when it has one. Setting
+`v.Native = false` keeps a transport integration's other duties, such as writing registry
+IDs, but skips its validation.
+
+For each direction (`OnPublish`, `OnConsume`), validation resolves as:
+
+| Mode for the direction | `v.Library` | Transport's native level | What runs |
+| --- | --- | --- | --- |
+| `Off` | any | any | Nothing |
+| `Report` / `Enforce` | `true` | `None` | Library |
+| `Report` / `Enforce` | `true` | `Reference` or `Payload` | Both. Under `Enforce`, either one can reject. |
+| `Report` / `Enforce` | `false` | `Payload` | Native only |
+| `Report` / `Enforce` | `false` | `Reference` | **Startup error**, unless the bus sets `v.AcceptReferenceOnly = true`. The broker would only check that a schema ID is attached. |
+| `Report` / `Enforce` | `false` | `None` | **Startup error.** Validation was asked for, and nothing would validate. |
+
+The last two rows fail at startup rather than warning, because silently weaker validation is
+the failure this feature exists to prevent (open question 16).
+
+### Other brokers
+
+| Transport | Native option | What it checks | JSON Schema? | Plan |
+| --- | --- | --- | --- | --- |
+| Kafka with Confluent | Registry serializers and broker-side ID validation | Client: payload. Broker: reference. | Yes | First implementation (above) |
+| Kafka on MSK, and Kinesis | AWS Glue Schema Registry serializers | Payload, client-side | Drafts 04, 06 and 07 only | Not planned. The libraries are Java, they carry the schema version ID in the payload, and our profile is draft 2020-12. |
+| Azure Event Hubs | Azure Schema Registry | Client-side only | Listed as a format, but the only .NET serializer is for Avro (`Microsoft.Azure.Data.SchemaRegistry.ApacheAvro`). JSON Schema only has Java/Kafka samples. | `None` until a .NET JSON Schema serializer exists |
+| Google Pub/Sub | Topic schemas | **Payload, server-side, at publish.** A failing message is rejected with `INVALID_ARGUMENT`. | **No.** Avro and Protocol Buffers only, though messages can use their JSON encoding. | Deferred. It would need a translation from JSON Schema to Avro or Protobuf, and the docs don't say how Pub/Sub treats the extra `__runax` field. Validated messages arrive with `googclient_schemaname`, `googclient_schemaencoding` and `googclient_schemarevisionid` attributes. |
+| Service Bus, SQS, SNS, RabbitMQ, Redis Streams, in-memory | None known | — | — | Library validation only |
+
+### Reusing the registry in CI
+
+On Kafka, "Kafka's own validator" can also mean the registry's compatibility checker. CI can
+register each committed file under its subject, with the subject's compatibility level set to
+`FULL_TRANSITIVE` to mirror §6, and fail the pipeline if registration fails.
+`runax-contracts check` stays the gate, because it covers every transport, including
+contracts that never touch Kafka. The two rule sets could disagree, for example on open
+versus closed objects, so which one wins is open question 21.
+
+### Sources (checked 2026-10-19)
+
+- Confluent broker-side schema ID validation:
+  [Confluent Cloud](https://docs.confluent.io/cloud/current/sr/broker-side-schema-validation.html),
+  [Confluent Platform](https://docs.confluent.io/platform/current/schema-registry/schema-validation.html)
+- Confluent wire formats and header schema IDs:
+  [serdes overview](https://docs.confluent.io/cloud/current/sr/fundamentals/serdes-develop/index.html),
+  [blog post](https://www.confluent.io/blog/schema-id-kafka-headers-data-governance/)
+- Confluent JSON Schema serdes:
+  [Java](https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/serdes-json.html),
+  .NET [`JsonSerializerConfig`](https://docs.confluent.io/platform/current/clients/confluent-kafka-dotnet/_site/api/Confluent.SchemaRegistry.Serdes.JsonSerializerConfig.html)
+  and [`JsonDeserializer`](https://docs.confluent.io/platform/current/clients/confluent-kafka-dotnet/_site/api/Confluent.SchemaRegistry.Serdes.JsonDeserializer-1.html)
+- Azure Schema Registry:
+  [concepts](https://learn.microsoft.com/azure/event-hubs/schema-registry-concepts),
+  [client-side enforcement](https://learn.microsoft.com/azure/event-hubs/schema-registry-client-side-enforcement)
+- Pub/Sub:
+  [schemas](https://cloud.google.com/pubsub/docs/schemas),
+  [publishing to a topic with a schema](https://cloud.google.com/pubsub/docs/publish-topics-schema)
+- AWS Glue Schema Registry:
+  [overview](https://docs.aws.amazon.com/glue/latest/dg/schema-registry.html),
+  [how it works](https://docs.aws.amazon.com/glue/latest/dg/schema-registry-works.html)
+
+## 8. Migration from integer versions
 
 ### Phases
 
@@ -552,6 +822,13 @@ of semantics, no dependency, and AOT safety by construction. The alternatives:
   priority order.
 - New package `Runax.Messaging.Contracts.JsonSchema` (export profile, embedded schema
   provider, validating serializer, self-check) and the `runax-contracts` tool.
+- The validation scope (`messaging.ValidateContracts` and the per-bus override) and the
+  `IContractValidatingTransport` capability ship here too (§7), so that native validation
+  can be added later without touching core again.
+
+**Phase 1b: a later 2.x minor.** The `Runax.Messaging.Transports.Kafka.SchemaRegistry`
+add-on (§7). It doesn't change the wire for anyone who doesn't install it. Where it is
+installed, it adds the registry header and strips foreign prefixes on receive.
 
 **Phase 2: adoption. This is fleet work, not a release.** For each contract:
 
@@ -607,35 +884,50 @@ integer from the wire stays supported indefinitely: it costs nothing, and it kee
 replays and foreign producers working (open question 9). `Name` stays an optional,
 non-routing label.
 
-## 8. Implementation outline (non-binding)
+## 9. Implementation outline (non-binding)
 
 1. **Abstractions:**
    - `MessageContractAttribute.Schema` / `Reads`, `MessageHeaders.ContractSchema` and the
      priority order.
-   - `MessageContext.ContractSchema`, `UnroutableMessage.ContractSchema`.
-   - Unseal `PoisonMessageException`.
+   - `MessageContext.ContractSchema`, `UnroutableMessage.ContractSchema`, and
+     `TransportMessage.ContractSchema`.
+   - Unseal `PoisonMessageException`, and add `ContractValidationException`.
+   - The optional `IContractValidatingTransport` interface and its level enum (§7).
 2. **Core:**
    - Envelope read/write of `contract_schema`, and `NativeHeaders` build/merge/`FromEnvelope`.
    - `IMessageConsumer` exposes its accepted schemas, and `MatchConsumers` implements §4.
    - Unroutable reason and logs, the span attribute, catalog additions, and the serializer
      decoration hook.
+   - The validation scope: a messaging-level default copied into each bus, the bus
+     override, the §7 resolution table with its startup errors, and calls into a validating
+     transport.
 3. **Outbox:** no store change. The envelope already carries the new key, and the dispatcher
    rebuilds native headers through `FromEnvelope`.
 4. **`Runax.Messaging.Contracts.JsonSchema`:** export profile and `ContractSerialization`
    attribute, embedded schema provider, profile evaluator, `ValidateContracts`, and
    `VerifyContractSchemas`.
 5. **`runax-contracts`:** lint, check, conform, export. Shipped as a .NET tool, native
-   binaries, and a container image.
-6. **Tests:**
+   binaries, and a container image. Optionally, a `register` command that publishes
+   committed files to a Confluent Schema Registry (§7).
+6. **`Runax.Messaging.Transports.Kafka.SchemaRegistry` (phase 1b):**
+   - `$id` → GUID mapping, and writing the registry header.
+   - Client-side validation with NJsonSchema.
+   - Stripping foreign prefixes on receive.
+   - Mapping broker `INVALID_RECORD` errors.
+   - The startup check of `confluent.value.schema.validation`.
+7. **Tests:**
    - The §4 matching table as data-driven tests.
    - 2.x wire fixtures: envelopes with and without the new key, a native-only schema header,
      and a non-integer version.
-   - Every row of the evolution table.
+   - Every row of the evolution table, and every row of the §7 resolution table.
    - The new package in `tests/Runax.Messaging.AotSmoke`.
-7. **Docs:** contracts.md (including the corrected required → optional rule), headers.md,
-   consuming.md, serialization.md, CHANGELOG.
+   - For the Kafka add-on, integration tests against a Schema Registry container. Tests of
+     broker-side validation need Confluent Server, so they can't run on Apache Kafka images.
+8. **Docs:** contracts.md (including the corrected required → optional rule), headers.md,
+   consuming.md, serialization.md, configuration.md (the validation default), the Kafka
+   README, CHANGELOG.
 
-## 9. Alternatives considered
+## 10. Alternatives considered
 
 | Alternative | Why not |
 | --- | --- |
@@ -644,9 +936,11 @@ non-routing label.
 | Runtime compatibility matching or registry lookup | §4. It adds a network dependency to routing, and decides compatibility too late |
 | A new `[JsonSchemaContract]` attribute | Two places to declare a contract, and a harder migration. Extending `[MessageContract]` keeps one place. |
 | Declare readable ids on the consumer class instead of the type | Invisible to the CLI, which reads types and schemas, not DI registrations. Could be added later as an override. |
-| Confluent Schema Registry or AWS Glue in core | Tied to a broker ecosystem. Possible as separate integrations later (roadmap). |
+| Confluent Schema Registry or AWS Glue in core | Tied to a broker ecosystem. Native validation goes through a transport capability instead, with Confluent as a Kafka add-on (§7). |
+| Confluent's payload-prefix wire format | The body stops being JSON, which breaks 2.x consumers, plain-JSON interop, and cross-transport outbox and DLQ copies (§7). Prefixes are only read, never written. |
+| Delegate validation to Kafka on the broker alone | Broker-side validation only checks that a schema ID is attached, never the payload (§7) |
 
-## 10. Open questions
+## 11. Open questions
 
 Each question has a recommendation, but the decision is yours.
 
@@ -686,3 +980,37 @@ Each question has a recommendation, but the decision is yours.
     drift? *Recommend yes to TestKit, and defer sampling.*
 14. **CloudEvents.** When the CloudEvents serializer (roadmap) lands, map `contract_schema`
     to and from `dataschema`? *Recommend yes. It's the reason for choosing an absolute URI.*
+
+Broker-native validation (§7):
+
+15. **"Enabled globally."** Options: a messaging-level default that every bus copies and can
+    override, which would be the first messaging-level setting; a per-bus helper
+    convention, as configuration.md suggests today; or a plain container options class.
+    *Recommend the messaging-level default. It has the same shape as the JSON options
+    buses already copy, and a fleet-wide policy is the point.*
+16. **Library validation off, but the broker only checks references.** Fail at startup
+    unless `AcceptReferenceOnly` is set, or just warn? *Recommend failing.*
+17. **What "Kafka validates" means for Runax's own publishes.** Should the add-on validate
+    payloads client-side, with the registry's schema and NJsonSchema? Or should Runax rely
+    on broker-side ID validation and other producers' serializers? *Recommend client-side
+    validation. Otherwise Kafka-only mode publishes unchecked payloads.*
+18. **The registry ID form, and whether the broker supports it.** *Recommend header GUIDs
+    only.* First test broker-side validation of header IDs on a Dedicated cluster. If the
+    broker doesn't support it, either give up broker-side validation on Runax topics, or
+    allow a per-topic prefix opt-in that gives up plain-JSON interop. *Recommend giving up
+    broker-side validation.*
+19. **Subject naming for topics that carry several `$id`s.** Use `TopicRecordNameStrategy`,
+    or allow only one `$id` per registry-validated topic? It also needs checking how
+    Confluent derives a JSON Schema's record name. *Recommend `TopicRecordNameStrategy`.*
+20. **Identity derived from the registry.** When a foreign record has a registry ID but no
+    `runax-contract-schema` header, should Kafka consumers derive `ContractSchema` from the
+    registry? *Recommend yes, as an opt-in.*
+21. **Which compatibility check wins when both run.** *Recommend that `runax-contracts check`
+    gates, with the registry set to `FULL_TRANSITIVE` as a second check whose failures also
+    fail CI.*
+22. **Packaging.** A separate `Runax.Messaging.Transports.Kafka.SchemaRegistry` add-on, or
+    part of the Kafka transport? *Recommend the add-on, which keeps the registry client and
+    Newtonsoft out of plain Kafka users' dependencies.*
+23. **Other brokers.** Pub/Sub would need translation to Avro or Protobuf, and Event Hubs has
+    no .NET JSON Schema serializer. Defer native validation for both? *Recommend deferring.
+    Library validation already covers them.*
