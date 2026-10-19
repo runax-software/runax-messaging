@@ -24,6 +24,21 @@ public class OptionsValidationTests
     }
 
     [Fact]
+    public async Task Invalid_topic_retry_options_throw_on_host_start()
+    {
+        var builder = Host.CreateApplicationBuilder();
+        builder.Services.AddRunaxMessaging(m => m.AddBus(bus =>
+        {
+            bus.AddTransport(new InMemoryConfig());
+            bus.WithRetryForTopic("orders", o => o.BackoffFactor = 0.5);
+        }));
+        using var host = builder.Build();
+
+        var ex = await Should.ThrowAsync<OptionsValidationException>(host.StartAsync());
+        ex.Message.ShouldContain(nameof(RetryOptions.BackoffFactor));
+    }
+
+    [Fact]
     public void Valid_retry_options_resolve()
     {
         var services = new ServiceCollection();

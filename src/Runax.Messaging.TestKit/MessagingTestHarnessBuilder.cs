@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Runax.Messaging.Abstractions;
 
@@ -25,7 +26,8 @@ public sealed class MessagingTestHarnessBuilder
     /// </summary>
     /// <typeparam name="TConsumer">The consumer type to register.</typeparam>
     /// <returns>The same builder, to allow chaining.</returns>
-    public MessagingTestHarnessBuilder AddConsumer<TConsumer>()
+    public MessagingTestHarnessBuilder AddConsumer<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer>()
         where TConsumer : class
     {
         _configureDefaultBus.Add(bus => bus.AddConsumer<TConsumer>());
@@ -52,7 +54,9 @@ public sealed class MessagingTestHarnessBuilder
     /// <typeparam name="TService">The service type.</typeparam>
     /// <typeparam name="TImplementation">The implementation type.</typeparam>
     /// <returns>The same builder, to allow chaining.</returns>
-    public MessagingTestHarnessBuilder AddService<TService, TImplementation>()
+    public MessagingTestHarnessBuilder AddService<
+        TService,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TImplementation>()
         where TService : class
         where TImplementation : class, TService
     {

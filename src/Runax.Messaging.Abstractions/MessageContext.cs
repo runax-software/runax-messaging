@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace Runax.Messaging.Abstractions;
 
 /// <summary>
@@ -45,6 +43,5 @@ public sealed class MessageContext
     /// </summary>
     /// <typeparam name="T">The type to deserialize the body into.</typeparam>
     /// <returns>The deserialized message, or <see langword="null"/> if the body is JSON null.</returns>
-    public T? Deserialize<T>() =>
-        Serializer is not null ? Serializer.Deserialize<T>(Body) : JsonSerializer.Deserialize<T>(Body);
+    public T? Deserialize<T>() => (Serializer ?? SystemTextJsonSerializer.Default).Deserialize<T>(Body);
 }

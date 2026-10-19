@@ -32,6 +32,11 @@ needs its references:
 Reference **only** `Runax.Messaging.Abstractions` — not the core package or other
 transports.
 
+`src/Directory.Build.props` also sets `IsAotCompatible`, so the trim and AOT analyzers check
+your transport on every build. Whether apps can actually use it under native AOT also depends on
+your broker SDK; add the package to `tests/Runax.Messaging.AotSmoke` when the SDK publishes
+cleanly (see [Native AOT & trimming](aot.md)).
+
 ## 2. Implement `IMessagingTransport`
 
 The transport works entirely in terms of the serialized envelope string — it

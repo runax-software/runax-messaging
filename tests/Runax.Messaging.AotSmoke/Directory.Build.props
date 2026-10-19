@@ -1,0 +1,4 @@
+<Project>
+  <!-- Deliberately does NOT import tests/Directory.Build.props: this is a native AOT console app that CI
+       publishes and runs, not an xUnit test project. Its settings live in the .csproj. -->
+</Project>

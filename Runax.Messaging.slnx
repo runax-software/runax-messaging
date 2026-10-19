@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/Tests/">
+    <Project Path="tests\Runax.Messaging.AotSmoke\Runax.Messaging.AotSmoke.csproj" Type="Classic C#" />
     <Project Path="tests\Runax.Messaging.Outbox.Tests\Runax.Messaging.Outbox.Tests.csproj" Type="Classic C#" />
     <Project Path="tests\Runax.Messaging.Transports.Google.PubSub.Tests\Runax.Messaging.Transports.Google.PubSub.Tests.csproj" Type="Classic C#" />
     <Project Path="tests\Runax.Messaging.Transports.Redis.Tests\Runax.Messaging.Transports.Redis.Tests.csproj" Type="Classic C#" />

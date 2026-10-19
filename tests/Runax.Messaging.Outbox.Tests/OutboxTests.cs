@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Runax.Messaging;
 using Runax.Messaging.Abstractions;
 using Runax.Messaging.InMemory;
@@ -70,5 +71,19 @@ public class OutboxTests
         (await store.GetPendingAsync(BusNames.Default, 10)).ShouldBeEmpty();
 
         await host.StopAsync();
+    }
+
+    [Fact]
+    public async Task Invalid_outbox_options_throw_on_host_start()
+    {
+        var builder = Host.CreateApplicationBuilder();
+        builder.Services.AddRunaxMessaging(m => m.AddBus(bus => bus
+            .AddTransport(new InMemoryConfig())
+            .AddOutbox(o => o.BatchSize = 0)
+            .AddOutboxStore(new InMemoryOutboxStoreConfig())));
+        using var host = builder.Build();
+
+        var ex = await Should.ThrowAsync<OptionsValidationException>(host.StartAsync());
+        ex.Message.ShouldContain(nameof(OutboxOptions.BatchSize));
     }
 }

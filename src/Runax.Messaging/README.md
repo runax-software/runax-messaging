@@ -192,7 +192,8 @@ container's global `JsonSerializerOptions` with your action applied on top. To s
 serializer entirely, implement `ISerializer` and register it with `bus.UseSerializer<T>()`.
 Both are **per bus**, with `ConfigureSerializationForTopic` / `UseSerializerForTopic<T>` for
 topic-level overrides; the framework-owned `__runax` envelope is identical either way. See
-[Serialization & custom serializers](../../docs/serialization.md).
+[Serialization & custom serializers](../../docs/serialization.md) and, for trimmed or native AOT
+apps, [Native AOT & trimming](../../docs/aot.md).
 
 ## Contract versioning
 

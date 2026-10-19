@@ -3,6 +3,9 @@
 Google Cloud Pub/Sub transport for [Runax.Messaging](https://github.com/runax-software/runax-messaging).
 A topic maps to a Pub/Sub topic for publishing and to a subscription for consuming.
 
+> Not supported in native AOT or trimmed apps: `Google.Cloud.PubSub.V1` (through Gax, Protobuf, and
+> Newtonsoft.Json) produces trim/AOT warnings. See [Native AOT & trimming](../../docs/aot.md).
+
 ## Install
 
 ```bash

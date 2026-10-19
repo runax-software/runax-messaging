@@ -24,8 +24,6 @@ observability (see [CHANGELOG.md](CHANGELOG.md)).
   orchestration: a saga reacts to a stream of events over time and coordinates a
   multi-step process, with timeouts and compensation on failure. Depends on a
   saga state store and the scheduling work above (for timeouts).
-- [ ] **AOT / trim support** — mark the shippable projects `IsTrimmable` /
-  `IsAotCompatible` and validate; the serializer is already source-gen-capable.
 - [ ] **Benchmarks (BenchmarkDotNet)** — guard throughput and allocations against
   regressions as the library grows.
 

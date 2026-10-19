@@ -77,7 +77,7 @@ of its three forms fits:
 | --- | --- |
 | `bus.AddTransport(config)` | You have a pre-built `TransportConfig` instance (settings known in code, or built by your own factory). |
 | `bus.AddTransport<TConfig>(c => ...)` | You want the config created for you and set a few properties inline. |
-| `bus.AddTransport<TConfig>(section)` | The settings live in `IConfiguration` — the section is bound onto a new config instance. |
+| `bus.AddTransport<TConfig>(section)` | The settings live in `IConfiguration` — the section is bound onto a new config instance. Not trim/AOT-safe; see [Native AOT & trimming](aot.md#configuration-binding). |
 
 ### A full example
 
