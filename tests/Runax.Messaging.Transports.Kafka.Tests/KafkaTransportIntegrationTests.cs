@@ -33,30 +33,38 @@ public sealed class KafkaTransportIntegrationTests : IDisposable
 
     public void Dispose() => _provider.Dispose();
 
+    private static readonly Dictionary<string, string> ProbeHeaders = new()
+    {
+        ["tenant"] = "acme",
+        [MessageHeaders.TraceParent] = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+    };
+
     [Fact]
-    public async Task Publish_then_subscribe_round_trips_the_envelope()
+    public async Task Publish_then_subscribe_round_trips_the_envelope_and_native_headers()
     {
         var transport = _provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
         var envelope = $$"""{"probe":"{{Guid.NewGuid():N}}"}""";
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var received = new TaskCompletionSource<TransportMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var subscription = transport.SubscribeAsync(
             [_topic],
-            (json, _) =>
+            message =>
             {
-                received.TrySetResult(json);
+                received.TrySetResult(message);
                 return ValueTask.FromResult(MessageDisposition.Acknowledge);
             },
             cts.Token);
 
         // Give the consumer time to join the group and get its partition assignment.
         await Task.Delay(3000);
-        await transport.PublishAsync(_topic, envelope);
+        await transport.PublishAsync(new TransportMessage(_topic, envelope, ProbeHeaders));
 
-        var delivered = await received.Task.WaitAsync(cts.Token);
-        delivered.ShouldBe(envelope);
+        var result = await received.Task.WaitAsync(cts.Token);
+        result.Body.ShouldBe(envelope);
+        result.Headers.ShouldContainKeyAndValue("tenant", "acme");
+        result.Headers.ShouldContainKeyAndValue(MessageHeaders.TraceParent, ProbeHeaders[MessageHeaders.TraceParent]);
 
         await cts.CancelAsync();
         try

@@ -22,6 +22,9 @@ strongly-typed messages without coupling your application to a specific broker.
 - **Contract versioning** — optional `[MessageContract(version)]`; consumers subscribe per version, with a
   pluggable strategy (dead-letter/requeue/custom) for versions no consumer handles.
 - **Transactional outbox** — optional package for atomic database-write + publish.
+- **Native broker headers** — headers, trace context, and contract version travel both in the
+  envelope and as native headers (AMQP, Kafka, SQS/SNS attributes, ...), so Go, Java, and Node
+  services interoperate without knowing the envelope.
 - **Native AOT & trimming** — the core, outbox, TestKit, and most transports are AOT-compatible
   and verified with a native AOT publish in CI.
 - **Transports** — RabbitMQ, Apache Kafka, Amazon SQS, Amazon SNS, Azure Service Bus, Azure Event Hubs,
@@ -249,6 +252,7 @@ Start at the [documentation index](docs/README.md).
 
 - [Buses — the core model](docs/buses.md): one transport per bus, modes, multi-bus patterns, resolution rules
 - [Publishing](docs/publishing.md): `IBus`, headers, batching, fan-out, what a publish actually does
+- [Headers & interop](docs/headers.md): native broker headers, precedence, producing from other languages
 - [Consuming & reliability](docs/consuming.md): consumers, contract versioning, retries, dead-lettering, unroutable messages
 - [Message contracts](docs/contracts.md): designing and sharing contract types, versioning, evolution, safe rollout
 - [Transactional outbox](docs/outbox.md): the pattern, wiring, writing a real store, delivery guarantees

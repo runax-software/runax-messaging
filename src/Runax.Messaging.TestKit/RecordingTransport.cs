@@ -19,68 +19,84 @@ internal sealed class RecordingTransport(
     MessageRecorder recorder,
     IMessageSerializer serializer,
     RetryOptions retryOptions,
+    BusHeaderSettings headerSettings,
     string busName) : IMessagingTransport
 {
     public string SystemName => inner.SystemName;
 
-    public ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default)
+    public ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default) =>
+        PublishAsync(new TransportMessage(topic, envelopeJson), cancellationToken);
+
+    public ValueTask PublishAsync(TransportMessage message, CancellationToken cancellationToken = default)
     {
-        RecordDeadLetterPublish(topic, envelopeJson);
-        return inner.PublishAsync(topic, envelopeJson, cancellationToken);
+        RecordDeadLetterPublish(message);
+        return inner.PublishAsync(message, cancellationToken);
     }
 
-    public async ValueTask PublishBatchAsync(
+    public ValueTask PublishBatchAsync(
         string topic,
         IReadOnlyList<string> envelopeJsons,
+        CancellationToken cancellationToken = default) =>
+        PublishBatchAsync(envelopeJsons.Select(e => new TransportMessage(topic, e)).ToList(), cancellationToken);
+
+    public async ValueTask PublishBatchAsync(
+        IReadOnlyList<TransportMessage> messages,
         CancellationToken cancellationToken = default)
     {
-        foreach (var envelopeJson in envelopeJsons)
-            RecordDeadLetterPublish(topic, envelopeJson);
+        foreach (var message in messages)
+            RecordDeadLetterPublish(message);
 
-        await inner.PublishBatchAsync(topic, envelopeJsons, cancellationToken).ConfigureAwait(false);
+        await inner.PublishBatchAsync(messages, cancellationToken).ConfigureAwait(false);
     }
 
     public Task SubscribeAsync(
         string[] topics,
         Func<string, string, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken = default) =>
-        inner.SubscribeAsync(topics, async (envelopeJson, topic) =>
+        SubscribeAsync(topics, message => onMessage(message.Body, message.Topic), cancellationToken);
+
+    public Task SubscribeAsync(
+        string[] topics,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
+        CancellationToken cancellationToken = default) =>
+        inner.SubscribeAsync(topics, async message =>
         {
-            var disposition = await onMessage(envelopeJson, topic).ConfigureAwait(false);
-            Record(topic, envelopeJson, disposition);
+            var disposition = await onMessage(message).ConfigureAwait(false);
+            Record(message, disposition);
             return disposition;
         }, cancellationToken);
 
-    private void RecordDeadLetterPublish(string topic, string envelopeJson)
+    private void RecordDeadLetterPublish(TransportMessage message)
     {
         // Dead-letter topics are never subscribed, so their messages never reach the delivery path above.
         // Record them here so WaitForDeadLetterAsync can observe them. A normal publish is recorded when it is
         // consumed, so this only ever fires for the framework-managed dead-letter topic.
         if (retryOptions.DeadLetterTopicSuffix.Length > 0
-            && topic.EndsWith(retryOptions.DeadLetterTopicSuffix, StringComparison.Ordinal))
+            && message.Topic.EndsWith(retryOptions.DeadLetterTopicSuffix, StringComparison.Ordinal))
         {
-            Record(topic, envelopeJson, MessageDisposition.DeadLetter);
+            Record(message, MessageDisposition.DeadLetter);
         }
     }
 
-    private void Record(string topic, string envelopeJson, MessageDisposition disposition)
+    private void Record(TransportMessage message, MessageDisposition disposition)
     {
         MessageContext context;
         try
         {
-            context = serializer.Deserialize(envelopeJson, topic);
+            context = NativeHeaders.Merge(
+                serializer.Deserialize(message.Body, message.Topic), message.Headers, headerSettings.Precedence);
         }
         catch
         {
             // A malformed envelope still counts as an observed delivery; record the raw body so tests can see it.
             context = new MessageContext
             {
-                Topic = topic,
-                Body = envelopeJson,
-                Headers = new Dictionary<string, string>(),
+                Topic = message.Topic,
+                Body = message.Body,
+                Headers = new Dictionary<string, string>(message.Headers),
             };
         }
 
-        recorder.Record(new RecordedMessage(busName, topic, context, disposition));
+        recorder.Record(new RecordedMessage(busName, message.Topic, context, disposition));
     }
 }

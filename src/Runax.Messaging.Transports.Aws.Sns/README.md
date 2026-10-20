@@ -70,6 +70,9 @@ See [Configuration & per-bus settings](../../docs/configuration.md).
 ## Behavior
 
 - **Publish** sends the serialized envelope to the topic's SNS ARN.
+- **Native headers** travel as SNS message attributes (10 per message, written most
+  important first). On the subscribed queue they're read from SQS attributes with raw
+  message delivery, or from the notification's `MessageAttributes` without it. See [Headers & interop](../../docs/headers.md).
 - **Subscribe** long-polls the SQS queue mapped for each topic, unwraps the SNS notification envelope
   (when raw message delivery is off), and maps the dispatch verdict:
   - `Acknowledge` → `DeleteMessage`

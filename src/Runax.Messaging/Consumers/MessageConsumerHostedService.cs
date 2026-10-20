@@ -11,11 +11,13 @@ namespace Runax.Messaging.Consumers;
 
 /// <summary>
 /// Background service that subscribes one bus's registered consumers to their topics and
-/// dispatches incoming messages, applying the bus's retry and dead-letter policy. Each consuming
+/// dispatches incoming messages, applying the bus's retry and dead-letter policy. A message's native
+/// broker headers are merged with its envelope's per the bus's <see cref="HeaderSource"/>. Each consuming
 /// bus runs its own instance, so buses subscribe, run, and shut down independently.
 /// </summary>
 internal sealed class MessageConsumerHostedService(
     string busName,
+    BusHeaderSettings headerSettings,
     IServiceProvider serviceProvider,
     IEnumerable<ConsumerRegistration> registrations,
     IMessageSerializerProvider serializerProvider,
@@ -63,16 +65,16 @@ internal sealed class MessageConsumerHostedService(
 
         await Transport.SubscribeAsync(
             topics,
-            (envelopeJson, topic) => DispatchAsync(envelopeJson, topic, topicConsumers, stoppingToken),
+            message => DispatchAsync(message, topicConsumers, stoppingToken),
             stoppingToken);
     }
 
     private async ValueTask<MessageDisposition> DispatchAsync(
-        string envelopeJson,
-        string topic,
+        TransportMessage message,
         Dictionary<string, List<IMessageConsumer>> topicConsumers,
         CancellationToken cancellationToken)
     {
+        var topic = message.Topic;
         if (!topicConsumers.TryGetValue(topic, out var consumers))
             return MessageDisposition.Acknowledge;
 
@@ -83,16 +85,17 @@ internal sealed class MessageConsumerHostedService(
         MessageContext context;
         try
         {
-            context = serializer.Deserialize(envelopeJson, topic);
+            context = NativeHeaders.Merge(
+                serializer.Deserialize(message.Body, topic), message.Headers, headerSettings.Precedence);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Malformed envelope on topic '{Topic}' (bus '{Bus}'). Dead-lettering.", topic, busName);
-            using var malformedActivity = StartProcessActivity(topic, headers: null);
+            using var malformedActivity = StartProcessActivity(topic, message.Headers);
             malformedActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             try
             {
-                return await DeadLetterAsync(envelopeJson, topic, ex, attempts: 0, cancellationToken);
+                return await DeadLetterAsync(message, context: null, ex, attempts: 0, cancellationToken);
             }
             finally
             {
@@ -108,7 +111,7 @@ internal sealed class MessageConsumerHostedService(
         {
             try
             {
-                return await HandleUnroutableAsync(context, envelopeJson, cancellationToken);
+                return await HandleUnroutableAsync(message, context, cancellationToken);
             }
             finally
             {
@@ -125,7 +128,7 @@ internal sealed class MessageConsumerHostedService(
             var result = MessageDisposition.Acknowledge;
             foreach (var consumer in matched)
             {
-                var disposition = await DispatchToConsumerAsync(consumer, context, envelopeJson, topic, cancellationToken);
+                var disposition = await DispatchToConsumerAsync(consumer, message, context, cancellationToken);
                 if (disposition == MessageDisposition.Requeue)
                     return MessageDisposition.Requeue;
                 if (disposition == MessageDisposition.DeadLetter)
@@ -157,8 +160,8 @@ internal sealed class MessageConsumerHostedService(
     }
 
     private async ValueTask<MessageDisposition> HandleUnroutableAsync(
+        TransportMessage message,
         MessageContext context,
-        string envelopeJson,
         CancellationToken cancellationToken)
     {
         logger.LogWarning(
@@ -181,7 +184,7 @@ internal sealed class MessageConsumerHostedService(
         if (disposition == MessageDisposition.DeadLetter)
         {
             var reason = new UnroutableMessageException(context.Topic, context.ContractVersion);
-            return await DeadLetterAsync(envelopeJson, context.Topic, reason, attempts: 0, cancellationToken);
+            return await DeadLetterAsync(message, context, reason, attempts: 0, cancellationToken);
         }
 
         return disposition;
@@ -224,11 +227,11 @@ internal sealed class MessageConsumerHostedService(
 
     private async ValueTask<MessageDisposition> DispatchToConsumerAsync(
         IMessageConsumer consumer,
+        TransportMessage message,
         MessageContext context,
-        string envelopeJson,
-        string topic,
         CancellationToken cancellationToken)
     {
+        var topic = message.Topic;
         var retryOptions = retryOptionsProvider.For(busName, topic);
 
         for (var attempt = 1; ; attempt++)
@@ -244,7 +247,7 @@ internal sealed class MessageConsumerHostedService(
                 logger.LogWarning(ex,
                     "Consumer {Consumer} rejected message on '{Topic}' as poison. Dead-lettering.",
                     consumer.GetType().Name, topic);
-                return await DeadLetterAsync(envelopeJson, topic, ex, attempt, cancellationToken);
+                return await DeadLetterAsync(message, context, ex, attempt, cancellationToken);
             }
             catch (Exception ex) when (attempt < retryOptions.MaxAttempts && !cancellationToken.IsCancellationRequested)
             {
@@ -267,7 +270,7 @@ internal sealed class MessageConsumerHostedService(
                 logger.LogError(ex,
                     "Consumer {Consumer} failed on '{Topic}' after {Attempt} attempt(s). Dead-lettering.",
                     consumer.GetType().Name, topic, attempt);
-                return await DeadLetterAsync(envelopeJson, topic, ex, attempt, cancellationToken);
+                return await DeadLetterAsync(message, context, ex, attempt, cancellationToken);
             }
         }
     }
@@ -282,13 +285,16 @@ internal sealed class MessageConsumerHostedService(
     // Dead-letter publishing is part of the consume pipeline and is therefore allowed even on a
     // ConsumeOnly bus (BusMode governs the application publishing surface only). Buses whose broker
     // credentials cannot write should use DeadLetterStrategy.BrokerNative or disable dead-lettering.
+    // The dead-lettered copy keeps the message's headers natively too: the merged view when the envelope
+    // could be decoded, else the broker's headers as received.
     private async ValueTask<MessageDisposition> DeadLetterAsync(
-        string envelopeJson,
-        string topic,
+        TransportMessage message,
+        MessageContext? context,
         Exception exception,
         int attempts,
         CancellationToken cancellationToken)
     {
+        var topic = message.Topic;
         var retryOptions = retryOptionsProvider.For(busName, topic);
 
         MessagingDiagnostics.Failed.Add(1, MessagingDiagnostics.Tags(Transport.SystemName, topic, busName));
@@ -311,16 +317,24 @@ internal sealed class MessageConsumerHostedService(
 
         try
         {
-            var enriched = serializerProvider.For(busName, topic).EnrichHeaders(envelopeJson, new Dictionary<string, string>
+            var deadLetterHeaders = new Dictionary<string, string>
             {
                 ["x-runax-dlq-reason"] = exception.Message,
                 ["x-runax-dlq-exception"] = exception.GetType().FullName ?? exception.GetType().Name,
                 ["x-runax-dlq-original-topic"] = topic,
                 ["x-runax-dlq-attempts"] = attempts.ToString(CultureInfo.InvariantCulture),
                 ["x-runax-dlq-timestamp"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
-            });
+            };
 
-            await Transport.PublishAsync(deadLetterTopic, enriched, cancellationToken);
+            var enriched = serializerProvider.For(busName, topic).EnrichHeaders(message.Body, deadLetterHeaders);
+            var nativeHeaders = headerSettings.WriteNativeHeaders
+                ? NativeHeaders.Build(
+                    context?.ContractName,
+                    context?.ContractVersion,
+                    (context?.Headers ?? message.Headers).Concat(deadLetterHeaders))
+                : null;
+
+            await Transport.PublishAsync(new TransportMessage(deadLetterTopic, enriched, nativeHeaders), cancellationToken);
             logger.LogInformation("Dead-lettered message from '{Topic}' to '{DeadLetterTopic}'.", topic, deadLetterTopic);
             return MessageDisposition.Acknowledge;
         }

@@ -40,7 +40,8 @@ public class EnvelopeSerializerTests
     [Fact]
     public void Serialize_places_the_payload_at_the_top_level_with_metadata_under_the_reserved_key()
     {
-        var envelopeJson = _serializer.Serialize(new Order(3, "thing"), headers: null);
+        var envelopeJson = _serializer.Serialize(
+            new Order(3, "thing"), new Dictionary<string, string> { ["k"] = "v" });
 
         using var document = JsonDocument.Parse(envelopeJson);
         var root = document.RootElement;
@@ -49,7 +50,29 @@ public class EnvelopeSerializerTests
         root.GetProperty("Id").GetInt32().ShouldBe(3);
         root.GetProperty("Name").GetString().ShouldBe("thing");
         // Framework metadata lives under the reserved key.
-        root.TryGetProperty(EnvelopeSerializer.MetadataKey, out _).ShouldBeTrue();
+        root.GetProperty(EnvelopeSerializer.MetadataKey).GetProperty("headers").GetProperty("k").GetString()
+            .ShouldBe("v");
+    }
+
+    [Fact]
+    public void Serialize_omits_the_reserved_key_when_there_is_no_metadata()
+    {
+        var envelopeJson = _serializer.Serialize(new Order(3, "thing"), headers: null);
+
+        envelopeJson.ShouldBe("""{"Id":3,"Name":"thing"}""");
+    }
+
+    [Fact]
+    public void An_envelope_without_metadata_reads_like_one_with_an_empty_reserved_key()
+    {
+        var omitted = _serializer.Deserialize(_serializer.Serialize(new Order(3, "thing"), headers: null), "orders");
+        var empty = _serializer.Deserialize("""{"Id":3,"Name":"thing","__runax":{}}""", "orders");
+
+        omitted.Body.ShouldBe(empty.Body);
+        omitted.Headers.ShouldBeEmpty();
+        empty.Headers.ShouldBeEmpty();
+        omitted.ContractVersion.ShouldBe(empty.ContractVersion);
+        omitted.ContractName.ShouldBe(empty.ContractName);
     }
 
     [Fact]

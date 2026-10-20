@@ -16,6 +16,18 @@ All packages in the repository are versioned together.
   AOT smoke test in CI (`tests/Runax.Messaging.AotSmoke`). The Kafka and Google Pub/Sub
   transports remain JIT-only because their broker SDKs aren't AOT-compatible. Guide:
   [docs/aot.md](docs/aot.md).
+- **Native broker headers** — a message's headers, W3C trace context, and `[MessageContract]`
+  name and version are written both in the `__runax` envelope and as native broker headers
+  (AMQP headers, Kafka record headers, SQS/SNS message attributes, Service Bus application
+  properties, Event Hubs properties, Pub/Sub attributes, Redis stream fields). On receive the
+  two copies are merged key by key; `bus.HeaderPrecedence` picks the winner on a conflict
+  (default `HeaderSource.Broker`). Producers in other languages can version a plain JSON
+  message with a `runax-contract-version` header and continue a trace with `traceparent`.
+  Turn writing off per bus with `bus.WriteNativeHeaders = false`. Guide:
+  [docs/headers.md](docs/headers.md).
+- `IMessagingTransport` gains `TransportMessage` overloads of `PublishAsync`,
+  `PublishBatchAsync`, and `SubscribeAsync` that carry native headers. They have default
+  implementations, so existing custom transports keep working (metadata stays in the envelope).
 
 ### Changed
 
@@ -29,6 +41,9 @@ All packages in the repository are versioned together.
 - `RetryOptions` and `OutboxOptions` are validated by source-generated options validators
   instead of `ValidateDataAnnotations()`. The rules are the same, but the
   `OptionsValidationException` message is worded differently.
+- The `__runax` key is left out of a message that has no metadata (no contract, no headers, no
+  active trace), so such a message is plain JSON. This is wire-compatible: every version reads a
+  missing key exactly like an empty one.
 
 ## [2.0.0] - 2026-09-10
 

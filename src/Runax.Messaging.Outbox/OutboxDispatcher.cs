@@ -3,13 +3,15 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Runax.Messaging.Abstractions;
+using Runax.Messaging.Serialization;
 
 namespace Runax.Messaging.Outbox;
 
 /// <summary>
 /// Background service that periodically drains one bus's pending messages from its
 /// <see cref="IOutboxStore"/> and publishes them to the bus's transport, marking each dispatched
-/// on success. Each bus with an outbox runs its own dispatcher.
+/// on success. Native headers are rebuilt from each stored envelope unless the bus turned them off. Each bus
+/// with an outbox runs its own dispatcher.
 /// </summary>
 internal sealed class OutboxDispatcher(
     string busName,
@@ -23,6 +25,7 @@ internal sealed class OutboxDispatcher(
         var options = optionsMonitor.Get(busName);
         var store = serviceProvider.GetRequiredKeyedService<IOutboxStore>(busName);
         var transport = serviceProvider.GetRequiredKeyedService<IMessagingTransport>(busName);
+        var headerSettings = serviceProvider.GetKeyedService<BusHeaderSettings>(busName) ?? BusHeaderSettings.Default;
 
         logger.LogInformation(
             "Outbox dispatcher for bus '{Bus}' started, polling every {Interval}.", busName, options.PollingInterval);
@@ -37,7 +40,11 @@ internal sealed class OutboxDispatcher(
                 {
                     if (stoppingToken.IsCancellationRequested) break;
 
-                    await transport.PublishAsync(message.Topic, message.Payload, stoppingToken);
+                    var nativeHeaders = headerSettings.WriteNativeHeaders
+                        ? NativeHeaders.FromEnvelope(message.Payload)
+                        : null;
+                    await transport.PublishAsync(
+                        new TransportMessage(message.Topic, message.Payload, nativeHeaders), stoppingToken);
                     await store.MarkDispatchedAsync(message.Id, stoppingToken);
                 }
             }

@@ -8,8 +8,9 @@ using Runax.Messaging.Abstractions;
 namespace Runax.Messaging.Transports.RabbitMq;
 
 /// <summary>
-/// RabbitMQ implementation of <see cref="IMessagingTransport"/>. Topics map to routing keys on a topic exchange.
-/// Built against the RabbitMQ.Client 7.x asynchronous <see cref="IChannel"/> API.
+/// RabbitMQ implementation of <see cref="IMessagingTransport"/>. Topics map to routing keys on a topic exchange,
+/// and native headers travel in the AMQP headers table. Built against the RabbitMQ.Client 7.x asynchronous
+/// <see cref="IChannel"/> API.
 /// </summary>
 internal sealed class RabbitMqTransport : IMessagingTransport, IDisposable
 {
@@ -34,12 +35,12 @@ internal sealed class RabbitMqTransport : IMessagingTransport, IDisposable
 
     public string SystemName => TransportName;
 
-    public async ValueTask PublishAsync(
-        string topic,
-        string envelopeJson,
-        CancellationToken cancellationToken = default)
+    public ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default) =>
+        PublishAsync(new TransportMessage(topic, envelopeJson), cancellationToken);
+
+    public async ValueTask PublishAsync(TransportMessage message, CancellationToken cancellationToken = default)
     {
-        var body = Encoding.UTF8.GetBytes(envelopeJson);
+        var body = Encoding.UTF8.GetBytes(message.Body);
 
         // Each pooled channel is used by a single publisher at a time, so concurrent publishes
         // fan out across channels. With confirmations enabled, BasicPublishAsync awaits the broker ack.
@@ -48,7 +49,8 @@ internal sealed class RabbitMqTransport : IMessagingTransport, IDisposable
         {
             using var confirm = ConfirmScope(cancellationToken);
             await channel.BasicPublishAsync(
-                _options.ExchangeName, topic, mandatory: false, CreateProperties(), body, confirm.Token)
+                _options.ExchangeName, message.Topic, mandatory: false, CreateProperties(message.Headers), body,
+                confirm.Token)
                 .ConfigureAwait(false);
 
             _publishPool.Return(channel);
@@ -61,27 +63,31 @@ internal sealed class RabbitMqTransport : IMessagingTransport, IDisposable
         }
     }
 
-    public async ValueTask PublishBatchAsync(
+    public ValueTask PublishBatchAsync(
         string topic,
         IReadOnlyList<string> envelopeJsons,
+        CancellationToken cancellationToken = default) =>
+        PublishBatchAsync(envelopeJsons.Select(e => new TransportMessage(topic, e)).ToList(), cancellationToken);
+
+    public async ValueTask PublishBatchAsync(
+        IReadOnlyList<TransportMessage> messages,
         CancellationToken cancellationToken = default)
     {
-        if (envelopeJsons.Count == 0)
+        if (messages.Count == 0)
             return;
 
         var channel = await _publishPool.RentAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var properties = CreateProperties();
             using var confirm = ConfirmScope(cancellationToken);
 
             // Pipeline every publish, then await all confirmations for the batch together.
-            var pending = new List<Task>(envelopeJsons.Count);
-            foreach (var envelopeJson in envelopeJsons)
+            var pending = new List<Task>(messages.Count);
+            foreach (var message in messages)
             {
                 pending.Add(channel.BasicPublishAsync(
-                    _options.ExchangeName, topic, mandatory: false, properties,
-                    Encoding.UTF8.GetBytes(envelopeJson), confirm.Token).AsTask());
+                    _options.ExchangeName, message.Topic, mandatory: false, CreateProperties(message.Headers),
+                    Encoding.UTF8.GetBytes(message.Body), confirm.Token).AsTask());
             }
 
             await Task.WhenAll(pending).ConfigureAwait(false);
@@ -95,9 +101,15 @@ internal sealed class RabbitMqTransport : IMessagingTransport, IDisposable
         }
     }
 
-    public async Task SubscribeAsync(
+    public Task SubscribeAsync(
         string[] topics,
         Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        CancellationToken cancellationToken = default) =>
+        SubscribeAsync(topics, message => onMessage(message.Body, message.Topic), cancellationToken);
+
+    public async Task SubscribeAsync(
+        string[] topics,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken = default)
     {
         var channel = await CreateChannelAsync(publisherConfirms: false, cancellationToken).ConfigureAwait(false);
@@ -148,14 +160,16 @@ internal sealed class RabbitMqTransport : IMessagingTransport, IDisposable
 
     private async Task OnReceivedAsync(
         IChannel channel,
-        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         BasicDeliverEventArgs ea)
     {
         MessageDisposition disposition;
         try
         {
             var json = Encoding.UTF8.GetString(ea.Body.Span);
-            disposition = await onMessage(json, ea.RoutingKey).ConfigureAwait(false);
+            disposition = await onMessage(
+                new TransportMessage(ea.RoutingKey, json, ReadHeaders(ea.BasicProperties.Headers)))
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -239,8 +253,28 @@ internal sealed class RabbitMqTransport : IMessagingTransport, IDisposable
         return channel;
     }
 
-    private static BasicProperties CreateProperties() =>
-        new() { ContentType = "application/json", DeliveryMode = DeliveryModes.Persistent };
+    internal static BasicProperties CreateProperties(IReadOnlyDictionary<string, string> headers) => new()
+    {
+        ContentType = "application/json",
+        DeliveryMode = DeliveryModes.Persistent,
+        Headers = headers.Count == 0 ? null : headers.ToDictionary(h => h.Key, h => (object?)h.Value),
+    };
+
+    // String headers arrive as AMQP long strings (raw bytes); other AMQP types are formatted.
+    internal static Dictionary<string, string>? ReadHeaders(IDictionary<string, object?>? headers)
+    {
+        if (headers is null || headers.Count == 0)
+            return null;
+
+        var result = new Dictionary<string, string>(headers.Count, StringComparer.Ordinal);
+        foreach (var (key, value) in headers)
+        {
+            if (MessageHeaders.FormatValue(value) is { } text)
+                result[key] = text;
+        }
+
+        return result;
+    }
 
     // Bounds the confirm wait to ConfirmTimeout when publisher confirmations are enabled.
     private ConfirmTokenScope ConfirmScope(CancellationToken cancellationToken)

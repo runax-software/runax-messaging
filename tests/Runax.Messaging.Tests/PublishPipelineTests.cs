@@ -22,8 +22,7 @@ public class PublishPipelineTests
         await provider.GetRequiredService<IBus>().PublishAsync("orders", new Order(1));
 
         await transport.Received(1).PublishAsync(
-            "orders",
-            Arg.Is<string>(envelope => envelope.Contains(EnvelopeSerializer.MetadataKey) && envelope.Contains("\"Id\":1")),
+            Arg.Is<TransportMessage>(message => message.Topic == "orders" && message.Body.Contains("\"Id\":1")),
             Arg.Any<CancellationToken>());
     }
 }

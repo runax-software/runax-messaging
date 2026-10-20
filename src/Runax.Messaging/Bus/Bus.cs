@@ -10,11 +10,13 @@ namespace Runax.Messaging;
 /// Default <see cref="IBus"/>. Publishing runs a small pipeline: mode guard
 /// (<see cref="BusMode.ConsumeOnly"/> throws), envelope serialization via the bus's serializer,
 /// then the sink — the bus's transport by default, or the outbox store when an outbox is
-/// configured. Emits publish telemetry tagged with the bus name.
+/// configured. The message's headers and contract metadata travel both in the envelope and, unless the bus
+/// turned it off, as native broker headers. Emits publish telemetry tagged with the bus name.
 /// </summary>
 internal sealed class Bus(
     string name,
     BusMode mode,
+    BusHeaderSettings headerSettings,
     IServiceProvider services,
     IMessageSerializerProvider serializerProvider) : IBus
 {
@@ -73,13 +75,14 @@ internal sealed class Bus(
 
         var headers = carrier.Count > 0 ? carrier : null;
         var serializer = serializerProvider.For(Name, topic);
-        var envelopes = new List<string>(messages.Count);
+        var nativeHeaders = NativeHeadersFor<TMessage>(headers);
+        var envelopes = new List<TransportMessage>(messages.Count);
         foreach (var message in messages)
-            envelopes.Add(serializer.Serialize(message, headers));
+            envelopes.Add(new TransportMessage(topic, serializer.Serialize(message, headers), nativeHeaders));
 
         try
         {
-            await Sink.PublishBatchAsync(topic, envelopes, cancellationToken).ConfigureAwait(false);
+            await Sink.PublishBatchAsync(envelopes, cancellationToken).ConfigureAwait(false);
             MessagingDiagnostics.Published.Add(
                 messages.Count, MessagingDiagnostics.Tags(Transport.SystemName, topic, Name));
         }
@@ -117,7 +120,9 @@ internal sealed class Bus(
         try
         {
             var envelope = serializerProvider.For(Name, topic).Serialize(message, carrier);
-            await Sink.PublishAsync(topic, envelope, cancellationToken).ConfigureAwait(false);
+            await Sink.PublishAsync(
+                new TransportMessage(topic, envelope, NativeHeadersFor<TMessage>(carrier)), cancellationToken)
+                .ConfigureAwait(false);
             MessagingDiagnostics.Published.Add(1, MessagingDiagnostics.Tags(Transport.SystemName, topic, Name));
         }
         catch (Exception ex)
@@ -125,6 +130,15 @@ internal sealed class Bus(
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             throw;
         }
+    }
+
+    private IReadOnlyDictionary<string, string>? NativeHeadersFor<TMessage>(IDictionary<string, string>? headers)
+    {
+        if (!headerSettings.WriteNativeHeaders)
+            return null;
+
+        var contract = MessageContractCache.For(typeof(TMessage));
+        return NativeHeaders.Build(contract?.Name, contract?.Version, headers);
     }
 
     private void EnsureCanPublish()
@@ -141,14 +155,13 @@ internal sealed class Bus(
         activity.SetTag("messaging.runax.bus", Name);
     }
 
-    /// <summary>The default sink: envelopes go straight to the bus's transport.</summary>
+    /// <summary>The default sink: messages go straight to the bus's transport.</summary>
     private sealed class TransportPublishSink(IMessagingTransport transport) : IBusPublishSink
     {
-        public ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken) =>
-            transport.PublishAsync(topic, envelopeJson, cancellationToken);
+        public ValueTask PublishAsync(TransportMessage message, CancellationToken cancellationToken) =>
+            transport.PublishAsync(message, cancellationToken);
 
-        public ValueTask PublishBatchAsync(
-            string topic, IReadOnlyList<string> envelopeJsons, CancellationToken cancellationToken) =>
-            transport.PublishBatchAsync(topic, envelopeJsons, cancellationToken);
+        public ValueTask PublishBatchAsync(IReadOnlyList<TransportMessage> messages, CancellationToken cancellationToken) =>
+            transport.PublishBatchAsync(messages, cancellationToken);
     }
 }

@@ -66,12 +66,13 @@ Messages travel wrapped in an envelope so metadata rides alongside the payload:
 }
 ```
 
-The payload sits at the top level and framework metadata rides under the reserved `__runax` key. This makes
-the envelope **self-identifying** (presence of `__runax` = a Runax message) and interop cheap in both
-directions: a payload with **no** `__runax` — an S3 event, another producer's JSON — is read as a plain body,
-and foreign consumers see a normal object. `contract_name` / `contract_version` appear only when the message
-type carries `[MessageContract]` (see [Contract versioning](#contract-versioning)). The transport only ever sees the
-serialized string — it never needs to know your message types. The body serializer is pluggable (the `__runax`
+The payload sits at the top level and framework metadata rides under the reserved `__runax` key, which is
+omitted when there is no metadata to carry. This keeps interop cheap in both directions: a payload with **no**
+`__runax` — an S3 event, another producer's JSON — is read as a plain body, and foreign consumers see a normal
+object. `contract_name` / `contract_version` appear only when the message type carries `[MessageContract]` (see
+[Contract versioning](#contract-versioning)). The same metadata is also written as native broker headers, and
+the two copies are merged on receive (see [Headers & interop](headers.md)). The transport only ever sees the
+serialized string plus those headers (a `TransportMessage`), so it never needs to know your message types. The body serializer is pluggable (the `__runax`
 envelope is always framework-owned); see [Serialization & custom serializers](serialization.md). The envelope
 is unchanged from 1.x, so 1.x and 2.0 services interoperate on the same broker.
 

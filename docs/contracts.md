@@ -95,6 +95,10 @@ one version; a consumer for V2 references the V2 type.
 | `[MessageContract(2)]` | `contract_version: 1` | No |
 | `[MessageContract(2)]` | Unversioned | No — a versioned consumer requires an exact version match |
 
+The wire version is read from the envelope's `contract_version` or from the native
+`runax-contract-version` header, which is how producers in other languages version a plain
+JSON message (see [Headers & interop](headers.md#producing-from-other-languages)).
+
 A message no consumer on the bus accepts is **unroutable** and goes to the configured
 strategy — dead-letter by default. See
 [unroutable messages](consuming.md#unroutable-messages).

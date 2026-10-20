@@ -64,8 +64,10 @@ public static class MessagingConfiguratorExtensions
 
         var config = builder.Validate();
         var mode = builder.Mode;
+        var headerSettings = new BusHeaderSettings(builder.WriteNativeHeaders, builder.HeaderPrecedence);
 
         services.AddSingleton(new BusRegistration { Name = name, Mode = mode, SystemName = config.SystemName });
+        services.AddKeyedSingleton(name, headerSettings);
 
         services.AddKeyedSingleton<IMessagingTransport>(name, (sp, _) =>
             config.CreateTransport(new TransportContext(sp, name, mode)));
@@ -73,14 +75,14 @@ public static class MessagingConfiguratorExtensions
         config.ConfigureServices(services, name);
 
         services.AddKeyedSingleton<IBus>(name, (sp, _) =>
-            new Bus(name, mode, sp, sp.GetRequiredService<IMessageSerializerProvider>()));
+            new Bus(name, mode, headerSettings, sp, sp.GetRequiredService<IMessageSerializerProvider>()));
 
         // Each consuming bus gets its own hosted service so buses subscribe, run, and shut
         // down independently. A PublishOnly bus can't have consumers (validated above).
         if (builder.Consumers.Count > 0)
         {
             services.AddSingleton<IHostedService>(sp =>
-                ActivatorUtilities.CreateInstance<MessageConsumerHostedService>(sp, name));
+                ActivatorUtilities.CreateInstance<MessageConsumerHostedService>(sp, name, headerSettings));
         }
 
         return configurator;
