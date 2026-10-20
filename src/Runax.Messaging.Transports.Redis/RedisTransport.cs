@@ -7,7 +7,8 @@ namespace Runax.Messaging.Transports.Redis;
 /// <summary>
 /// Redis Streams implementation of <see cref="IMessagingTransport"/> (works with Redis and Valkey).
 /// A topic maps to a stream key; publishing is <c>XADD</c> and consuming uses a consumer group
-/// (<c>XREADGROUP</c> for new messages, <c>XAUTOCLAIM</c> to redeliver idle-pending ones).
+/// (<c>XREADGROUP</c> for new messages, <c>XAUTOCLAIM</c> to redeliver idle-pending ones). The envelope is the
+/// entry's <c>data</c> field, and every other field is a native header.
 /// </summary>
 internal sealed class RedisTransport : IMessagingTransport, IDisposable
 {
@@ -32,15 +33,32 @@ internal sealed class RedisTransport : IMessagingTransport, IDisposable
 
     public string SystemName => TransportName;
 
-    public async ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default)
+    public ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default) =>
+        PublishAsync(new TransportMessage(topic, envelopeJson), cancellationToken);
+
+    public async ValueTask PublishAsync(TransportMessage message, CancellationToken cancellationToken = default)
     {
         var db = await GetDatabaseAsync().ConfigureAwait(false);
-        await db.StreamAddAsync(topic, DataField, envelopeJson).ConfigureAwait(false);
+        await db.StreamAddAsync(message.Topic, ToStreamFields(message)).ConfigureAwait(false);
     }
+
+    public async ValueTask PublishBatchAsync(
+        IReadOnlyList<TransportMessage> messages,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var message in messages)
+            await PublishAsync(message, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task SubscribeAsync(
+        string[] topics,
+        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        CancellationToken cancellationToken = default) =>
+        SubscribeAsync(topics, message => onMessage(message.Body, message.Topic), cancellationToken);
 
     public async Task SubscribeAsync(
         string[] topics,
-        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken = default)
     {
         var db = await GetDatabaseAsync().ConfigureAwait(false);
@@ -81,7 +99,7 @@ internal sealed class RedisTransport : IMessagingTransport, IDisposable
     private async Task PumpStreamAsync(
         IDatabaseAsync db,
         string topic,
-        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
@@ -117,7 +135,7 @@ internal sealed class RedisTransport : IMessagingTransport, IDisposable
         IDatabaseAsync db,
         string topic,
         StreamEntry[] entries,
-        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken)
     {
         if (entries is null || entries.Length == 0)
@@ -139,7 +157,8 @@ internal sealed class RedisTransport : IMessagingTransport, IDisposable
             MessageDisposition disposition;
             try
             {
-                disposition = await onMessage(payload.ToString(), topic).ConfigureAwait(false);
+                disposition = await onMessage(new TransportMessage(topic, payload.ToString(), ReadHeaders(entry)))
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -154,6 +173,35 @@ internal sealed class RedisTransport : IMessagingTransport, IDisposable
         }
 
         return true;
+    }
+
+    // A header named like the data field cannot be a stream field; it stays in the envelope only.
+    internal static NameValueEntry[] ToStreamFields(TransportMessage message)
+    {
+        var fields = new List<NameValueEntry>(message.Headers.Count + 1) { new(DataField, message.Body) };
+        foreach (var (key, value) in message.Headers)
+        {
+            if (key != DataField)
+                fields.Add(new NameValueEntry(key, value));
+        }
+
+        return [.. fields];
+    }
+
+    internal static Dictionary<string, string>? ReadHeaders(StreamEntry entry)
+    {
+        Dictionary<string, string>? headers = null;
+        foreach (var field in entry.Values)
+        {
+            var name = field.Name.ToString();
+            if (name == DataField || field.Value.IsNull)
+                continue;
+
+            headers ??= new Dictionary<string, string>(StringComparer.Ordinal);
+            headers[name] = field.Value.ToString();
+        }
+
+        return headers;
     }
 
     /// <summary>

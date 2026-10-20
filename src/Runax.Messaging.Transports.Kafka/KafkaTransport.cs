@@ -1,3 +1,4 @@
+using System.Text;
 using Confluent.Kafka;
 using Confluent.Kafka.Admin;
 using Microsoft.Extensions.Logging;
@@ -7,7 +8,8 @@ namespace Runax.Messaging.Transports.Kafka;
 
 /// <summary>
 /// Apache Kafka implementation of <see cref="IMessagingTransport"/>. A topic maps directly to a Kafka topic;
-/// publishing produces the envelope as the record value and consuming uses a group with manual offset commits.
+/// publishing produces the envelope as the record value (native headers as UTF-8 record headers) and
+/// consuming uses a group with manual offset commits.
 /// Kafka has no per-message ack or native dead-letter queue, so dispositions are mapped onto offset control:
 /// <c>Acknowledge</c> commits the offset, <c>Requeue</c> seeks back so the record is redelivered, and
 /// <c>DeadLetter</c> produces the record to <c>{topic}{DeadLetterTopicSuffix}</c> before committing.
@@ -30,27 +32,35 @@ internal sealed class KafkaTransport : IMessagingTransport, IDisposable
 
     public string SystemName => TransportName;
 
-    public async ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default)
+    public ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default) =>
+        PublishAsync(new TransportMessage(topic, envelopeJson), cancellationToken);
+
+    public async ValueTask PublishAsync(TransportMessage message, CancellationToken cancellationToken = default)
     {
         await _producer.Value
-            .ProduceAsync(topic, new Message<Null, string> { Value = envelopeJson }, cancellationToken)
+            .ProduceAsync(message.Topic, ToKafkaMessage(message), cancellationToken)
             .ConfigureAwait(false);
     }
 
-    public async ValueTask PublishBatchAsync(
+    public ValueTask PublishBatchAsync(
         string topic,
         IReadOnlyList<string> envelopeJsons,
+        CancellationToken cancellationToken = default) =>
+        PublishBatchAsync(envelopeJsons.Select(e => new TransportMessage(topic, e)).ToList(), cancellationToken);
+
+    public async ValueTask PublishBatchAsync(
+        IReadOnlyList<TransportMessage> messages,
         CancellationToken cancellationToken = default)
     {
-        if (envelopeJsons.Count == 0)
+        if (messages.Count == 0)
             return;
 
         var producer = _producer.Value;
 
         // Fire every produce without awaiting the per-message delivery, then flush the whole batch once.
-        var pending = new List<Task<DeliveryResult<Null, string>>>(envelopeJsons.Count);
-        foreach (var envelopeJson in envelopeJsons)
-            pending.Add(producer.ProduceAsync(topic, new Message<Null, string> { Value = envelopeJson }, cancellationToken));
+        var pending = new List<Task<DeliveryResult<Null, string>>>(messages.Count);
+        foreach (var message in messages)
+            pending.Add(producer.ProduceAsync(message.Topic, ToKafkaMessage(message), cancellationToken));
 
         await Task.WhenAll(pending).ConfigureAwait(false);
     }
@@ -58,6 +68,12 @@ internal sealed class KafkaTransport : IMessagingTransport, IDisposable
     public Task SubscribeAsync(
         string[] topics,
         Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        CancellationToken cancellationToken = default) =>
+        SubscribeAsync(topics, message => onMessage(message.Body, message.Topic), cancellationToken);
+
+    public Task SubscribeAsync(
+        string[] topics,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken = default)
     {
         // Consume() is a blocking call, so run the poll loop on a dedicated background thread.
@@ -70,7 +86,7 @@ internal sealed class KafkaTransport : IMessagingTransport, IDisposable
 
     private void ConsumeLoop(
         string[] topics,
-        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken)
     {
         using var consumer = new ConsumerBuilder<Null, string>(BuildConsumerConfig()).Build();
@@ -115,13 +131,15 @@ internal sealed class KafkaTransport : IMessagingTransport, IDisposable
     private async Task SettleAsync(
         IConsumer<Null, string> consumer,
         ConsumeResult<Null, string> result,
-        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken)
     {
         MessageDisposition disposition;
         try
         {
-            disposition = await onMessage(result.Message.Value, result.Topic).ConfigureAwait(false);
+            disposition = await onMessage(
+                new TransportMessage(result.Topic, result.Message.Value, ReadHeaders(result.Message.Headers)))
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -142,7 +160,7 @@ internal sealed class KafkaTransport : IMessagingTransport, IDisposable
                     var deadLetterTopic = result.Topic + _options.DeadLetterTopicSuffix;
                     await _producer.Value.ProduceAsync(
                         deadLetterTopic,
-                        new Message<Null, string> { Value = result.Message.Value },
+                        new Message<Null, string> { Value = result.Message.Value, Headers = result.Message.Headers },
                         cancellationToken).ConfigureAwait(false);
                     consumer.Commit(result);
                     break;
@@ -157,6 +175,35 @@ internal sealed class KafkaTransport : IMessagingTransport, IDisposable
         {
             _logger.LogWarning(ex, "Failed to settle Kafka message at {Offset}.", result.TopicPartitionOffset);
         }
+    }
+
+    internal static Message<Null, string> ToKafkaMessage(TransportMessage message)
+    {
+        var record = new Message<Null, string> { Value = message.Body };
+        if (message.Headers.Count > 0)
+        {
+            record.Headers = new Headers();
+            foreach (var (key, value) in message.Headers)
+                record.Headers.Add(key, Encoding.UTF8.GetBytes(value));
+        }
+
+        return record;
+    }
+
+    // Kafka allows repeated header keys; the last occurrence wins, as with GetLastBytes.
+    internal static Dictionary<string, string>? ReadHeaders(Headers? headers)
+    {
+        if (headers is null || headers.Count == 0)
+            return null;
+
+        var result = new Dictionary<string, string>(headers.Count, StringComparer.Ordinal);
+        foreach (var header in headers)
+        {
+            if (header.GetValueBytes() is { } bytes)
+                result[header.Key] = Encoding.UTF8.GetString(bytes);
+        }
+
+        return result;
     }
 
     /// <summary>

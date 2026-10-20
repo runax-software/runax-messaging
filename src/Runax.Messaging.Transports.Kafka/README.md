@@ -71,6 +71,8 @@ Kafka for events and Kafka for audit are simply two buses, each with its own `Ka
   by default. A `ConsumeOnly` bus creates no producer.
 - **Batch publish** (`PublishBatchAsync`) pipelines every produce and awaits all
   delivery reports for the batch together.
+- **Native headers** travel as UTF-8 record headers; a repeated key resolves to its last
+  value. The `DeadLetter` copy keeps the original record headers. See [Headers & interop](../../docs/headers.md).
 - **Subscribe** joins `ConsumerGroupId`, subscribes to each topic, and polls on a
   dedicated background thread with manual offset commits. Kafka has no per-message
   ack or native dead-letter queue, so the dispatch verdict is mapped onto offset

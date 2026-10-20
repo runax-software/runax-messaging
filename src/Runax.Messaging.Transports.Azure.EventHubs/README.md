@@ -68,6 +68,8 @@ See [Configuration & per-bus settings](../../docs/configuration.md).
 
 - **Publish** sends the serialized envelope to the event hub named after the runax topic (via
   `EventHubProducerClient`). `PublishBatchAsync` packs events into size-bounded `EventDataBatch`es.
+- **Native headers** travel as event properties, and a `{topic}.dead-letter` republish keeps them.
+  See [Headers & interop](../../docs/headers.md).
 - **Subscribe** runs an `EventProcessorClient` per topic over the configured consumer group, using a
   `BlobCheckpointStore` for ownership and checkpoints. Event Hubs has **no per-message ack and no native
   dead-letter queue**, so the dispatch verdict is mapped to checkpointing:

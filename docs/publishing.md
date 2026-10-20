@@ -160,9 +160,11 @@ await bus.PublishAsync(
 
 Rules of the road:
 
-- **Headers ride in the envelope**, under `__runax.headers` — not in broker-native
-  message attributes. That makes them identical on every transport, and consumers read
-  them back from `MessageContext.Headers` regardless of broker.
+- **Headers ride in the envelope and natively.** They're written under `__runax.headers`, which
+  works on every transport, and also as native broker headers (AMQP headers, Kafka record
+  headers, SQS attributes, ...) for tooling and producers in other languages. Consumers read the
+  merged result from `MessageContext.Headers` regardless of broker. See
+  [Headers & interop](headers.md) for per-broker limits and precedence.
 - **Your dictionary is copied**, never mutated: reuse it freely across publishes.
 - **W3C trace context is injected automatically.** When a trace is active, the bus
   injects the current context (`traceparent`, `tracestate`, and baggage, per
@@ -216,7 +218,8 @@ bus.PublishAsync(topic, message[, headers])
         ├─ 1. mode guard          ConsumeOnly → InvalidOperationException
         ├─ 2. producer span       "{topic} publish"; W3C trace context → headers
         ├─ 3. envelope serialize  body (per-bus / per-topic serializer) + __runax metadata
-        └─ 4. sink                default: IMessagingTransport.PublishAsync(topic, envelopeJson)
+        └─ 4. sink                default: IMessagingTransport.PublishAsync(TransportMessage)
+                                           (envelope + native headers)
                                   outbox:  IOutboxStore.AddAsync(...)   (sink swapped per bus)
                                         └─ broker (exchange / queue / stream / hub)
 ```
@@ -224,8 +227,9 @@ bus.PublishAsync(topic, message[, headers])
 **The envelope, in one paragraph.** Your message is serialized at the top level and the
 framework attaches a single reserved `__runax` key beside it carrying the contract name
 and version (when the type has `[MessageContract]`) and the headers — including the
-injected trace context. The transport only ever sees this one JSON string; it never
-knows your message types. The full wire format, interop with foreign producers, and
+injected trace context. The key is left out when there is nothing to carry. The same
+metadata also goes out as native broker headers. The transport only ever sees this JSON
+string and those headers; it never knows your message types. The full wire format, interop with foreign producers, and
 custom body serializers are covered in [Serialization](serialization.md).
 
 **Telemetry.** Every publish emits, under the `"Runax.Messaging"` activity source and

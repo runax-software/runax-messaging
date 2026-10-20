@@ -63,18 +63,24 @@ public sealed class GooglePubSubIntegrationTests : IAsyncLifetime
         return services.BuildServiceProvider();
     }
 
+    private static readonly Dictionary<string, string> ProbeHeaders = new()
+    {
+        ["tenant"] = "acme",
+        [MessageHeaders.TraceParent] = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+    };
+
     [Fact]
-    public async Task Transport_round_trips_publish_to_subscribe()
+    public async Task Transport_round_trips_the_envelope_and_native_headers()
     {
         await using var provider = BuildProvider();
         var transport = provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
 
-        var received = new TaskCompletionSource<string>();
+        var received = new TaskCompletionSource<TransportMessage>();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
-        var subscription = transport.SubscribeAsync([_topicId], (json, _) =>
+        var subscription = transport.SubscribeAsync([_topicId], message =>
         {
-            received.TrySetResult(json);
+            received.TrySetResult(message);
             return ValueTask.FromResult(MessageDisposition.Acknowledge);
         }, cts.Token);
 
@@ -82,10 +88,12 @@ public sealed class GooglePubSubIntegrationTests : IAsyncLifetime
         await Task.Delay(1000);
 
         var envelope = $$"""{"probe":"{{Guid.NewGuid():N}}"}""";
-        await transport.PublishAsync(_topicId, envelope);
+        await transport.PublishAsync(new TransportMessage(_topicId, envelope, ProbeHeaders));
 
         var result = await received.Task.WaitAsync(TimeSpan.FromSeconds(20));
-        result.ShouldBe(envelope);
+        result.Body.ShouldBe(envelope);
+        result.Headers.ShouldContainKeyAndValue("tenant", "acme");
+        result.Headers.ShouldContainKeyAndValue(MessageHeaders.TraceParent, ProbeHeaders[MessageHeaders.TraceParent]);
 
         await cts.CancelAsync();
         try

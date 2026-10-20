@@ -13,13 +13,15 @@ see that transport's package README.
 
 ## Setting reference
 
-All of these are methods on the `BusBuilder` inside an `AddBus` block:
+All of these are methods or properties on the `BusBuilder` inside an `AddBus` block:
 
 | Setting | Bus-wide? | Per-topic? | Fallback when not scoped |
 | --- | --- | --- | --- |
 | `AddTransport(config)` / `AddTransport<TConfig>(...)` | Yes (exactly one per bus) | — | — (required; zero or two transports throw at configuration time) |
 | `AddConsumer<T>()` | Yes (subscribes on this bus's transport) | — | — |
 | `Mode = BusMode.PublishOnly / ConsumeOnly` | Yes | — | `PublishAndConsume` |
+| `WriteNativeHeaders = false` | Yes | — | `true`: metadata is also written as native broker headers ([Headers & interop](headers.md)) |
+| `HeaderPrecedence = HeaderSource.Envelope` | Yes | — | `HeaderSource.Broker`: a native header wins over the envelope's copy |
 | `WithRetry(o => ...)` | Yes | — | Built-in `RetryOptions` defaults |
 | `WithRetryForTopic("<topic>", o => ...)` | — | Yes | Bus policy, then defaults |
 | `OnUnroutableMessage(strategy)` | Yes | No | Built-in `DeadLetter` |

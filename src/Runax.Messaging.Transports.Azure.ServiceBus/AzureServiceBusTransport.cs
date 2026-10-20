@@ -8,8 +8,8 @@ namespace Runax.Messaging.Transports.Azure.ServiceBus;
 
 /// <summary>
 /// Azure Service Bus implementation of <see cref="IMessagingTransport"/>. Publishing sends to a topic;
-/// consuming runs a processor over a subscription. The <c>DeadLetter</c> disposition uses Service Bus's
-/// native dead-letter queue.
+/// consuming runs a processor over a subscription. Native headers travel as application properties. The
+/// <c>DeadLetter</c> disposition uses Service Bus's native dead-letter queue.
 /// </summary>
 internal sealed class AzureServiceBusTransport : IMessagingTransport, IDisposable
 {
@@ -29,15 +29,32 @@ internal sealed class AzureServiceBusTransport : IMessagingTransport, IDisposabl
 
     public string SystemName => TransportName;
 
-    public async ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default)
+    public ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken = default) =>
+        PublishAsync(new TransportMessage(topic, envelopeJson), cancellationToken);
+
+    public async ValueTask PublishAsync(TransportMessage message, CancellationToken cancellationToken = default)
     {
-        var sender = _senders.GetOrAdd(topic, _client.CreateSender);
-        await sender.SendMessageAsync(new ServiceBusMessage(envelopeJson), cancellationToken).ConfigureAwait(false);
+        var sender = _senders.GetOrAdd(message.Topic, _client.CreateSender);
+        await sender.SendMessageAsync(ToServiceBusMessage(message), cancellationToken).ConfigureAwait(false);
     }
+
+    public async ValueTask PublishBatchAsync(
+        IReadOnlyList<TransportMessage> messages,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var message in messages)
+            await PublishAsync(message, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task SubscribeAsync(
+        string[] topics,
+        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        CancellationToken cancellationToken = default) =>
+        SubscribeAsync(topics, message => onMessage(message.Body, message.Topic), cancellationToken);
 
     public async Task SubscribeAsync(
         string[] topics,
-        Func<string, string, ValueTask<MessageDisposition>> onMessage,
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken = default)
     {
         var processors = new List<ServiceBusProcessor>();
@@ -99,12 +116,14 @@ internal sealed class AzureServiceBusTransport : IMessagingTransport, IDisposabl
     private async Task OnMessageAsync(
         ProcessMessageEventArgs args,
         string topic,
-        Func<string, string, ValueTask<MessageDisposition>> onMessage)
+        Func<TransportMessage, ValueTask<MessageDisposition>> onMessage)
     {
         MessageDisposition disposition;
         try
         {
-            disposition = await onMessage(args.Message.Body.ToString(), topic).ConfigureAwait(false);
+            disposition = await onMessage(new TransportMessage(
+                topic, args.Message.Body.ToString(), ReadHeaders(args.Message.ApplicationProperties)))
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -126,6 +145,30 @@ internal sealed class AzureServiceBusTransport : IMessagingTransport, IDisposabl
                 await args.AbandonMessageAsync(args.Message, cancellationToken: args.CancellationToken).ConfigureAwait(false);
                 break;
         }
+    }
+
+    internal static ServiceBusMessage ToServiceBusMessage(TransportMessage message)
+    {
+        var serviceBusMessage = new ServiceBusMessage(message.Body);
+        foreach (var (key, value) in message.Headers)
+            serviceBusMessage.ApplicationProperties[key] = value;
+
+        return serviceBusMessage;
+    }
+
+    internal static Dictionary<string, string>? ReadHeaders(IReadOnlyDictionary<string, object> properties)
+    {
+        if (properties.Count == 0)
+            return null;
+
+        var headers = new Dictionary<string, string>(properties.Count, StringComparer.Ordinal);
+        foreach (var (key, value) in properties)
+        {
+            if (MessageHeaders.FormatValue(value) is { } text)
+                headers[key] = text;
+        }
+
+        return headers;
     }
 
     /// <summary>

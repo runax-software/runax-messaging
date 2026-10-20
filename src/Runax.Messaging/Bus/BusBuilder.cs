@@ -44,6 +44,20 @@ public sealed class BusBuilder
     public BusMode Mode { get; set; } = BusMode.PublishAndConsume;
 
     /// <summary>
+    /// Gets or sets whether this bus also writes each message's metadata (headers, trace context, contract
+    /// name and version) as native broker headers, next to the envelope's <c>__runax</c> copy. Defaults to
+    /// <see langword="true"/>. Transports whose broker cannot carry a header natively, or caps how many a
+    /// message may carry, keep the rest in the envelope only.
+    /// </summary>
+    public bool WriteNativeHeaders { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets which copy wins when a message received on this bus carries the same header natively
+    /// and in the envelope. Defaults to <see cref="HeaderSource.Broker"/>.
+    /// </summary>
+    public HeaderSource HeaderPrecedence { get; set; } = HeaderSource.Broker;
+
+    /// <summary>
     /// Gets a shared property bag for extension packages (e.g. the outbox) to keep per-bus
     /// configuration state that participates in end-of-block validation.
     /// </summary>

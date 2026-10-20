@@ -44,7 +44,8 @@ public class ScopedSerializationTests
 
         var serializers = provider.GetRequiredService<IMessageSerializerProvider>();
 
-        var scoped = serializers.For(BusNames.Default, "any").Serialize(new Thing(1), null);
+        var scoped = serializers.For(BusNames.Default, "any")
+            .Serialize(new Thing(1), new Dictionary<string, string> { ["k"] = "v" });
         scoped.ShouldContain("\"marker\":true");                // the custom body serializer ran
         scoped.ShouldContain(EnvelopeSerializer.MetadataKey);   // the envelope is still framework-owned
 

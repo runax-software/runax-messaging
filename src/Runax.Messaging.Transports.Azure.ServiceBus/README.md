@@ -61,6 +61,8 @@ See [Configuration & per-bus settings](../../docs/configuration.md).
 ## Behavior
 
 - **Publish** sends the serialized envelope to the Service Bus topic named after the runax topic.
+- **Native headers** travel as application properties, which the native dead-letter queue keeps.
+  See [Headers & interop](../../docs/headers.md).
 - **Subscribe** runs a `ServiceBusProcessor` per topic over its mapped subscription and maps the
   dispatch verdict to the message:
   - `Acknowledge` → complete

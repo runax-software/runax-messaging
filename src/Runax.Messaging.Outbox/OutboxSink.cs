@@ -1,3 +1,5 @@
+using Runax.Messaging.Abstractions;
+
 namespace Runax.Messaging.Outbox;
 
 /// <summary>
@@ -7,15 +9,16 @@ namespace Runax.Messaging.Outbox;
 /// </summary>
 internal sealed class OutboxSink(string busName, IOutboxStore store) : IBusPublishSink
 {
-    public async ValueTask PublishAsync(string topic, string envelopeJson, CancellationToken cancellationToken) =>
+    // Only the envelope is stored: it carries every header too, so the dispatcher rebuilds the native
+    // headers from it and the store schema stays unchanged.
+    public async ValueTask PublishAsync(TransportMessage message, CancellationToken cancellationToken) =>
         await store.AddAsync(
-            new OutboxMessage { Bus = busName, Topic = topic, Payload = envelopeJson }, cancellationToken)
+            new OutboxMessage { Bus = busName, Topic = message.Topic, Payload = message.Body }, cancellationToken)
             .ConfigureAwait(false);
 
-    public async ValueTask PublishBatchAsync(
-        string topic, IReadOnlyList<string> envelopeJsons, CancellationToken cancellationToken)
+    public async ValueTask PublishBatchAsync(IReadOnlyList<TransportMessage> messages, CancellationToken cancellationToken)
     {
-        foreach (var envelopeJson in envelopeJsons)
-            await PublishAsync(topic, envelopeJson, cancellationToken).ConfigureAwait(false);
+        foreach (var message in messages)
+            await PublishAsync(message, cancellationToken).ConfigureAwait(false);
     }
 }

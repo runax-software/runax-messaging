@@ -27,8 +27,14 @@ public sealed class AzureEventHubsIntegrationTests
         Environment.GetEnvironmentVariable("EVENTHUBS_BLOB_CONNECTION_STRING")
         ?? "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;";
 
+    private static readonly Dictionary<string, string> ProbeHeaders = new()
+    {
+        ["tenant"] = "acme",
+        [MessageHeaders.TraceParent] = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+    };
+
     [Fact]
-    public async Task Transport_round_trips_publish_to_subscribe()
+    public async Task Transport_round_trips_the_envelope_and_native_headers()
     {
         var services = new ServiceCollection();
         // Capture the transport's logs so a timeout can surface the EventProcessorClient error (the MTP
@@ -46,14 +52,14 @@ public sealed class AzureEventHubsIntegrationTests
         var transport = provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
 
         var envelope = $$"""{"probe":"{{Guid.NewGuid():N}}"}""";
-        var received = new TaskCompletionSource<string>();
+        var received = new TaskCompletionSource<TransportMessage>();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
 
         // The hub is shared across runs; acknowledge everything and match our own probe.
-        var subscription = transport.SubscribeAsync([Topic], (json, _) =>
+        var subscription = transport.SubscribeAsync([Topic], message =>
         {
-            if (json == envelope)
-                received.TrySetResult(json);
+            if (message.Body == envelope)
+                received.TrySetResult(message);
             return ValueTask.FromResult(MessageDisposition.Acknowledge);
         }, cts.Token);
 
@@ -65,7 +71,7 @@ public sealed class AzureEventHubsIntegrationTests
             {
                 try
                 {
-                    await transport.PublishAsync(Topic, envelope, cts.Token);
+                    await transport.PublishAsync(new TransportMessage(Topic, envelope, ProbeHeaders), cts.Token);
                 }
                 catch (OperationCanceledException)
                 {
@@ -97,7 +103,10 @@ public sealed class AzureEventHubsIntegrationTests
                 "Event Hubs round-trip timed out. Transport logs:\n" + string.Join("\n", logs.Messages));
         }
 
-        (await received.Task).ShouldBe(envelope);
+        var result = await received.Task;
+        result.Body.ShouldBe(envelope);
+        result.Headers.ShouldContainKeyAndValue("tenant", "acme");
+        result.Headers.ShouldContainKeyAndValue(MessageHeaders.TraceParent, ProbeHeaders[MessageHeaders.TraceParent]);
 
         await cts.CancelAsync();
         foreach (var task in new[] { subscription, publishLoop })

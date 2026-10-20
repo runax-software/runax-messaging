@@ -64,6 +64,8 @@ See [Configuration & per-bus settings](../../docs/configuration.md).
 ## Behavior
 
 - **Publish** sends the serialized envelope to the Pub/Sub topic named after the runax topic.
+- **Native headers** travel as message attributes, within Pub/Sub's limits (keys up to 256 bytes and
+  not starting with `goog`, values up to 1 KB); anything else stays in the envelope. See [Headers & interop](../../docs/headers.md).
 - **Subscribe** starts a streaming pull per topic (on the mapped subscription) and maps the dispatch
   verdict to the message:
   - `Acknowledge` → ack

@@ -77,6 +77,8 @@ Two RabbitMQ clusters are simply two buses, each with its own `RabbitMqConfig`. 
   bus creates no publish channel pool.
 - **Batch publish** (`PublishBatchAsync`) publishes all envelopes on one channel and
   waits for a single confirm for the whole batch instead of one per message.
+- **Native headers** travel in the AMQP headers table and are read back from it (string
+  values arrive as AMQP long strings). See [Headers & interop](../../docs/headers.md).
 - **Subscribe** declares an exclusive, auto-delete queue (with `BasicQos` prefetch),
   binds it to each topic, and maps the dispatch verdict to the broker:
   - `Acknowledge` → `basic.ack`

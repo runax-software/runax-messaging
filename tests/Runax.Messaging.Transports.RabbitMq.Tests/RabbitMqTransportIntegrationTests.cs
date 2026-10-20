@@ -97,6 +97,28 @@ public sealed class RabbitMqTransportIntegrationTests : IAsyncLifetime, IDisposa
     }
 
     [Fact]
+    public async Task Publish_writes_native_headers_to_the_amqp_headers_table()
+    {
+        var transport = _provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
+
+        await transport.PublishAsync(new TransportMessage(
+            _topic, """{"x":1}""", new Dictionary<string, string> { ["tenant"] = "acme" }));
+
+        BasicGetResult? result = null;
+        for (var attempt = 0; attempt < 20 && result is null; attempt++)
+        {
+            result = await _channel.BasicGetAsync(_queue, autoAck: true, CancellationToken.None);
+            if (result is null)
+                await Task.Delay(100);
+        }
+
+        result.ShouldNotBeNull();
+        var headers = RabbitMqTransport.ReadHeaders(result!.BasicProperties.Headers);
+        headers.ShouldNotBeNull();
+        headers!["tenant"].ShouldBe("acme");
+    }
+
+    [Fact]
     public async Task Concurrent_publishes_all_arrive()
     {
         var transport = _provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);

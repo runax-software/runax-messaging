@@ -74,6 +74,39 @@ public class OutboxTests
     }
 
     [Fact]
+    public async Task Dispatcher_publishes_the_stored_headers_as_native_headers()
+    {
+        var builder = Host.CreateApplicationBuilder();
+        builder.Services.AddRunaxMessaging(m => m.AddBus(bus => bus
+            .AddTransport(new InMemoryConfig())
+            .AddOutbox(o => o.PollingInterval = TimeSpan.FromMilliseconds(50))
+            .AddOutboxStore(new InMemoryOutboxStoreConfig())));
+        using var host = builder.Build();
+        await host.StartAsync();
+
+        // Read the topic straight off the transport to see what the dispatcher sent.
+        var transport = host.Services.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
+        var delivered = new TaskCompletionSource<TransportMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var stop = new CancellationTokenSource();
+        var listener = transport.SubscribeAsync(["orders"], message =>
+        {
+            delivered.TrySetResult(message);
+            return ValueTask.FromResult(MessageDisposition.Acknowledge);
+        }, stop.Token);
+
+        await host.Services.GetRequiredService<IBus>().PublishAsync(
+            "orders", new Order(7), new Dictionary<string, string> { ["tenant"] = "acme" });
+
+        var message = await delivered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        message.Headers.ShouldContainKeyAndValue("tenant", "acme");
+        message.Body.ShouldContain("\"tenant\":\"acme\"");
+
+        await stop.CancelAsync();
+        await listener;
+        await host.StopAsync();
+    }
+
+    [Fact]
     public async Task Invalid_outbox_options_throw_on_host_start()
     {
         var builder = Host.CreateApplicationBuilder();

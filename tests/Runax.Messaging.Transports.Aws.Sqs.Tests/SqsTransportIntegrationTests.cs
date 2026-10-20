@@ -77,25 +77,33 @@ public sealed class SqsTransportIntegrationTests : IAsyncLifetime, IDisposable
         response.Messages[0].Body.ShouldContain(tag);
     }
 
+    private static readonly Dictionary<string, string> ProbeHeaders = new()
+    {
+        ["tenant"] = "acme",
+        [MessageHeaders.TraceParent] = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+    };
+
     [Fact]
-    public async Task Transport_round_trips_publish_to_subscribe()
+    public async Task Transport_round_trips_the_envelope_and_native_headers()
     {
         var transport = _provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
         var envelope = $$"""{"probe":"{{Guid.NewGuid():N}}"}""";
 
-        await transport.PublishAsync(_topic, envelope);
+        await transport.PublishAsync(new TransportMessage(_topic, envelope, ProbeHeaders));
 
-        var received = new TaskCompletionSource<string>();
+        var received = new TaskCompletionSource<TransportMessage>();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
-        var subscription = transport.SubscribeAsync([_topic], (json, _) =>
+        var subscription = transport.SubscribeAsync([_topic], message =>
         {
-            received.TrySetResult(json);
+            received.TrySetResult(message);
             return ValueTask.FromResult(MessageDisposition.Acknowledge);
         }, cts.Token);
 
         var result = await received.Task.WaitAsync(TimeSpan.FromSeconds(15));
-        result.ShouldBe(envelope);
+        result.Body.ShouldBe(envelope);
+        result.Headers.ShouldContainKeyAndValue("tenant", "acme");
+        result.Headers.ShouldContainKeyAndValue(MessageHeaders.TraceParent, ProbeHeaders[MessageHeaders.TraceParent]);
 
         await cts.CancelAsync();
         await subscription;

@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Runax.Messaging.Abstractions;
 
@@ -7,10 +9,11 @@ namespace Runax.Messaging.Serialization;
 /// Framework-owned <see cref="IMessageSerializer"/>. It delegates the message body to a pluggable
 /// <see cref="ISerializer"/> and is the sole owner of the reserved <see cref="MetadataKey"/> envelope:
 /// the body is placed at the top level and framework metadata (contract name/version, headers) is attached
-/// under a single reserved key. A payload that carries no such key — e.g. an S3 event or any message from a
-/// producer outside this library — is read as-is, so foreign messages can be consumed, and this library's
-/// messages can be consumed by foreign readers, without ceremony. A custom <see cref="ISerializer"/> only
-/// controls the body; it can never change or omit this envelope.
+/// under a single reserved key. The key is omitted when there is no metadata to carry, so a plain message is
+/// plain JSON. A payload that carries no such key — e.g. an S3 event or any message from a producer outside
+/// this library — is read as-is, so foreign messages can be consumed, and this library's messages can be
+/// consumed by foreign readers, without ceremony. A custom <see cref="ISerializer"/> only controls the body;
+/// it can never change or omit this envelope.
 /// </summary>
 internal sealed class EnvelopeSerializer(ISerializer body) : IMessageSerializer
 {
@@ -35,7 +38,10 @@ internal sealed class EnvelopeSerializer(ISerializer body) : IMessageSerializer
                 $"Message of type '{typeof(TMessage).Name}' declares a reserved '{MetadataKey}' property.");
         }
 
-        body[MetadataKey] = BuildMetadata(MessageContractCache.For(typeof(TMessage)), headers);
+        var metadata = BuildMetadata(MessageContractCache.For(typeof(TMessage)), headers);
+        if (metadata.Count > 0)
+            body[MetadataKey] = metadata;
+
         return body.ToJsonString();
     }
 
@@ -45,21 +51,13 @@ internal sealed class EnvelopeSerializer(ISerializer body) : IMessageSerializer
         var node = JsonNode.Parse(payload);
 
         string body;
-        string? contractName = null;
-        int? contractVersion = null;
-        var headers = new Dictionary<string, string>();
+        var metadata = Metadata.None;
 
         if (node is JsonObject obj && obj[MetadataKey] is JsonObject meta)
         {
             obj.Remove(MetadataKey);
             body = obj.ToJsonString();
-            contractName = (string?)meta["contract_name"];
-            contractVersion = (int?)meta["contract_version"];
-            if (meta["headers"] is JsonObject headerObject)
-            {
-                foreach (var (key, value) in headerObject)
-                    headers[key] = (string?)value ?? string.Empty;
-            }
+            metadata = ReadMetadata(meta);
         }
         else
         {
@@ -71,11 +69,29 @@ internal sealed class EnvelopeSerializer(ISerializer body) : IMessageSerializer
         {
             Topic = topic,
             Body = body,
-            Headers = headers,
-            ContractName = contractName,
-            ContractVersion = contractVersion,
+            Headers = metadata.Headers,
+            ContractName = metadata.ContractName,
+            ContractVersion = metadata.ContractVersion,
             Serializer = _body,
         };
+    }
+
+    /// <summary>
+    /// Reads the reserved metadata of a serialized envelope without materializing its body. A payload that is
+    /// not JSON, or carries no reserved key, has none.
+    /// </summary>
+    internal static Metadata ReadMetadata(string payload)
+    {
+        try
+        {
+            return JsonNode.Parse(payload) is JsonObject obj && obj[MetadataKey] is JsonObject meta
+                ? ReadMetadata(meta)
+                : Metadata.None;
+        }
+        catch (JsonException)
+        {
+            return Metadata.None;
+        }
     }
 
     /// <inheritdoc />
@@ -103,6 +119,18 @@ internal sealed class EnvelopeSerializer(ISerializer body) : IMessageSerializer
         return obj.ToJsonString();
     }
 
+    private static Metadata ReadMetadata(JsonObject meta)
+    {
+        var headers = new Dictionary<string, string>();
+        if (meta["headers"] is JsonObject headerObject)
+        {
+            foreach (var (key, value) in headerObject)
+                headers[key] = (string?)value ?? string.Empty;
+        }
+
+        return new Metadata((string?)meta["contract_name"], (int?)meta["contract_version"], headers);
+    }
+
     private static JsonObject BuildMetadata(MessageContractAttribute? contract, IDictionary<string, string>? headers)
     {
         var meta = new JsonObject();
@@ -123,5 +151,11 @@ internal sealed class EnvelopeSerializer(ISerializer body) : IMessageSerializer
         }
 
         return meta;
+    }
+
+    /// <summary>The framework metadata an envelope carries under its reserved key.</summary>
+    internal sealed record Metadata(string? ContractName, int? ContractVersion, IReadOnlyDictionary<string, string> Headers)
+    {
+        public static Metadata None { get; } = new(null, null, ReadOnlyDictionary<string, string>.Empty);
     }
 }

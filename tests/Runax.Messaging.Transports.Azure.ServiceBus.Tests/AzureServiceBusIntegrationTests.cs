@@ -19,8 +19,14 @@ public sealed class AzureServiceBusIntegrationTests
         Environment.GetEnvironmentVariable("SERVICEBUS_CONNECTION_STRING")
         ?? "Endpoint=sb://localhost:5673;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;";
 
+    private static readonly Dictionary<string, string> ProbeHeaders = new()
+    {
+        ["tenant"] = "acme",
+        [MessageHeaders.TraceParent] = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+    };
+
     [Fact]
-    public async Task Transport_round_trips_publish_to_subscribe()
+    public async Task Transport_round_trips_the_envelope_and_native_headers()
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -33,22 +39,24 @@ public sealed class AzureServiceBusIntegrationTests
         var transport = provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
 
         var envelope = $$"""{"probe":"{{Guid.NewGuid():N}}"}""";
-        var received = new TaskCompletionSource<string>();
+        var received = new TaskCompletionSource<TransportMessage>();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(40));
 
         // The topic/subscription is shared across runs; acknowledge everything and match our own probe.
-        var subscription = transport.SubscribeAsync([Topic], (json, _) =>
+        var subscription = transport.SubscribeAsync([Topic], message =>
         {
-            if (json == envelope)
-                received.TrySetResult(json);
+            if (message.Body == envelope)
+                received.TrySetResult(message);
             return ValueTask.FromResult(MessageDisposition.Acknowledge);
         }, cts.Token);
 
         await Task.Delay(500);
-        await transport.PublishAsync(Topic, envelope);
+        await transport.PublishAsync(new TransportMessage(Topic, envelope, ProbeHeaders));
 
         var result = await received.Task.WaitAsync(TimeSpan.FromSeconds(35));
-        result.ShouldBe(envelope);
+        result.Body.ShouldBe(envelope);
+        result.Headers.ShouldContainKeyAndValue("tenant", "acme");
+        result.Headers.ShouldContainKeyAndValue(MessageHeaders.TraceParent, ProbeHeaders[MessageHeaders.TraceParent]);
 
         await cts.CancelAsync();
         try
