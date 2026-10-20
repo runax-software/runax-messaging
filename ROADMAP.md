@@ -68,13 +68,15 @@ observability (see [CHANGELOG.md](CHANGELOG.md)).
 - [ ] **JSON Schema contracts** (`Runax.Messaging.Contracts.JsonSchema`) —
   replace integer contract versions with schema-based contracts, because an
   integer doesn't check that producer and consumer shapes match. **Design:
-  [docs/specs/json-schema-contracts.md](docs/specs/json-schema-contracts.md)
-  (draft, open questions pending).** In short: the schema's `$id` becomes the
+  [docs/specs/json-schema-contracts.md](docs/specs/json-schema-contracts.md).
+  In progress: identity, routing, embedded schemas and validation are built
+  ([guide](docs/json-schema-contracts.md)); the CI tool and broker-native
+  validation are next.** In short: the schema's `$id` becomes the
   wire identity, in a new `__runax.contract_schema` key and
   `runax-contract-schema` native header next to the existing slots, so no
   transport changes. Consumers match the `$id` exactly. Identity on the wire
   is optional: a message without it is routed by validating its body against
-  the schemas its consumers declare, and is refused when that's ambiguous. A
+  the schemas its consumers declare, and no schema consumer gets it when that's ambiguous. A
   `runax-contracts` CI gate checks that revisions under one `$id` stay
   compatible and that each service's types conform to the committed schema,
   in any language. Opt-in

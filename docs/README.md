@@ -16,6 +16,7 @@ New to the library? Read the [root README](../README.md) quick start first, then
 | [Publishing](publishing.md) | `IBus` — the single publishing abstraction: topics, headers, batching, fan-out across buses, the publish pipeline and its telemetry |
 | [Headers & interop](headers.md) | Metadata in the envelope and as native broker headers, per-broker mapping and limits, merge precedence, producing from Go/Java/Node |
 | [Consuming & reliability](consuming.md) | Writing consumers, contract versioning, the dispatch pipeline, retries and backoff, poison messages, dead-lettering (framework-managed and broker-native), unroutable messages |
+| [JSON Schema contracts](json-schema-contracts.md) | Contract identity by schema `$id`, embedded schemas, validation on publish and consume, routing messages without identity |
 | [Message contracts](contracts.md) | Designing and sharing contract types, `[MessageContract]` versioning, evolution rules, safe rollout with `IMessageContractCatalog` |
 | [Transactional outbox](outbox.md) | The dual-write problem, wiring `AddOutbox` + `AddOutboxStore`, how the publish sink and dispatcher work, writing a database-backed store, delivery guarantees |
 | [Testing](testing.md) | The broker-free TestKit harness, asserting retries and dead-letters, multi-bus tests, configuration tests, docker-based integration tests |

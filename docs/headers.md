@@ -18,6 +18,7 @@ Every publish writes the same metadata to both places:
 | --- | --- | --- |
 | Your headers (`PublishAsync(..., headers)`) | `__runax.headers.<name>` | `<name>` |
 | W3C trace context, when a trace is active | `__runax.headers.traceparent` / `tracestate` | `traceparent` / `tracestate` |
+| `[MessageContract]` schema `$id` | `__runax.contract_schema` | `runax-contract-schema` |
 | `[MessageContract]` name | `__runax.contract_name` | `runax-contract-name` |
 | `[MessageContract]` version | `__runax.contract_version` | `runax-contract-version` |
 | Dead-letter details | `__runax.headers.x-runax-dlq-*` | `x-runax-dlq-*` |

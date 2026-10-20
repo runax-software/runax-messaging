@@ -22,6 +22,10 @@ All of these are methods or properties on the `BusBuilder` inside an `AddBus` bl
 | `Mode = BusMode.PublishOnly / ConsumeOnly` | Yes | — | `PublishAndConsume` |
 | `WriteNativeHeaders = false` | Yes | — | `true`: metadata is also written as native broker headers ([Headers & interop](headers.md)) |
 | `HeaderPrecedence = HeaderSource.Envelope` | Yes | — | `HeaderSource.Broker`: a native header wins over the envelope's copy |
+| `RequireContractIdentity = true` | Yes | — | `false`: with JSON Schema contracts loaded, messages without identity are routed by validation ([JSON Schema contracts](json-schema-contracts.md)) |
+| `ContractSchemaMismatch = SchemaMismatch.Report` | Yes | — | `Reject`: a mismatched schema `$id` isn't delivered even if the version matches |
+| `DecorateSerializer((sp, inner) => ...)` | Yes | — | None: wraps whichever body serializer resolves, per topic or bus |
+| `ValidateContracts(v => ...)` (JSON Schema package) | Yes | — | Off |
 | `WithRetry(o => ...)` | Yes | — | Built-in `RetryOptions` defaults |
 | `WithRetryForTopic("<topic>", o => ...)` | — | Yes | Bus policy, then defaults |
 | `OnUnroutableMessage(strategy)` | Yes | No | Built-in `DeadLetter` |

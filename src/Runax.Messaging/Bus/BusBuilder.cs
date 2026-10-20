@@ -329,6 +329,21 @@ public sealed class BusBuilder
         return this;
     }
 
+    /// <summary>
+    /// Wraps the body serializer this bus resolves for each topic, whichever one that is: per topic, per bus,
+    /// or the default. Use it to add behavior around serialization without replacing the serializer, such as
+    /// contract validation. Decorators apply in registration order, innermost first, and the reserved
+    /// <c>__runax</c> envelope stays outside all of them.
+    /// </summary>
+    /// <param name="decorate">Receives the application services and the inner serializer, and returns the wrapper.</param>
+    /// <returns>The same builder, to allow chaining.</returns>
+    public BusBuilder DecorateSerializer(Func<IServiceProvider, ISerializer, ISerializer> decorate)
+    {
+        ArgumentNullException.ThrowIfNull(decorate);
+        Services.AddKeyedSingleton(BusName, new SerializerDecorator(decorate));
+        return this;
+    }
+
     // --- End-of-block validation ----------------------------------------------------------------
 
     internal TransportConfig Validate()

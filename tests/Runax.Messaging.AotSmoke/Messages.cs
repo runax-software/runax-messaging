@@ -3,7 +3,7 @@ using Runax.Messaging.Abstractions;
 
 namespace Runax.Messaging.AotSmoke;
 
-[MessageContract(2, Name = "orders.placed")]
+[MessageContract(2, Name = "orders.placed", Schema = "https://contracts.runax.test/orders/order-placed/v2")]
 public sealed record OrderPlaced(int Id, string Product);
 
 public sealed record InvoiceIssued(int OrderId, decimal Amount);

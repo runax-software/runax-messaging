@@ -58,6 +58,11 @@ public static class MessagingDiagnostics
         unit: "{message}",
         description: "Number of messages delivered by their contract version despite a mismatched schema $id.");
 
+    internal static readonly Counter<long> ContractValidationFailures = Meter.CreateCounter<long>(
+        "runax.messaging.contract.validation_failures",
+        unit: "{message}",
+        description: "Number of message bodies that failed validation against their contract schema.");
+
     internal static TagList Tags(string system, string destination, string bus) => new()
     {
         { "messaging.system", system },

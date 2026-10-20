@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Draft for review. Nothing here is implemented. |
+| **Status** | In progress. Phase 1 core and the JSON Schema package are implemented; see [Implementation status](#implementation-status). |
 | **Date** | 2026-10-19, revised 2026-10-20 |
 | **Replaces** | Integer contract versions (`[MessageContract(version)]`) |
 | **Depends on** | Native broker headers ([#71](https://github.com/runax-software/runax-messaging/pull/71)) |
@@ -42,6 +42,34 @@
   services keep routing by the integer. The integer lives in each schema file
   (`x-runax-legacy-version`), so a service that embeds its documents keeps writing and
   accepting it after the attribute drops it. The integer constructor is deprecated in 3.0.
+
+## Implementation status
+
+Built so far, following the recommendations in §11 unless noted:
+
+| Part | Status |
+| --- | --- |
+| §3 Wire identity: `Schema`/`Reads`, `contract_schema`, `runax-contract-schema`, merge, normalization | Done |
+| §4 Matching: the rule, legacy versions from lines, routing by validation, selectivity, ambiguity (accept-all consumers unaffected), `RequireContractIdentity`, `ContractSchemaMismatch` | Done |
+| §4 Unroutable reasons, span attributes, metrics, catalog additions | Done |
+| §5 Embedded schema provider (`AddJsonSchemaContracts`, `AddEmbeddedSchemas`, `AddSchema`) | Done |
+| §6 Profile evaluator (in-house, open question 6) with formats asserted by System.Text.Json's rules | Done |
+| §6 Runtime validation (`bus.ValidateContracts`), the `DecorateSerializer` hook, `ContractValidationException` | Done |
+| §4 Startup overlap, non-selective and missing-document warnings | Done |
+| §5 Export (`runax-contracts export`, `ContractSerialization`) and `VerifyContractSchemas` | Not started |
+| §6 `runax-contracts` lint, check, conform | Not started |
+| §7 Messaging-level validation default, `IContractValidatingTransport`, the Kafka Schema Registry add-on | Not started |
+| §8 Phase 3 (parameterless constructor, deprecations) | Not started, by design: 3.0 |
+
+Deviations from the text below:
+
+- `DecorateSerializer` takes `Func<IServiceProvider, ISerializer, ISerializer>`, so decorators can
+  resolve services such as loggers.
+- A message routed by validation is validated again when consume validation is on. Skipping the
+  second check (§4) needs the serializer to see the message context, which it doesn't today. It
+  only costs time.
+- `IContractSchemaMatcher` is internal to core and implemented by the package through
+  `InternalsVisibleTo`, until the design settles.
 
 ## 1. Problem
 

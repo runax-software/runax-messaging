@@ -99,6 +99,11 @@ The wire version is read from the envelope's `contract_version` or from the nati
 `runax-contract-version` header, which is how producers in other languages version a plain
 JSON message (see [Headers & interop](headers.md#producing-from-other-languages)).
 
+An integer only labels a contract; nothing checks that both sides agree on the shape. Add a
+`Schema` (the `$id` of the contract's JSON Schema) to identify it by schema, validate bodies,
+and route messages that carry no identity at all. When both sides carry a `$id`, it decides
+routing instead of the integer. See [JSON Schema contracts](json-schema-contracts.md).
+
 A message no consumer on the bus accepts is **unroutable** and goes to the configured
 strategy — dead-letter by default. See
 [unroutable messages](consuming.md#unroutable-messages).

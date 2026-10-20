@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.runax.test/orders/order-placed/v2",
+  "title": "OrderPlaced",
+  "x-runax-legacy-version": 2,
+  "type": "object",
+  "properties": {
+    "Id": { "type": "integer", "minimum": 1 },
+    "Product": { "type": "string", "minLength": 1, "pattern": "^[a-z]+$" }
+  },
+  "required": ["Id", "Product"]
+}
