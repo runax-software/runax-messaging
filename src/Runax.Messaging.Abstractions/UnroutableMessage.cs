@@ -23,6 +23,16 @@ public sealed class UnroutableMessage
     public int? ContractVersion { get; init; }
 
     /// <summary>
+    /// Gets the contract schema <c>$id</c> the message carried, or <see langword="null"/> if it carried none.
+    /// </summary>
+    public string? ContractSchema { get; init; }
+
+    /// <summary>
+    /// Gets why no consumer accepted the message.
+    /// </summary>
+    public UnroutableReason Reason { get; init; } = UnroutableReason.NoMatchingContract;
+
+    /// <summary>
     /// Gets the raw JSON body of the message.
     /// </summary>
     public required string Body { get; init; }

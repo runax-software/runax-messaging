@@ -10,6 +10,11 @@ namespace Runax.Messaging.Abstractions;
 /// </summary>
 public static class MessageHeaders
 {
+    /// <summary>
+    /// The <c>$id</c> of a <c>[MessageContract]</c> message's JSON Schema, which identifies its contract line.
+    /// </summary>
+    public const string ContractSchema = "runax-contract-schema";
+
     /// <summary>The contract name of a <c>[MessageContract]</c> message.</summary>
     public const string ContractName = "runax-contract-name";
 
@@ -22,7 +27,8 @@ public static class MessageHeaders
     /// <summary>The W3C trace context <c>tracestate</c> header.</summary>
     public const string TraceState = "tracestate";
 
-    private static readonly string[] PriorityNames = [ContractName, ContractVersion, TraceParent, TraceState];
+    private static readonly string[] PriorityNames =
+        [ContractSchema, ContractName, ContractVersion, TraceParent, TraceState];
 
     /// <summary>
     /// Returns <paramref name="headers"/> most important first: contract metadata, then trace context, then
