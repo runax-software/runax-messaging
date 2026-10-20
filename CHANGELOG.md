@@ -41,6 +41,10 @@ All packages in the repository are versioned together.
   `DecorateSerializer`. `UnroutableMessage` gains `ContractSchema` and `Reason`;
   `IMessageContractCatalog` gains schema-aware `Accepts` overloads. Guide:
   [docs/json-schema-contracts.md](docs/json-schema-contracts.md).
+- **`Runax.Messaging.Cli`** — the `runax-messaging` .NET tool. `contracts lint` checks schema files
+  against the contract profile (draft, `$id` and file path, keywords, open root, unique `$id`s and
+  legacy versions); `contracts check` checks that each file stays fully compatible with every earlier
+  revision of its `$id` in git history, or against a baseline directory. Text or GitHub Actions output.
 
 ### Changed
 

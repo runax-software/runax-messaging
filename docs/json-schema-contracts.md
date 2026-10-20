@@ -5,11 +5,12 @@ can disagree on the shape, and nothing notices. JSON Schema contracts identify e
 its schema document's `$id`, validate bodies against that schema, and can route messages that
 carry no identity at all by the schemas their consumers declare.
 
-> **Status.** This page covers what ships today: identity and routing in `Runax.Messaging`, and
-> embedded schemas, validation, and routing by validation in `Runax.Messaging.Contracts.JsonSchema`.
-> The CI tool (`runax-contracts lint` / `check` / `conform` / `export`), a messaging-wide validation
-> default, broker-native validation (Kafka with Confluent Schema Registry), and the startup self-check
-> are designed in the [spec](specs/json-schema-contracts.md) but not built yet.
+> **Status.** This page covers what ships today: identity and routing in `Runax.Messaging`;
+> embedded schemas, validation, and routing by validation in `Runax.Messaging.Contracts.JsonSchema`;
+> and the `runax-messaging contracts lint` / `check` CI gate in `Runax.Messaging.Cli`. `conform`,
+> `export`, a messaging-wide validation default, broker-native validation (Kafka with Confluent Schema
+> Registry), and the startup self-check are designed in the [spec](specs/json-schema-contracts.md) but
+> not built yet.
 
 ## Declaring a schema
 
@@ -186,6 +187,43 @@ When the host starts, the package warns, per bus and topic, about:
 - two lines that reach different consumers and could both accept the same message. Lines count as
   distinct only when both require a top-level property whose `const`, `enum`, or `type` values
   don't intersect, so add a required discriminator to clear the warning.
+
+## The CI gate
+
+Exact `$id` matching is only safe if every revision under one `$id` stays compatible with all the
+earlier ones, so `…/v2` keeps meaning one shape. A running service can't check that: it only has the
+current file. The `runax-messaging` tool checks it in CI, before anything is deployed:
+
+```bash
+dotnet tool install --global Runax.Messaging.Cli
+runax-messaging contracts lint schemas/
+runax-messaging contracts check schemas/
+```
+
+- **`contracts lint`** checks each file on its own and the files together: a 2020-12 `$schema`, an
+  absolute `$id` of at most 256 bytes that matches the file path (`schemas/orders/order-placed/v2.schema.json`
+  for `…/orders/order-placed/v2`), only profile keywords (a typo like `requried` is an error; custom
+  annotations start with `x-`), an open root object, unique `$id`s, and a distinct
+  `x-runax-legacy-version` per line of a contract. It warns about lines that accept any object and
+  about formats that aren't asserted.
+- **`contracts check`** compares each file with **every** earlier revision of the same `$id` in git
+  history, both ways: readers of either must accept what the other writes. Adding or removing an
+  optional property is the one freedom; anything else, such as a new required property, a type
+  change, or a tightened constraint, is breaking, and the message says which new `$id` to mint. A
+  changed `default` is a warning, and the legacy version must never change. `--baseline <dir>`
+  compares against another directory instead, such as a checkout of the base branch.
+
+Exit codes are `0` (no errors), `1` (errors found), and `2` (usage problems, such as a missing
+directory or no git repository). In GitHub Actions, check out the full history and use
+`--format github` to annotate the pull request:
+
+```yaml
+- uses: actions/checkout@v5
+  with: { fetch-depth: 0 }          # check compares against every earlier revision
+- run: dotnet tool install --global Runax.Messaging.Cli
+- run: runax-messaging contracts lint schemas/ --format github
+- run: runax-messaging contracts check schemas/ --format github
+```
 
 ## Bus settings
 

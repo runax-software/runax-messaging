@@ -15,6 +15,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="runax-messaging" />
+    <InternalsVisibleTo Include="Runax.Messaging.Cli.Tests" />
     <InternalsVisibleTo Include="Runax.Messaging.Contracts.JsonSchema.Tests" />
   </ItemGroup>
 </Project>

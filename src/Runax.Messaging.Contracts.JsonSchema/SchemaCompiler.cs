@@ -12,7 +12,8 @@ namespace Runax.Messaging.Contracts.JsonSchema;
 /// </summary>
 internal sealed class SchemaCompiler
 {
-    private static readonly HashSet<string> Unsupported = new(StringComparer.Ordinal)
+    /// <summary>Keywords the profile excludes. Loading a document that uses one fails.</summary>
+    internal static readonly HashSet<string> Unsupported = new(StringComparer.Ordinal)
     {
         "if", "then", "else", "not", "allOf", "patternProperties", "dependentSchemas", "dependentRequired",
         "unevaluatedProperties", "unevaluatedItems", "prefixItems", "contains", "minContains", "maxContains",
@@ -20,10 +21,25 @@ internal sealed class SchemaCompiler
         "dependencies", "additionalItems",
     };
 
-    private static readonly HashSet<string> Annotations = new(StringComparer.Ordinal)
+    /// <summary>Keywords that don't affect validation (besides <c>x-*</c> ones).</summary>
+    internal static readonly HashSet<string> Annotations = new(StringComparer.Ordinal)
     {
         "$schema", "$id", "$comment", "$defs", "definitions", "title", "description", "default", "examples",
         "deprecated", "readOnly", "writeOnly", "contentMediaType", "contentEncoding",
+    };
+
+    /// <summary>Keywords the evaluator checks.</summary>
+    internal static readonly HashSet<string> Evaluated = new(StringComparer.Ordinal)
+    {
+        "type", "properties", "required", "additionalProperties", "minProperties", "maxProperties", "items",
+        "minItems", "maxItems", "uniqueItems", "enum", "const", "format", "anyOf", "oneOf", "$ref", "minimum",
+        "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "minLength", "maxLength", "pattern",
+    };
+
+    /// <summary>The formats validation asserts; every other format is an annotation.</summary>
+    internal static readonly HashSet<string> AssertedFormats = new(StringComparer.Ordinal)
+    {
+        "uuid", "date-time", "date", "time",
     };
 
     private readonly JsonElement _root;
@@ -76,6 +92,12 @@ internal sealed class SchemaCompiler
 
             if (name == "$id" && pointer != "#")
                 throw Error(pointer, "nested '$id' is not part of the contract profile");
+
+            if (name == "default")
+            {
+                node.Default = value.Clone();
+                continue;
+            }
 
             if (Annotations.Contains(name) || name.StartsWith("x-", StringComparison.Ordinal))
                 continue;

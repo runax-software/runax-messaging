@@ -37,7 +37,10 @@ jobs:
     if: needs.changes.outputs.code == 'true'
 
     steps:
+      # Full history, so `contracts check` can compare schema files with their earlier revisions.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Setup and build
         uses: ./.github/actions/setup-dotnet-build
@@ -49,6 +52,14 @@ jobs:
 
       - name: Format check
         run: dotnet format --verify-no-changes
+
+      # Dogfood the contracts CI gate on the repository's own schema files.
+      - name: Contract schemas
+        run: |
+          for dir in tests/Runax.Messaging.Contracts.JsonSchema.Tests/schemas tests/Runax.Messaging.AotSmoke/schemas; do
+            dotnet run --no-build --project src/Runax.Messaging.Cli -- contracts lint "$dir" --format github
+            dotnet run --no-build --project src/Runax.Messaging.Cli -- contracts check "$dir" --format github
+          done
 
       # Publishing with native AOT fails on any trim/AOT warning, in our packages or in the broker SDKs they
       # pull in; running the binary then exercises a real publish/consume round trip. See docs/aot.md.

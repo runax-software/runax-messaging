@@ -48,6 +48,7 @@ strongly-typed messages without coupling your application to a specific broker.
 | [`Runax.Messaging.Transports.Redis`](src/Runax.Messaging.Transports.Redis/README.md) | Redis Streams transport (Redis and Valkey). |
 | [`Runax.Messaging.Outbox`](src/Runax.Messaging.Outbox/README.md) | Transactional outbox: persist in your DB transaction, dispatch reliably. |
 | [`Runax.Messaging.Contracts.JsonSchema`](src/Runax.Messaging.Contracts.JsonSchema/README.md) | JSON Schema contracts: embedded schemas, validation on publish and consume, routing messages without identity by their consumers' schemas. |
+| [`Runax.Messaging.Cli`](src/Runax.Messaging.Cli/README.md) | The `runax-messaging` .NET tool: `contracts lint` and `contracts check`, the CI gate for contract schema files. |
 | [`Runax.Messaging.TestKit`](src/Runax.Messaging.TestKit/README.md) | Test-support: a broker-free `MessagingTestHarness` to publish messages and assert what your consumers handled, retried, or dead-lettered. |
 
 Application code that only publishes needs `Runax.Messaging.Abstractions`. The

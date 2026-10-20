@@ -81,4 +81,7 @@ internal sealed class SchemaNode
     public int? MaxLength { get; set; }
 
     public Regex? Pattern { get; set; }
+
+    /// <summary>Gets or sets the <c>default</c> annotation. Not used for validation, only for comparing revisions.</summary>
+    public JsonElement? Default { get; set; }
 }

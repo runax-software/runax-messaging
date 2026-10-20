@@ -37,6 +37,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="schemas/*.schema.json" />
+    <EmbeddedResource Include="schemas/**/*.schema.json" />
   </ItemGroup>
 </Project>

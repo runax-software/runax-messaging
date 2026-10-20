@@ -35,6 +35,11 @@
     <PackageVersion Include="StackExchange.Redis" Version="3.4.5" />
   </ItemGroup>
 
+  <!-- The runax-messaging command-line tool. -->
+  <ItemGroup Label="Tools">
+    <PackageVersion Include="System.CommandLine" Version="2.0.13" />
+  </ItemGroup>
+
   <!-- Test-only. Runner is Microsoft.Testing.Platform (see global.json) + xUnit v3. -->
   <ItemGroup Label="Tests">
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
