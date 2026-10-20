@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | **Status** | Draft for review. Nothing here is implemented. |
-| **Date** | 2026-10-19 |
+| **Date** | 2026-10-19, revised 2026-10-20 |
 | **Replaces** | Integer contract versions (`[MessageContract(version)]`) |
 | **Depends on** | Native broker headers ([#71](https://github.com/runax-software/runax-messaging/pull/71)) |
 | **Roadmap** | "JSON Schema contracts" in [ROADMAP.md](../../ROADMAP.md) |
@@ -18,8 +18,9 @@
   out at runtime. A consumer type can list extra `$id`s it can read, and CI checks that claim.
 - **Identity is optional on the wire.** A message that carries neither a `$id` nor an
   integer is routed by validating its body against the schemas its topic's consumers
-  declare. If several lines that reach different consumers accept it, it's unroutable
-  rather than guessed. A bus can require identity instead.
+  declare. Lines that would accept any JSON object are left out. If several lines that reach
+  different consumers accept it, no schema consumer gets it, rather than guessing, while
+  accept-all consumers still do. A bus can require identity instead.
 - **Source of truth.** A committed schema file per `$id`. .NET-owned contracts export it from
   the C# type with `JsonSchemaExporter`, which is AOT-clean (verified below), and CI fails if
   the file drifts from the type. Go, Java and Node teams either author the file by hand or
@@ -38,7 +39,9 @@
   client-side. It carries the registry ID in a header, never as a payload prefix, so the body
   stays plain JSON.
 - **Migration.** Producers write both the integer and the `$id` while they coexist. 2.x
-  services keep routing by the integer. The integer constructor is deprecated in 3.0.
+  services keep routing by the integer. The integer lives in each schema file
+  (`x-runax-legacy-version`), so a service that embeds its documents keeps writing and
+  accepting it after the attribute drops it. The integer constructor is deprecated in 3.0.
 
 ## 1. Problem
 
@@ -202,13 +205,18 @@ makes exact `$id` matching a compatibility-based match, decided at build time.
 
 ### Extra readable `$id`s: `Reads`
 
-Sometimes one type can read two breaking lines. For example, v3 only added a required field
-that the v3 type defaults. That type can say so:
+Sometimes one type can read two breaking lines. For example, v3 dropped `legacyCode`, which
+v2 required. That's breaking, because v2 readers require the field. But a v3 reader simply
+ignores it in a v2 message, so the v3 type can read both lines and can say so:
 
 ```csharp
 [MessageContract(3, Schema = OrderContracts.OrderPlacedV3, Reads = [OrderContracts.OrderPlacedV2])]
-public sealed record OrderPlacedV3(Guid OrderId, string CustomerId, decimal Total, string Currency = "USD");
+public sealed record OrderPlacedV3(Guid OrderId, string CustomerId, decimal Total);
 ```
+
+Adding a field the type defaults (`string Currency = "USD"`) is **not** such a case. The
+exporter marks a defaulted parameter optional, so that change is additive and stays within
+the same `$id` (§6).
 
 A producer of this type always writes `Schema`. `Reads` only widens which messages a
 consumer of the type accepts. CI's conformance check (§6) verifies that every message valid
@@ -217,23 +225,28 @@ never something the runtime infers.
 
 ### The rule
 
-For each consumer, let *S* be its type's `Schema` plus `Reads` (empty without `Schema`), and
-*V* its legacy integer (possibly absent). *Inferred* is the set of `$id`s the body validated
-against when the message carried no identity (next section), and is empty otherwise. The
-dispatcher accepts the consumer when:
+For each consumer, let *S* be its type's `Schema` plus `Reads` (empty without `Schema`).
+Let *V* be the legacy integers it accepts: the attribute's integer, plus the
+`x-runax-legacy-version` of every line in *S* whose document is embedded (§5). CI's
+conformance check keeps the attribute's integer equal to its `Schema` line's, so the two
+sources never disagree. *V* is what lets a consumer that declares only `Schema` keep
+accepting int-only messages from 2.x and foreign producers, and a `Reads` v2 consumer accept
+an int-only v2 message. *Inferred* is the set of `$id`s the body validated against when the
+message carried no identity, after the ambiguity rule (next section). It's empty otherwise,
+and empty for an ambiguous message. The dispatcher accepts the consumer when:
 
 ```csharp
-static bool Accepts(IReadOnlySet<string> s, int? v, string? wireSchema, int? wireVersion,
+static bool Accepts(IReadOnlySet<string> s, IReadOnlySet<int> v, string? wireSchema, int? wireVersion,
     IReadOnlySet<string> inferred)
 {
-    if (s.Count == 0 && v is null)
+    if (s.Count == 0 && v.Count == 0)
         return true;                              // unversioned: accepts everything, as today
 
     if (wireSchema is not null && s.Count > 0)
         return s.Contains(wireSchema);            // both sides have schema ids: they decide
 
     if (wireVersion is not null)
-        return v == wireVersion;                  // otherwise fall back to the integer
+        return v.Contains(wireVersion.Value);     // otherwise fall back to the integer
 
     return wireSchema is null && inferred.Overlaps(s);   // no identity at all: route by validation
 }
@@ -242,14 +255,22 @@ static bool Accepts(IReadOnlySet<string> s, int? v, string? wireSchema, int? wir
 The precedence is: a wire `$id` decides when present, from the envelope or a header. Without
 one, the integer decides. Only a message that carries neither is routed by validation.
 
+**Adoption safety valve.** During phase 2 (§8), a consumer that just added `Schema` stops
+accepting a message whose `$id` doesn't match, even though its integer still does. That's
+the point, but a producer that ships a mistyped `$id` would then dead-letter traffic that
+used to flow. `bus.ContractSchemaMismatch = SchemaMismatch.Report` lets such a message
+through by its integer instead, while logging a warning and recording
+`runax.messaging.contract.schema_mismatch`. It only applies when both sides also carry
+integers that match. The default is `Reject` (open question 29).
+
 | Consumer declares | Wire carries | Result |
 | --- | --- | --- |
 | Nothing (unversioned) | Anything | Delivered (unchanged) |
 | `Schema` (+ int) | Same `$id` | Delivered |
 | `Schema` (+ int) | A `$id` in `Reads` | Delivered |
-| `Schema` + int 2 | Different `$id`, int 2 | **Not delivered.** A mismatched `$id` is exactly the drift this feature exists to catch, so there's no fallback to the integer here. |
+| `Schema` + int 2 | Different `$id`, int 2 | **Not delivered.** A mismatched `$id` is exactly the drift this feature exists to catch, so there's no fallback to the integer here, unless the bus opts into the adoption safety valve below. |
 | `Schema` + int 2 | No `$id`, int 2 (2.x or foreign producer) | Delivered by the integer |
-| `Schema` only (3.0) | No `$id`, int 2 | Not delivered. The message claims an identity, just not one this consumer declares, so it isn't validated (open question 27). |
+| `Schema` only (3.0) | No `$id`, int 2 | Delivered if 2 is the `x-runax-legacy-version` of one of its lines, which needs the documents embedded (§5). Otherwise not delivered: the integer is an identity claim, so it isn't validated (open question 27). |
 | `Schema` (+ int) | **No `$id`, no int** | **Delivered if the body validates against one of the consumer's lines, and the match isn't ambiguous** (next section) |
 | int 2 only (legacy) | `$id` + int 2 (dual-writing producer) | Delivered by the integer |
 | int 2 only (legacy) | `$id` only | Not delivered |
@@ -273,9 +294,12 @@ without `[MessageContract]`.
 3. **Resolve ambiguity.** Readers ignore unknown properties (§6), so a v2 body often also
    validates against the v1 schema. *Inferred* is ambiguous when two of its lines would
    reach different consumers, meaning some consumer declares one line but not the other. An
-   ambiguous message is unroutable **as a whole**: it isn't delivered to anyone, including
-   accept-all consumers, so that it can be replayed once identity is added (open
-   question 25).
+   ambiguous message goes to **none of the schema-declaring consumers**: *Inferred* becomes
+   empty, nothing is guessed, and nothing is delivered twice. Unversioned (accept-all)
+   consumers still receive it, exactly as they do today, so adding a schema consumer to a
+   topic can never cut off an existing accept-all one. As with any message, it's unroutable
+   only when no consumer received it at all. Either way it's logged as a warning and
+   recorded as `runax.messaging.contract.ambiguous` (open question 25).
    - Lines whose consumers are the same don't conflict. That happens with a type that
      declares v3 with `Reads` v2, or when every consumer reads both lines.
    - With one line per topic, which is the common case, ambiguity never arises.
@@ -284,6 +308,13 @@ without `[MessageContract]`.
 
 More rules:
 
+- **Only selective lines take part.** Readers ignore unknown properties, so a line with no
+  required property and no `const` discriminator accepts every JSON object. Routing by it
+  would deliver any foreign traffic on the topic as long as it's an object. Such lines are
+  left out of the candidates: their consumers need identity on the wire. `lint` and the
+  startup check flag them, and adding a required discriminator or any required property
+  makes the line selective (open question 28). A selective line can still be broad, which
+  is the honest limit of routing by shape: a consumer receives whatever its schema accepts.
 - **Routing validation is separate from `ValidateContracts`.** It runs whenever a message
   has no identity and the topic has schema-declaring consumers, even when the bus's
   `Report`/`Enforce` validation is off, or when library validation is off in favor of the
@@ -407,9 +438,15 @@ schemas/orders/order-placed/v2.schema.json   # $id …/orders/order-placed/v2; t
 ```
 
 `x-runax-legacy-version` keeps the coexistence-period integer next to the `$id` in a
-language-neutral place. Foreign producers read it to set `runax-contract-version`, .NET
-conformance checks that the attribute's integer matches it, and the linter checks that a
-`$id` never changes its integer and that two `$id`s of one contract never share one (§8).
+language-neutral place. It makes the integer a property of the **line**, not of the C# type:
+
+- Foreign producers read it to set `runax-contract-version`.
+- .NET conformance checks that the attribute's integer matches it.
+- When the documents are embedded (below), a consumer accepts the integers of all its lines
+  (§4), and a producer whose attribute omits the integer still writes its line's. That's
+  what makes dropping the integer from the attribute in 3.0 safe (§8).
+- The linter checks that a `$id` never changes its integer and that two `$id`s of one
+  contract never share one (§8).
 
 ### .NET-owned contracts: export and commit
 
@@ -529,6 +566,26 @@ Other keywords make `lint` fail: `if`/`then`/`else`, `not`, `patternProperties`,
 `dependentSchemas`, `unevaluated*`, and remote `$ref`. The checker can't reason about them
 soundly, and a gate that silently passes what it can't check is worse than no gate.
 
+**Formats are asserted, for a fixed set, by System.Text.Json's rules.** In draft 2020-12,
+`format` is only an annotation by default, so a standard validator lets `"format": "uuid"`
+accept any string. A message would then pass validation, or be routed by it (§4), and fail
+later in `Deserialize<T>`. The profile evaluator therefore asserts the formats the exporter
+emits for types whose converters reject bad input: `uuid` (`Guid`), `date-time` (`DateTime`,
+`DateTimeOffset`), `date` (`DateOnly`) and `time` (`TimeOnly`).
+
+- It parses them the way System.Text.Json does, not by strict RFC 3339. STJ writes an
+  unspecified `DateTime` and every `TimeOnly` without a UTC offset, which RFC 3339 rejects,
+  so strict assertion would fail STJ's own output.
+- Other formats stay annotations, and `lint` warns about them.
+- Contracts that cross languages should prefer `DateTimeOffset`. Its values always carry an
+  offset, so they also pass standard validators that assert formats.
+
+**Valid doesn't guarantee deserializable.** Some constraints never reach the schema. The
+exporter doesn't emit `int` ranges, for example, so `3000000000` passes `"type": "integer"`
+and then overflows an `int`. Such failures stay what they are today: poison at
+deserialization, dead-lettered without retries. The conformance check narrows the gap but
+doesn't close it.
+
 ### Evolution rules: full compatibility, transitively
 
 A **writer** schema describes what a producer emits, and a **reader** schema what a consumer
@@ -575,11 +632,14 @@ Integer versions never had this check:
 For .NET types, `conform --assembly` derives both views from the same `JsonTypeInfo`. The
 reader view is the exporter's output as is. The writer view marks every property the
 serializer always writes as required, and leaves properties with an ignore condition
-(`JsonIgnoreCondition.WhenWritingNull`, …) optional. This matters for the `Reads` example
-in §4: the v3 type's `currency` parameter has a default, so a v2 message without it is
-readable, yet the type always writes it, so it still conforms as a v3 producer. For schemas
-exported in other languages, one document stands in for both views. That's an
-approximation that errs on the safe side for readers.
+(`JsonIgnoreCondition.WhenWritingNull`, …) optional. A defaulted parameter is the usual case
+where the views differ: readers can do without the property, but the type always writes it.
+The canonical file is the reader view, the exporter's output, so the property is optional
+there and the producer still conforms, because what it writes is a subset of what the file
+allows. For the `Reads` example in §4, the consumer check is what matters: the v2 document,
+`legacyCode` included, has to be readable by the v3 type, and it is, because readers ignore
+unknown properties. For schemas exported in other languages, one document stands in for both
+views. That's an approximation that errs on the safe side for readers.
 
 ### Runtime validation (optional, off by default)
 
@@ -713,9 +773,17 @@ or verify these points:
   transport writes them as UTF-8. So the Kafka integration writes and reads this header
   itself, outside the generic header slots, and keeps it out of `MessageContext.Headers`. A
   2.x consumer with #71 would show it as a garbled string header, which is harmless.
-- **Confluent's docs don't name the header.** Third-party clients use `__value_schema_id` and
-  `__key_schema_id`. That needs confirming against confluent-kafka-dotnet, which exposes the
-  header form as `JsonSerializerConfig.SchemaIdStrategy = Header` (the default is `Prefix`).
+- **Confluent's docs don't name the header, or the .NET setting.** Java turns the header form
+  on with `value.schema.id.serializer=io.confluent.kafka.serializers.schema.id.HeaderSchemaIdSerializer`.
+  Third-party clients use `__value_schema_id` and `__key_schema_id` as header names. Both the
+  name and confluent-kafka-dotnet's equivalent setting (reportedly
+  `JsonSerializerConfig.SchemaIdStrategy`) have to be confirmed against the client's source
+  before implementation.
+- **The GUID's byte order isn't documented.** The REST API shows GUIDs in 8-4-4-4-12 hex, but
+  the docs don't say how the 16 header bytes are ordered. .NET's `Guid.ToByteArray()` is
+  mixed-endian, so the add-on must convert explicitly (big-endian, per RFC 9562, unless
+  Confluent's clients say otherwise), and it needs an interop test against a Java or Go
+  producer.
 - **It needs recent versions.** Header IDs need Confluent Cloud or Confluent Platform 8.1.1+
   (Confluent's blog says 8.2). Clients need 2.13.0+ for .NET, Go and Python, 8.1.1+ for Java,
   and 1.8.0+ for JavaScript. Since 8.1.1, Confluent's deserializers look for the header first
@@ -878,7 +946,7 @@ versus closed objects, so which one wins is open question 21.
 - Confluent broker-side schema ID validation:
   [Confluent Cloud](https://docs.confluent.io/cloud/current/sr/broker-side-schema-validation.html),
   [Confluent Platform](https://docs.confluent.io/platform/current/schema-registry/schema-validation.html)
-- Confluent wire formats and header schema IDs:
+- Confluent wire formats and header schema IDs (re-checked 2026-10-20):
   [serdes overview](https://docs.confluent.io/cloud/current/sr/fundamentals/serdes-develop/index.html),
   [blog post](https://www.confluent.io/blog/schema-id-kafka-headers-data-governance/)
 - Confluent JSON Schema serdes:
@@ -923,8 +991,10 @@ installed, it adds the registry header and strips foreign prefixes on receive.
 
 1. Commit the canonical document with `x-runax-legacy-version`, and turn on lint, check, and
    conform.
-2. Add `Schema` to consumer types and ship the consumers. They now accept the `$id` and,
-   while the type keeps its integer, the integer too.
+2. Add `Schema` to consumer types and ship the consumers. They now accept the `$id`, and
+   the integer too, from the attribute or from the embedded line (§4). Consider
+   `ContractSchemaMismatch = Report` on their buses until producers are confirmed to write
+   the right `$id` (§4).
 3. Ship producers, which then write both automatically. Foreign producers add the
    `runax-contract-schema` header.
 4. Run validation in `Report` mode in staging.
@@ -936,9 +1006,14 @@ installed, it adds the registry header and strips foreign prefixes on receive.
 - The `int` constructor, `HandledContract.Version`, `Accepts(string, int)`,
   `MessageContext.ContractVersion` and `UnroutableMessage.ContractVersion` are marked
   `[Obsolete]` (a warning, not an error).
-- A team drops the integer from a contract type only once nothing still routes by it: no
-  2.x consumer of that contract (check with the catalog or manifest, or broker metrics) and
-  no int-only messages left in DLQs or outbox backlogs. Until then the type keeps both.
+- Dropping the integer from a contract **type** is safe once the service embeds its schema
+  documents (§5). The line's file keeps the integer, so the service still writes it as a
+  producer and still accepts it as a consumer (§4). A service without embedded documents
+  keeps the integer on the type until nothing routes by it: no 2.x consumer of that contract
+  (check with the catalog or manifest, or broker metrics), and no int-only messages left in
+  DLQs or outbox backlogs.
+- The integer leaves the **wire** only when the fleet is done with it: a later release stops
+  writing it, and reading it stays supported (open question 9).
 - `migrating-to-3.0.md` documents the switch.
 
 ### Compatibility during coexistence
@@ -947,19 +1022,23 @@ installed, it adds the registry header and strips foreign prefixes on receive.
 
 | Producer ↓ / Consumer → | 2.x, int | 2.y+ with `Schema` + int | 3.0, `Schema` only |
 | --- | --- | --- | --- |
-| 2.x, int | ✓ int | ✓ int | ✗ unroutable |
+| 2.x, int | ✓ int | ✓ int | ✓ int via the line's legacy version¹, else ✗ unroutable |
 | 2.y+ with `Schema` + int | ✓ int | ✓ `$id` | ✓ `$id` |
-| 3.0, `Schema` only | ✗ unroutable | ✓ `$id` | ✓ `$id` |
-| Foreign, `runax-contract-version` only | ✓ int | ✓ int | ✗ unroutable |
+| 3.0, `Schema` only | ✓ int via the line's legacy version¹, else ✗ unroutable | ✓ `$id` | ✓ `$id` |
+| Foreign, `runax-contract-version` only | ✓ int | ✓ int | ✓ int via the line's legacy version¹, else ✗ unroutable |
 | Foreign, `runax-contract-schema` (+ version) | ✓ int if the version is set | ✓ `$id` | ✓ `$id` |
-| Foreign or untyped, **no identity** | ✗ unroutable (as today) | ✓ by validation, if unambiguous | ✓ by validation, if unambiguous |
+| Foreign or untyped, **no identity** | ✗ unroutable (as today) | ✓ by validation, if selective and unambiguous | ✓ by validation, if selective and unambiguous |
+
+¹ When the 3.0 service embeds its schema documents (§5), which it already needs for
+validation and for routing unidentified messages.
 
 Producers that never set identity, such as plain-JSON services in other languages, only need
 their consumers to declare `Schema`. Validation-based routing (§4) then works the same
 before and after 3.0.
 
-The ✗ cells are the reason for the "drop the integer last" rule. They fail safe: the message
-is unroutable and dead-lettered with its headers, so it can be replayed once the consumer
+The remaining ✗ cells only affect 3.0 services that don't embed their documents, and they're
+the reason those services keep the integer on their types. They fail safe: the message is
+unroutable and dead-lettered with its headers, so it can be replayed once the consumer
 catches up. It's never silently misdelivered.
 
 ### The rule CI must enforce during coexistence
@@ -999,6 +1078,8 @@ non-routing label.
    - The unidentified-message path: the matcher hook that the JSON Schema package
      implements, the ambiguity rule, `RequireContractIdentity`, and the unroutable reasons
      (§4).
+   - Legacy integers taken from embedded lines (*V* in §4), for both matching and writing,
+     and the `ContractSchemaMismatch` safety valve.
 3. **Outbox:** no store change. The envelope already carries the new key, and the dispatcher
    rebuilds native headers through `FromEnvelope`.
 4. **`Runax.Messaging.Contracts.JsonSchema`:** export profile and `ContractSerialization`
@@ -1017,8 +1098,12 @@ non-routing label.
 7. **Tests:**
    - The §4 matching table as data-driven tests, including unidentified messages. Cover
      one line per topic, overlapping lines with the same consumers, overlapping lines with
-     different consumers (ambiguous), no match with and without an unversioned consumer,
-     and `RequireContractIdentity`.
+     different consumers (ambiguous, with and without an accept-all consumer), no match with
+     and without an unversioned consumer, a non-selective line, `RequireContractIdentity`,
+     int-only messages to `Schema`-only and `Reads` consumers, and both
+     `ContractSchemaMismatch` modes.
+   - The asserted formats: values that pass the profile evaluator deserialize under
+     System.Text.Json, and ones it rejects don't.
    - 2.x wire fixtures: envelopes with and without the new key, a native-only schema header,
      and a non-integer version.
    - Every row of the evolution table, and every row of the §7 resolution table.
@@ -1125,16 +1210,26 @@ Optional identity and routing by validation (§4):
     some unroutable messages into deliveries of valid ones. *Recommend on by default,
     whenever the JSON Schema package is installed.*
 25. **Ambiguity.** When lines that reach different consumers all accept a message, options
-    are: refuse it as unroutable, including for accept-all consumers; deliver it to every
-    accepting line; or pick the newest line. *Recommend refusing. Guessing or
-    double-delivering is how mismatches go unnoticed.*
+    are: deliver it to no schema consumer and leave accept-all consumers as they are today;
+    refuse it for everyone, accept-all consumers included; deliver it to every accepting
+    line; or pick the newest line. *Recommend the first. Guessing or double-delivering is
+    how mismatches go unnoticed, and refusing it for everyone would let a new schema
+    consumer cut off an existing accept-all one.*
 26. **The overlap check.** Should two lines on one topic that could accept the same message,
     and that reach different consumers, be a warning or an error, at startup and in CI? The
     check counts lines as disjoint only when a shared required property has disjoint
     `const`/`enum`/`type` values. *Recommend a warning, and documenting a discriminator
     property as the fix.*
-27. **Int-only messages and schema-only consumers.** A message with an integer but no `$id`
-    stays unroutable for a consumer that declares only `Schema`, because the integer is an
-    identity claim. Should it be validated against that consumer's schemas instead? It would
-    smooth the move to 3.0 for 2.x producers that can't add `$id`s. *Recommend keeping the
-    precedence. An integer that maps to nothing the consumer declares is a real mismatch.*
+27. **Int-only messages and schema-only consumers.** A consumer that declares only `Schema`
+    accepts an int-only message when the integer is one of its lines' `x-runax-legacy-version`
+    values (§4). Should an integer that maps to none of its lines be validated against its
+    schemas instead? *Recommend not. The integer is an identity claim, and one that matches
+    nothing the consumer declares is a real mismatch.*
+28. **Non-selective lines.** A line with no required property and no `const` discriminator
+    accepts every JSON object. Leave it out of routing by validation (its consumers need
+    identity), or allow it with a warning? *Recommend leaving it out. Inference by such a
+    line isn't routing.*
+29. **Adoption safety valve.** Offer `bus.ContractSchemaMismatch = Report`, which delivers a
+    message whose `$id` mismatches but whose integer matches, with a warning and a metric?
+    Is the default `Reject`? *Recommend offering it, defaulting to `Reject`, and suggesting
+    `Report` only while a contract is being adopted.*
