@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.test/orders/order-placed/v3",
+  "title": "OrderPlaced",
+  "x-runax-legacy-version": 3,
+  "type": "object",
+  "properties": {
+    "kind": { "const": "order.placed" },
+    "id": { "type": "integer", "minimum": 1 },
+    "currency": { "type": "string", "minLength": 3, "maxLength": 3 }
+  },
+  "required": ["kind", "id", "currency"]
+}

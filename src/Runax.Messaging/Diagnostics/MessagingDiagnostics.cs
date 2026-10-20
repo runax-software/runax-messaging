@@ -48,6 +48,21 @@ public static class MessagingDiagnostics
         unit: "ms",
         description: "Time spent processing a received message before it is acknowledged, requeued, or dead-lettered.");
 
+    internal static readonly Counter<long> ContractAmbiguous = Meter.CreateCounter<long>(
+        "runax.messaging.contract.ambiguous",
+        unit: "{message}",
+        description: "Number of unidentified messages that matched contract schemas reaching different consumers.");
+
+    internal static readonly Counter<long> ContractSchemaMismatch = Meter.CreateCounter<long>(
+        "runax.messaging.contract.schema_mismatch",
+        unit: "{message}",
+        description: "Number of messages delivered by their contract version despite a mismatched schema $id.");
+
+    internal static readonly Counter<long> ContractValidationFailures = Meter.CreateCounter<long>(
+        "runax.messaging.contract.validation_failures",
+        unit: "{message}",
+        description: "Number of message bodies that failed validation against their contract schema.");
+
     internal static TagList Tags(string system, string destination, string bus) => new()
     {
         { "messaging.system", system },

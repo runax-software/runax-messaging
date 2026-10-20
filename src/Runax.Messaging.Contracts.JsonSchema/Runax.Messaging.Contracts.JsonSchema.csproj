@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>JSON Schema contracts for Runax.Messaging: embedded contract schemas, validation on publish and consume, and routing of messages that carry no contract identity by the schemas their consumers declare.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Runax.Messaging.Abstractions/Runax.Messaging.Abstractions.csproj" />
+    <ProjectReference Include="../Runax.Messaging/Runax.Messaging.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="runax-messaging" />
+    <InternalsVisibleTo Include="Runax.Messaging.Cli.Tests" />
+    <InternalsVisibleTo Include="Runax.Messaging.Contracts.JsonSchema.Tests" />
+  </ItemGroup>
+</Project>

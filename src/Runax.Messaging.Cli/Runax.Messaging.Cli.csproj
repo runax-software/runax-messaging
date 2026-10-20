@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>The runax-messaging command-line tool. `runax-messaging contracts lint` and `contracts check` are the CI gate for JSON Schema contracts: lint schema files against the contract profile, and check that every revision under one $id stays compatible with the earlier ones.</Description>
+    <OutputType>Exe</OutputType>
+    <!-- Named like the command, so help, errors and the binary all say runax-messaging. The package stays Runax.Messaging.Cli. -->
+    <AssemblyName>runax-messaging</AssemblyName>
+    <RootNamespace>Runax.Messaging.Cli</RootNamespace>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>runax-messaging</ToolCommandName>
+    <!-- Run on whatever newer .NET the CI machine has. -->
+    <RollForward>Major</RollForward>
+    <PackageTags>$(PackageTags);cli;json-schema;contracts;dotnet-tool</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Runax.Messaging.Contracts.JsonSchema/Runax.Messaging.Contracts.JsonSchema.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Runax.Messaging.Cli.Tests" />
+  </ItemGroup>
+</Project>

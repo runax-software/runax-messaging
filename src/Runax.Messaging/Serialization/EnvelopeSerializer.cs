@@ -72,6 +72,7 @@ internal sealed class EnvelopeSerializer(ISerializer body) : IMessageSerializer
             Headers = metadata.Headers,
             ContractName = metadata.ContractName,
             ContractVersion = metadata.ContractVersion,
+            ContractSchema = metadata.ContractSchema,
             Serializer = _body,
         };
     }
@@ -128,7 +129,15 @@ internal sealed class EnvelopeSerializer(ISerializer body) : IMessageSerializer
                 headers[key] = (string?)value ?? string.Empty;
         }
 
-        return new Metadata((string?)meta["contract_name"], (int?)meta["contract_version"], headers);
+        // A non-string contract_schema is ignored rather than failing the whole envelope.
+        var schema = meta["contract_schema"] is JsonValue schemaValue && schemaValue.TryGetValue<string>(out var text)
+            ? ContractSchemaId.NormalizeOrNull(text)
+            : null;
+
+        return new Metadata((string?)meta["contract_name"], (int?)meta["contract_version"], headers)
+        {
+            ContractSchema = schema,
+        };
     }
 
     private static JsonObject BuildMetadata(MessageContractAttribute? contract, IDictionary<string, string>? headers)
@@ -137,6 +146,8 @@ internal sealed class EnvelopeSerializer(ISerializer body) : IMessageSerializer
 
         if (contract is not null)
         {
+            if (contract.Schema is { } schema)
+                meta["contract_schema"] = ContractSchemaId.Normalize(schema);
             meta["contract_version"] = contract.Version;
             if (contract.Name is { } name)
                 meta["contract_name"] = name;
@@ -157,5 +168,8 @@ internal sealed class EnvelopeSerializer(ISerializer body) : IMessageSerializer
     internal sealed record Metadata(string? ContractName, int? ContractVersion, IReadOnlyDictionary<string, string> Headers)
     {
         public static Metadata None { get; } = new(null, null, ReadOnlyDictionary<string, string>.Empty);
+
+        /// <summary>The contract schema <c>$id</c>, normalized; <see langword="null"/> when absent.</summary>
+        public string? ContractSchema { get; init; }
     }
 }
