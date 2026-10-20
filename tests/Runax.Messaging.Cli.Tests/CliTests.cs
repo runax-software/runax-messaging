@@ -76,7 +76,7 @@ public class CliTests
     {
         using var output = new StringWriter();
         using var error = new StringWriter();
-        var exitCode = CliApp.Run(args, output, error);
+        var exitCode = Program.Run(args, output, error);
         return (exitCode, output.ToString(), error.ToString());
     }
 }
