@@ -18,6 +18,7 @@ namespace Runax.Messaging.Consumers;
 internal sealed class MessageConsumerHostedService(
     string busName,
     BusHeaderSettings headerSettings,
+    BusContractSettings contractSettings,
     IServiceProvider serviceProvider,
     IEnumerable<ConsumerRegistration> registrations,
     IMessageSerializerProvider serializerProvider,
@@ -63,15 +64,18 @@ internal sealed class MessageConsumerHostedService(
             "Bus '{Bus}': subscribing to {TopicCount} topic(s) on '{System}': {Topics}",
             busName, topics.Length, Transport.SystemName, string.Join(", ", topics));
 
+        var router = new ContractRouter(serviceProvider.GetService<IContractSchemaMatcher>(), contractSettings);
+
         await Transport.SubscribeAsync(
             topics,
-            message => DispatchAsync(message, topicConsumers, stoppingToken),
+            message => DispatchAsync(message, topicConsumers, router, stoppingToken),
             stoppingToken);
     }
 
     private async ValueTask<MessageDisposition> DispatchAsync(
         TransportMessage message,
         Dictionary<string, List<IMessageConsumer>> topicConsumers,
+        ContractRouter router,
         CancellationToken cancellationToken)
     {
         var topic = message.Topic;
@@ -104,14 +108,21 @@ internal sealed class MessageConsumerHostedService(
             }
         }
 
-        // Versioned consumers accept only their contract version; an unversioned consumer accepts every
-        // message on the topic. If none match, the message is unroutable and the configured strategy decides.
-        var matched = MatchConsumers(consumers, context.ContractVersion);
+        // Contract-declaring consumers accept only the identities they declare (or, for an unidentified
+        // message, a body that validates against their schemas); an unversioned consumer accepts every message
+        // on the topic. If none match, the message is unroutable and the configured strategy decides.
+        var route = router.Route(consumers, context);
+        ReportRouting(route, context, topic, tags);
+
+        var matched = route.Matched;
+        if (route.Inferred.Count > 0)
+            context = WithInferred(context, route.Inferred);
+
         if (matched.Count == 0)
         {
             try
             {
-                return await HandleUnroutableAsync(message, context, cancellationToken);
+                return await HandleUnroutableAsync(message, context, route, cancellationToken);
             }
             finally
             {
@@ -121,6 +132,10 @@ internal sealed class MessageConsumerHostedService(
         }
 
         using var activity = StartProcessActivity(topic, context.Headers);
+        if (context.ContractSchema is { } contractSchema)
+            activity?.SetTag("messaging.runax.contract.schema", contractSchema);
+        if (route.Inferred.Count > 0)
+            activity?.SetTag("messaging.runax.contract.inferred", string.Join(",", route.Inferred));
         try
         {
             // Requeue wins outright (redeliver the whole message); otherwise a single dead-letter
@@ -147,32 +162,66 @@ internal sealed class MessageConsumerHostedService(
         }
     }
 
-    private static List<IMessageConsumer> MatchConsumers(List<IMessageConsumer> consumers, int? wireVersion)
+    private void ReportRouting(ContractRoute route, MessageContext context, string topic, TagList tags)
     {
-        var matched = new List<IMessageConsumer>(consumers.Count);
-        foreach (var consumer in consumers)
+        if (route.Ambiguous)
         {
-            if (consumer.ContractVersion is null || consumer.ContractVersion == wireVersion)
-                matched.Add(consumer);
+            MessagingDiagnostics.ContractAmbiguous.Add(1, tags);
+            logger.LogWarning(
+                "Unidentified message on topic '{Topic}' (bus '{Bus}') matches contract schemas that reach different " +
+                "consumers ({Schemas}); no schema consumer receives it.",
+                topic, busName, route.Detail);
         }
 
-        return matched;
+        foreach (var consumer in route.Mismatched)
+        {
+            MessagingDiagnostics.ContractSchemaMismatch.Add(1, tags);
+            logger.LogWarning(
+                "Delivering a message with contract schema '{Schema}' to {Consumer} on topic '{Topic}' (bus '{Bus}') " +
+                "by its version {Version}, although the consumer declares other schemas.",
+                context.ContractSchema, consumer.GetType().Name, topic, busName, context.ContractVersion);
+        }
     }
+
+    private static MessageContext WithInferred(MessageContext context, IReadOnlyList<string> inferred) => new()
+    {
+        Topic = context.Topic,
+        Body = context.Body,
+        Headers = context.Headers,
+        ContractName = context.ContractName,
+        ContractVersion = context.ContractVersion,
+        ContractSchema = context.ContractSchema,
+        InferredContractSchemas = inferred,
+        Serializer = context.Serializer,
+    };
 
     private async ValueTask<MessageDisposition> HandleUnroutableAsync(
         TransportMessage message,
         MessageContext context,
+        ContractRoute route,
         CancellationToken cancellationToken)
     {
-        logger.LogWarning(
-            "No consumer accepts contract version {Version} on topic '{Topic}' (bus '{Bus}').",
-            context.ContractVersion, context.Topic, busName);
+        if (route.Reason == UnroutableReason.NoMatchingContract)
+        {
+            logger.LogWarning(
+                "No consumer accepts contract {Identity} on topic '{Topic}' (bus '{Bus}').",
+                context.ContractSchema is { } schema ? $"schema '{schema}'" : $"version {context.ContractVersion}",
+                context.Topic, busName);
+        }
+        else
+        {
+            logger.LogWarning(
+                "Unidentified message on topic '{Topic}' (bus '{Bus}') is unroutable ({Reason}): {Detail}",
+                context.Topic, busName, route.Reason, route.Detail);
+        }
 
         var unroutable = new UnroutableMessage
         {
             Topic = context.Topic,
             ContractName = context.ContractName,
             ContractVersion = context.ContractVersion,
+            ContractSchema = context.ContractSchema,
+            Reason = route.Reason,
             Body = context.Body,
             Headers = context.Headers,
             TransportSystemName = Transport.SystemName,
@@ -183,7 +232,8 @@ internal sealed class MessageConsumerHostedService(
 
         if (disposition == MessageDisposition.DeadLetter)
         {
-            var reason = new UnroutableMessageException(context.Topic, context.ContractVersion);
+            var reason = new UnroutableMessageException(
+                context.Topic, context.ContractVersion, context.ContractSchema, route.Reason, route.Detail);
             return await DeadLetterAsync(message, context, reason, attempts: 0, cancellationToken);
         }
 
@@ -331,6 +381,7 @@ internal sealed class MessageConsumerHostedService(
                 ? NativeHeaders.Build(
                     context?.ContractName,
                     context?.ContractVersion,
+                    context?.ContractSchema,
                     (context?.Headers ?? message.Headers).Concat(deadLetterHeaders))
                 : null;
 

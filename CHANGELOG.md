@@ -29,8 +29,26 @@ All packages in the repository are versioned together.
   `PublishBatchAsync`, and `SubscribeAsync` that carry native headers. They have default
   implementations, so existing custom transports keep working (metadata stays in the envelope).
 
+- **JSON Schema contracts** (first part of the [spec](docs/specs/json-schema-contracts.md)) —
+  `[MessageContract]` gains `Schema` (the contract schema's `$id`) and `Reads`. The `$id` travels as
+  `__runax.contract_schema` and the `runax-contract-schema` header, and decides routing when both
+  sides carry one. Without one, the integer decides, and a consumer also accepts the legacy versions
+  its schema lines record. The new `Runax.Messaging.Contracts.JsonSchema` package loads embedded
+  schemas (a built-in, AOT-safe evaluator for a draft 2020-12 profile), validates bodies on publish
+  and consume (`bus.ValidateContracts`: off, report, or enforce), routes messages without identity
+  by the schemas their consumers declare, and warns at startup about missing, non-selective, or
+  overlapping schemas. New bus settings: `RequireContractIdentity`, `ContractSchemaMismatch`, and
+  `DecorateSerializer`. `UnroutableMessage` gains `ContractSchema` and `Reason`;
+  `IMessageContractCatalog` gains schema-aware `Accepts` overloads. Guide:
+  [docs/json-schema-contracts.md](docs/json-schema-contracts.md).
+- **`Runax.Messaging.Cli`** — the `runax-messaging` .NET tool. `contracts lint` checks schema files
+  against the contract profile (draft, `$id` and file path, keywords, open root, unique `$id`s and
+  legacy versions); `contracts check` checks that each file stays fully compatible with every earlier
+  revision of its `$id` in git history, or against a baseline directory. Text or GitHub Actions output.
+
 ### Changed
 
+- `PoisonMessageException` is no longer sealed, so `ContractValidationException` can derive from it.
 - The default System.Text.Json serializer resolves metadata through the options'
   `TypeInfoResolver`, so a source-generated `JsonSerializerContext` is all a native AOT app
   needs. Options without a resolver still fall back to reflection under the JIT. The

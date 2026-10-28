@@ -29,6 +29,7 @@ internal readonly record struct TopicKey(string Bus, string Topic);
 /// Default <see cref="IMessageSerializerProvider"/>. Looks up a keyed <see cref="ISerializer"/> by
 /// decreasing specificity — <c>(bus, topic)</c>, then bus — and wraps the first match in an
 /// <see cref="EnvelopeSerializer"/>; falls back to the global serializer when none is registered.
+/// The bus's <see cref="SerializerDecorator"/>s then wrap whichever body serializer resolved.
 /// Results are cached per <c>(bus, topic)</c>.
 /// </summary>
 internal sealed class MessageSerializerProvider(IServiceProvider services, IMessageSerializer defaultSerializer)
@@ -42,6 +43,15 @@ internal sealed class MessageSerializerProvider(IServiceProvider services, IMess
             var body =
                 state.services.GetKeyedService<ISerializer>(key)
                 ?? state.services.GetKeyedService<ISerializer>(key.Bus);
+
+            var decorators = state.services.GetKeyedServices<SerializerDecorator>(key.Bus).ToArray();
+            if (decorators.Length > 0)
+            {
+                body ??= state.services.GetRequiredService<ISerializer>();
+                foreach (var decorator in decorators)
+                    body = decorator.Decorate(state.services, body);
+            }
+
             return body is null ? state.defaultSerializer : new EnvelopeSerializer(body);
         }, (services, defaultSerializer));
 }

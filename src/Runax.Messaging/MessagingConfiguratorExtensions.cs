@@ -65,9 +65,11 @@ public static class MessagingConfiguratorExtensions
         var config = builder.Validate();
         var mode = builder.Mode;
         var headerSettings = new BusHeaderSettings(builder.WriteNativeHeaders, builder.HeaderPrecedence);
+        var contractSettings = new BusContractSettings(builder.RequireContractIdentity, builder.ContractSchemaMismatch);
 
         services.AddSingleton(new BusRegistration { Name = name, Mode = mode, SystemName = config.SystemName });
         services.AddKeyedSingleton(name, headerSettings);
+        services.AddKeyedSingleton(name, contractSettings);
 
         services.AddKeyedSingleton<IMessagingTransport>(name, (sp, _) =>
             config.CreateTransport(new TransportContext(sp, name, mode)));
@@ -82,7 +84,8 @@ public static class MessagingConfiguratorExtensions
         if (builder.Consumers.Count > 0)
         {
             services.AddSingleton<IHostedService>(sp =>
-                ActivatorUtilities.CreateInstance<MessageConsumerHostedService>(sp, name, headerSettings));
+                ActivatorUtilities.CreateInstance<MessageConsumerHostedService>(
+                    sp, name, headerSettings, contractSettings));
         }
 
         return configurator;

@@ -17,6 +17,7 @@ internal static class NativeHeaders
     public static IReadOnlyDictionary<string, string> Build(
         string? contractName,
         int? contractVersion,
+        string? contractSchema,
         IEnumerable<KeyValuePair<string, string>>? headers)
     {
         var native = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -33,8 +34,19 @@ internal static class NativeHeaders
         if (contractVersion is { } version)
             native[MessageHeaders.ContractVersion] = version.ToString(CultureInfo.InvariantCulture);
 
+        if (contractSchema is not null)
+            native[MessageHeaders.ContractSchema] = ContractSchemaId.Normalize(contractSchema);
+
         return native;
     }
+
+    /// <summary>
+    /// Builds the native headers for an outgoing message of a <c>[MessageContract]</c> type.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> Build(
+        MessageContractAttribute? contract,
+        IEnumerable<KeyValuePair<string, string>>? headers) =>
+        Build(contract?.Name, contract?.Version, contract?.Schema, headers);
 
     /// <summary>
     /// Builds the native headers for an already-serialized envelope (e.g. one stored by the outbox) from the
@@ -43,7 +55,7 @@ internal static class NativeHeaders
     public static IReadOnlyDictionary<string, string> FromEnvelope(string envelopeJson)
     {
         var metadata = EnvelopeSerializer.ReadMetadata(envelopeJson);
-        return Build(metadata.ContractName, metadata.ContractVersion, metadata.Headers);
+        return Build(metadata.ContractName, metadata.ContractVersion, metadata.ContractSchema, metadata.Headers);
     }
 
     /// <summary>
@@ -62,6 +74,7 @@ internal static class NativeHeaders
 
         string? nativeName = null;
         int? nativeVersion = null;
+        string? nativeSchema = null;
         var nativeHeaders = new Dictionary<string, string>(native.Count, StringComparer.Ordinal);
 
         foreach (var (key, value) in native)
@@ -70,6 +83,9 @@ internal static class NativeHeaders
             {
                 case MessageHeaders.ContractName:
                     nativeName = value;
+                    break;
+                case MessageHeaders.ContractSchema:
+                    nativeSchema = ContractSchemaId.NormalizeOrNull(value);
                     break;
                 case MessageHeaders.ContractVersion:
                     if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var version))
@@ -99,6 +115,9 @@ internal static class NativeHeaders
             ContractVersion = brokerWins
                 ? nativeVersion ?? context.ContractVersion
                 : context.ContractVersion ?? nativeVersion,
+            ContractSchema = brokerWins
+                ? nativeSchema ?? context.ContractSchema
+                : context.ContractSchema ?? nativeSchema,
             Serializer = context.Serializer,
         };
     }

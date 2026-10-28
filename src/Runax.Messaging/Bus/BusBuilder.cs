@@ -58,6 +58,20 @@ public sealed class BusBuilder
     public HeaderSource HeaderPrecedence { get; set; } = HeaderSource.Broker;
 
     /// <summary>
+    /// Gets or sets whether consumers that declare a contract <c>Schema</c> only receive messages that carry
+    /// a contract identity (a schema <c>$id</c> or a version). When <see langword="false"/> (the default) and
+    /// the JSON Schema contracts package is installed, a message that carries neither is routed by validating
+    /// its body against the schemas the topic's consumers declare.
+    /// </summary>
+    public bool RequireContractIdentity { get; set; }
+
+    /// <summary>
+    /// Gets or sets what happens to a message whose contract schema <c>$id</c> doesn't match a consumer's
+    /// while its contract version does. Defaults to <see cref="SchemaMismatch.Reject"/>.
+    /// </summary>
+    public SchemaMismatch ContractSchemaMismatch { get; set; } = SchemaMismatch.Reject;
+
+    /// <summary>
     /// Gets a shared property bag for extension packages (e.g. the outbox) to keep per-bus
     /// configuration state that participates in end-of-block validation.
     /// </summary>
@@ -312,6 +326,21 @@ public sealed class BusBuilder
     {
         ArgumentException.ThrowIfNullOrEmpty(topic);
         Services.AddKeyedSingleton<ISerializer, TSerializer>(new TopicKey(BusName, topic));
+        return this;
+    }
+
+    /// <summary>
+    /// Wraps the body serializer this bus resolves for each topic, whichever one that is: per topic, per bus,
+    /// or the default. Use it to add behavior around serialization without replacing the serializer, such as
+    /// contract validation. Decorators apply in registration order, innermost first, and the reserved
+    /// <c>__runax</c> envelope stays outside all of them.
+    /// </summary>
+    /// <param name="decorate">Receives the application services and the inner serializer, and returns the wrapper.</param>
+    /// <returns>The same builder, to allow chaining.</returns>
+    public BusBuilder DecorateSerializer(Func<IServiceProvider, ISerializer, ISerializer> decorate)
+    {
+        ArgumentNullException.ThrowIfNull(decorate);
+        Services.AddKeyedSingleton(BusName, new SerializerDecorator(decorate));
         return this;
     }
 

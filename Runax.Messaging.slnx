@@ -1,6 +1,8 @@
 <Solution>
   <Folder Name="/Tests/">
     <Project Path="tests\Runax.Messaging.AotSmoke\Runax.Messaging.AotSmoke.csproj" Type="Classic C#" />
+    <Project Path="tests\Runax.Messaging.Cli.Tests\Runax.Messaging.Cli.Tests.csproj" Type="Classic C#" />
+    <Project Path="tests\Runax.Messaging.Contracts.JsonSchema.Tests\Runax.Messaging.Contracts.JsonSchema.Tests.csproj" Type="Classic C#" />
     <Project Path="tests\Runax.Messaging.Outbox.Tests\Runax.Messaging.Outbox.Tests.csproj" Type="Classic C#" />
     <Project Path="tests\Runax.Messaging.Transports.Google.PubSub.Tests\Runax.Messaging.Transports.Google.PubSub.Tests.csproj" Type="Classic C#" />
     <Project Path="tests\Runax.Messaging.Transports.Redis.Tests\Runax.Messaging.Transports.Redis.Tests.csproj" Type="Classic C#" />
@@ -14,6 +16,8 @@
     <Project Path="tests\Runax.Messaging.TestKit.Tests\Runax.Messaging.TestKit.Tests.csproj" Type="Classic C#" />
   </Folder>
   <Project Path="src\Runax.Messaging.Abstractions\Runax.Messaging.Abstractions.csproj" Type="Classic C#" />
+  <Project Path="src\Runax.Messaging.Cli\Runax.Messaging.Cli.csproj" Type="Classic C#" />
+  <Project Path="src\Runax.Messaging.Contracts.JsonSchema\Runax.Messaging.Contracts.JsonSchema.csproj" Type="Classic C#" />
   <Project Path="src\Runax.Messaging.Outbox\Runax.Messaging.Outbox.csproj" Type="Classic C#" />
   <Project Path="src\Runax.Messaging.Transports.Google.PubSub\Runax.Messaging.Transports.Google.PubSub.csproj" Type="Classic C#" />
   <Project Path="src\Runax.Messaging.Transports.Redis\Runax.Messaging.Transports.Redis.csproj" Type="Classic C#" />

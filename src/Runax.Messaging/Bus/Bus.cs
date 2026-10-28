@@ -137,8 +137,7 @@ internal sealed class Bus(
         if (!headerSettings.WriteNativeHeaders)
             return null;
 
-        var contract = MessageContractCache.For(typeof(TMessage));
-        return NativeHeaders.Build(contract?.Name, contract?.Version, headers);
+        return NativeHeaders.Build(MessageContractCache.For(typeof(TMessage)), headers);
     }
 
     private void EnsureCanPublish()

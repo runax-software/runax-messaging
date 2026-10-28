@@ -32,6 +32,19 @@ public sealed class MessageContext
     public int? ContractVersion { get; init; }
 
     /// <summary>
+    /// Gets the <c>$id</c> of the contract schema the message carried (in the envelope or as a native
+    /// header), or <see langword="null"/> when it carried none.
+    /// </summary>
+    public string? ContractSchema { get; init; }
+
+    /// <summary>
+    /// Gets the contract schema <c>$id</c>s the body validated against when the message carried no
+    /// identity and was routed by validation. Empty otherwise. Unlike <see cref="ContractSchema"/>,
+    /// these were inferred, not claimed by the producer.
+    /// </summary>
+    public IReadOnlyList<string> InferredContractSchemas { get; init; } = [];
+
+    /// <summary>
     /// Gets the body serializer threaded through from the framework so <see cref="Deserialize{T}"/> uses the
     /// same encoding the message was written with. When <see langword="null"/> (e.g. a hand-built context),
     /// default System.Text.Json is used.
