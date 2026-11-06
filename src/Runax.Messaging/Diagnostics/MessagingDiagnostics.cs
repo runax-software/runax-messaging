@@ -53,11 +53,6 @@ public static class MessagingDiagnostics
         unit: "{message}",
         description: "Number of unidentified messages that matched contract schemas reaching different consumers.");
 
-    internal static readonly Counter<long> ContractSchemaMismatch = Meter.CreateCounter<long>(
-        "runax.messaging.contract.schema_mismatch",
-        unit: "{message}",
-        description: "Number of messages delivered by their contract version despite a mismatched schema $id.");
-
     internal static readonly Counter<long> ContractValidationFailures = Meter.CreateCounter<long>(
         "runax.messaging.contract.validation_failures",
         unit: "{message}",

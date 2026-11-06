@@ -19,10 +19,10 @@ strongly-typed messages without coupling your application to a specific broker.
 - **Configurable** — DataAnnotations-validated transport configs with `IConfiguration`
   binding, and a pluggable body serializer set per bus or per topic (the `__runax`
   envelope stays framework-owned).
-- **JSON Schema contracts** — identify contracts by schema `$id`, validate bodies, and route plain JSON from
-  other languages by the schemas consumers declare.
-- **Contract versioning** — optional `[MessageContract(version)]`; consumers subscribe per version, with a
-  pluggable strategy (dead-letter/requeue/custom) for versions no consumer handles.
+- **JSON Schema contracts** — optional `[MessageContract(Schema = "…")]` identifies a contract by its
+  schema's `$id`; consumers subscribe per contract and per earlier line they can read, bodies are
+  validated against the schema, and plain JSON from other languages is routed by the schemas consumers
+  declare. A pluggable strategy (dead-letter/requeue/custom) handles contracts no consumer accepts.
 - **Transactional outbox** — optional package for atomic database-write + publish.
 - **Native broker headers** — headers, trace context, and contract version travel both in the
   envelope and as native headers (AMQP, Kafka, SQS/SNS attributes, ...), so Go, Java, and Node

@@ -8,6 +8,28 @@ All packages in the repository are versioned together.
 
 ## [Unreleased]
 
+### Breaking
+
+- **A contract has one identity.** Declaring both a `Schema` and an integer version on
+  `[MessageContract]` is now a configuration error, rejected the first time the type is used: the
+  `$id` already names the contract, so a number next to it is a second identity nothing keeps in step
+  with the first. Drop the integer from every type that has a `Schema`. `MessageContractAttribute`
+  gains a parameterless constructor for the schema form, and `Version` is now `int?`.
+- **`x-runax-legacy-version` is removed** from the contract profile, from `ContractSchemaDocument`,
+  from the linter and from the compatibility check. A leftover one in a committed file loads as a
+  plain `x-` annotation rather than failing.
+- **An integer no longer routes to a schema consumer, or a `$id` to an integer consumer.** A consumer
+  accepts its schema lines or its integer, never both. Migrating a line is what `Reads` is for.
+- **`SchemaMismatch` is removed**, with `bus.ContractSchemaMismatch` and the
+  `runax.messaging.contract.schema_mismatch` metric. It delivered a message whose `$id` mismatched
+  but whose integer matched, which has no meaning now that a schema contract carries no integer.
+- `HandledContract.Version` is `null` for every schema line, and its constructor takes the topic
+  alone. `IMessageContractCatalog.Accepts(topic, version)` no longer matches schema consumers.
+
+The integer form, `[MessageContract(2)]`, still works for contracts that have not adopted schemas,
+and is removed in 3.0. The plan, the full remaining surface, and the open questions are in
+[docs/specs/removing-integer-contract-versions.md](docs/specs/removing-integer-contract-versions.md).
+
 ### Added
 
 - **.NET 8 and .NET 9 support** — every shipped package now targets `net8.0`, `net9.0`, and

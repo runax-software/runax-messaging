@@ -65,7 +65,7 @@ public static class MessagingConfiguratorExtensions
         var config = builder.Validate();
         var mode = builder.Mode;
         var headerSettings = new BusHeaderSettings(builder.WriteNativeHeaders, builder.HeaderPrecedence);
-        var contractSettings = new BusContractSettings(builder.RequireContractIdentity, builder.ContractSchemaMismatch);
+        var contractSettings = new BusContractSettings(builder.RequireContractIdentity);
 
         services.AddSingleton(new BusRegistration { Name = name, Mode = mode, SystemName = config.SystemName });
         services.AddKeyedSingleton(name, headerSettings);

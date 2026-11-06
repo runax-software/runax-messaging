@@ -23,11 +23,10 @@ internal sealed class SchemaDirectory : IDisposable
     }
 
     /// <summary>Writes a contract-profile document whose $id matches its path.</summary>
-    public SchemaDirectory WriteSchema(string relativePath, string body, int? legacyVersion = null)
+    public SchemaDirectory WriteSchema(string relativePath, string body)
     {
         var id = $"https://contracts.test/{relativePath[..^".schema.json".Length]}";
-        var legacy = legacyVersion is { } v ? $"\"x-runax-legacy-version\":{v}," : "";
-        return Write(relativePath, $$"""{"$schema":"{{Draft}}","$id":"{{id}}",{{legacy}}{{body}}}""");
+        return Write(relativePath, $$"""{"$schema":"{{Draft}}","$id":"{{id}}",{{body}}}""");
     }
 
     public void Dispose()

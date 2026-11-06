@@ -15,7 +15,7 @@ public static class JsonSchemaContractsExtensions
     /// <summary>
     /// Loads contract schema documents and turns on what they enable: routing messages that carry no contract
     /// identity by the schemas their consumers declare (unless a bus sets <c>RequireContractIdentity</c>),
-    /// accepting the legacy versions schema lines record, startup warnings, and <c>bus.ValidateContracts</c>.
+    /// startup warnings, and <c>bus.ValidateContracts</c>.
     /// </summary>
     /// <param name="messaging">The messaging configurator.</param>
     /// <param name="configure">Adds the schema sources.</param>

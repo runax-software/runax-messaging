@@ -1,12 +1,13 @@
 using System.Text;
 using System.Text.Json;
+
 namespace Runax.Messaging.Contracts.JsonSchema;
 
 /// <summary>
 /// Checks committed contract schema files against the contract profile: a draft 2020-12 <c>$schema</c>, an
-/// absolute <c>$id</c> that matches the file path, only profile keywords, an open root object, unique
-/// <c>$id</c>s, and a distinct <c>x-runax-legacy-version</c> per line of a contract. It runs the same schema
-/// compiler the runtime does, so it rejects exactly what <see cref="ContractSchemaDocument.Parse"/> rejects.
+/// absolute <c>$id</c> that matches the file path, only profile keywords, an open root object, and unique
+/// <c>$id</c>s. It runs the same schema compiler the runtime does, so it rejects exactly what
+/// <see cref="ContractSchemaDocument.Parse"/> rejects.
 /// <para>
 /// Assert over this from your test suite, so a schema that the runtime could not load, or a typo that a
 /// validator would silently ignore, fails before it is deployed:
@@ -103,21 +104,6 @@ public static class ContractSchemaLinter
                     $"'{duplicate.Key}' is already declared by {duplicate.First().File.RelativePath}.");
             }
         }
-
-        // Each breaking line of one contract needs its own legacy integer, or 2.x consumers routing by the
-        // integer would receive the new shape.
-        var lines = loaded
-            .Where(x => x.Document.LegacyVersion is not null)
-            .GroupBy(x => (Contract: ContractOf(x.Document.Id), Version: x.Document.LegacyVersion!.Value));
-        foreach (var shared in lines.Where(g => g.Select(x => x.Document.Id).Distinct(StringComparer.Ordinal).Count() > 1))
-        {
-            foreach (var (file, document) in shared.Skip(1))
-            {
-                Add(findings, file, "/x-runax-legacy-version", ContractSchemaSeverity.Error,
-                    $"legacy version {shared.Key.Version} is already used by '{shared.First().Document.Id}'. A breaking " +
-                    "change mints a new $id and a new integer together.");
-            }
-        }
     }
 
     // Unknown keywords would be silently ignored by validators; a typo like "requried" must not pass.
@@ -173,13 +159,6 @@ public static class ContractSchemaLinter
 
         var path = uri.Scheme is "http" or "https" ? uri.AbsolutePath : id[(uri.Scheme.Length + 1)..];
         return path.Split(['/', ':'], StringSplitOptions.RemoveEmptyEntries);
-    }
-
-    /// <summary>The contract an $id belongs to: the $id without its last (version) segment.</summary>
-    internal static string ContractOf(string id)
-    {
-        var cut = id.LastIndexOfAny(['/', ':']);
-        return cut > 0 ? id[..cut] : id;
     }
 
     private static bool SegmentsEndWith(string[] segments, string[] suffix) =>

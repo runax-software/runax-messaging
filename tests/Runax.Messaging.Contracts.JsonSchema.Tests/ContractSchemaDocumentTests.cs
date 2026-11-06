@@ -31,13 +31,25 @@ public class ContractSchemaDocumentTests
     }
 
     [Fact]
-    public void The_id_and_legacy_version_are_read_and_an_empty_fragment_is_dropped()
+    public void The_id_is_read_and_an_empty_fragment_is_dropped()
     {
         var document = ContractSchemaDocument.Parse(
-            """{"$id":"https://contracts.test/orders/v2#","x-runax-legacy-version":2,"required":["id"]}""");
+            """{"$id":"https://contracts.test/orders/v2#","required":["id"]}""");
 
         document.Id.ShouldBe("https://contracts.test/orders/v2");
-        document.LegacyVersion.ShouldBe(2);
+    }
+
+    /// <summary>
+    /// A contract is identified by its $id alone, so an integer alongside it is just an annotation now.
+    /// Keeping it loadable means a schema file written for 2.x isn't rejected outright.
+    /// </summary>
+    [Fact]
+    public void A_leftover_legacy_version_is_an_annotation_rather_than_an_error()
+    {
+        var document = ContractSchemaDocument.Parse(
+            """{"$id":"https://contracts.test/orders/v2","x-runax-legacy-version":2,"required":["id"]}""");
+
+        document.Id.ShouldBe("https://contracts.test/orders/v2");
     }
 
     [Fact]
@@ -63,7 +75,7 @@ public class ContractSchemaDocumentTests
             ],
             ignoreOrder: true);
         registry.TryGet(Ids.PlacedV2 + "#", out var placed).ShouldBeTrue();
-        placed!.LegacyVersion.ShouldBe(2);
+        placed!.Id.ShouldBe(Ids.PlacedV2);
     }
 
     [Fact]

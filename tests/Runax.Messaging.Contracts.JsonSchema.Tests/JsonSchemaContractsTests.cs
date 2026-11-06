@@ -11,16 +11,16 @@ namespace Runax.Messaging.Contracts.JsonSchema.Tests;
 
 public class JsonSchemaContractsTests
 {
-    [MessageContract(2, Schema = Ids.PlacedV2)]
+    [MessageContract(Schema = Ids.PlacedV2)]
     public sealed record OrderPlacedV2(string Kind, int Id, string Currency, string LegacyCode);
 
-    [MessageContract(3, Schema = Ids.PlacedV3, Reads = [Ids.PlacedV2])]
+    [MessageContract(Schema = Ids.PlacedV3, Reads = [Ids.PlacedV2])]
     public sealed record OrderPlacedV3(string Kind, int Id, string Currency);
 
-    [MessageContract(1, Schema = Ids.CancelledV1)]
+    [MessageContract(Schema = Ids.CancelledV1)]
     public sealed record OrderCancelledV1(string Kind, int Id, string? Reason);
 
-    [MessageContract(1, Schema = Ids.AnythingV1)]
+    [MessageContract(Schema = Ids.AnythingV1)]
     public sealed record Anything(string? Note);
 
     private sealed class Inbox
@@ -80,17 +80,21 @@ public class JsonSchemaContractsTests
     }
 
     [Fact]
-    public async Task A_consumer_accepts_the_legacy_version_recorded_by_a_line_it_reads()
+    public async Task An_integer_on_the_wire_does_not_reach_a_schema_consumer()
     {
         await using var app = await App.StartAsync(bus => bus.AddConsumer<PlacedConsumer>());
+        var deadLetter = app.ListenTo("orders.dead-letter");
 
-        // A 2.x producer: integer only, v2 shape.
+        // A 2.x producer: integer only, v2 shape. Schema contracts carry no integer, so the claim means
+        // nothing to this consumer and the body is not consulted either — the message claimed an identity.
         await app.Transport.PublishAsync(new TransportMessage(
             "orders",
             """{"kind":"order.placed","id":9,"currency":"USD","legacyCode":"L"}""",
             new Dictionary<string, string> { [MessageHeaders.ContractVersion] = "2" }));
 
-        (await app.Inbox.Placed.Task.WaitAsync(TimeSpan.FromSeconds(5))).ShouldBe(new OrderPlacedV3("order.placed", 9, "USD"));
+        var message = await deadLetter.WaitAsync(TimeSpan.FromSeconds(5));
+        message.Headers["x-runax-dlq-reason"].ShouldContain("orders");
+        app.Inbox.Placed.Task.IsCompleted.ShouldBeFalse();
     }
 
     [Fact]

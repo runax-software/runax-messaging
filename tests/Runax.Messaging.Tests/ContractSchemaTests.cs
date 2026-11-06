@@ -13,14 +13,17 @@ public class ContractSchemaTests
     private const string V2 = "https://contracts.test/orders/order-placed/v2";
     private const string V3 = "https://contracts.test/orders/order-placed/v3";
 
-    [MessageContract(2, Name = "orders.placed", Schema = V2)]
+    [MessageContract(Name = "orders.placed", Schema = V2)]
     public sealed record OrderPlacedV2(int Id);
 
-    [MessageContract(3, Schema = V3 + "#", Reads = [V2])]
+    [MessageContract(Schema = V3 + "#", Reads = [V2])]
     public sealed record OrderPlacedV3(int Id);
 
-    [MessageContract(1, Reads = [V2])]
+    [MessageContract(Reads = [V2])]
     public sealed record ReadsWithoutSchema(int Id);
+
+    [MessageContract(2, Schema = V2)]
+    public sealed record TwoIdentities(int Id);
 
     private readonly EnvelopeSerializer _serializer = new(new SystemTextJsonSerializer());
 
@@ -72,6 +75,19 @@ public class ContractSchemaTests
         NativeHeaders.Merge(context, native, HeaderSource.Broker).Headers.ShouldBeEmpty();
     }
 
+    /// <summary>
+    /// The $id names the contract, so an integer alongside it is a second identity nothing keeps in step
+    /// with the first. Rejected the first time the type is used, on either side of the wire.
+    /// </summary>
+    [Fact]
+    public void A_type_that_declares_both_a_schema_and_a_version_is_rejected()
+    {
+        var ex = Should.Throw<InvalidOperationException>(() => MessageContractCache.For(typeof(TwoIdentities)));
+
+        ex.Message.ShouldContain(nameof(TwoIdentities));
+        ex.Message.ShouldContain("one identity");
+    }
+
     [Fact]
     public void A_type_that_reads_lines_without_its_own_schema_is_rejected()
     {
@@ -102,12 +118,15 @@ public class ContractSchemaTests
         using var provider = services.BuildServiceProvider();
         var catalog = provider.GetRequiredService<IMessageContractCatalog>();
 
-        catalog.Handled.ShouldContain(new HandledContract("orders", 3) { Schema = V3 });
-        catalog.Handled.ShouldContain(h => h.Topic == "orders" && h.Schema == V2);
+        catalog.Handled.ShouldContain(new HandledContract("orders") { Schema = V3 });
+        catalog.Handled.ShouldContain(new HandledContract("orders") { Schema = V2 });
+        catalog.Handled.ShouldAllBe(h => h.Version == null);
         catalog.Accepts("orders", V3).ShouldBeTrue();
         catalog.Accepts("orders", V2).ShouldBeTrue();
         catalog.Accepts("orders", "https://contracts.test/other/v1").ShouldBeFalse();
-        catalog.Accepts("orders", 3).ShouldBeTrue();
+
+        // A schema contract has no integer, so an integer claim reaches none of its consumers.
+        catalog.Accepts("orders", 3).ShouldBeFalse();
         catalog.Accepts("orders", "https://contracts.test/other/v1", 3).ShouldBeFalse();
     }
 

@@ -11,9 +11,9 @@ public class ContractSchemaCompatibilityTests
     [Fact]
     public void An_additive_change_against_the_baseline_passes()
     {
-        using var baseline = new SchemaDirectory().WriteSchema(V2, Placed, legacyVersion: 2);
+        using var baseline = new SchemaDirectory().WriteSchema(V2, Placed);
         using var current = new SchemaDirectory().WriteSchema(
-            V2, WithOptional("note", "string"), legacyVersion: 2);
+            V2, WithOptional("note", "string"));
 
         Compare(baseline, current).ShouldBeEmpty();
     }
@@ -21,10 +21,10 @@ public class ContractSchemaCompatibilityTests
     [Fact]
     public void A_breaking_change_fails_with_advice()
     {
-        using var baseline = new SchemaDirectory().WriteSchema(V2, Placed, legacyVersion: 2);
+        using var baseline = new SchemaDirectory().WriteSchema(V2, Placed);
         using var current = new SchemaDirectory().WriteSchema(V2, """
             "type":"object","properties":{"id":{"type":"integer"},"currency":{"type":"string"}},"required":["id","currency"]
-            """, legacyVersion: 2);
+            """);
 
         var finding = Compare(baseline, current).ShouldHaveSingleItem();
 
@@ -36,24 +36,14 @@ public class ContractSchemaCompatibilityTests
     }
 
     [Fact]
-    public void The_legacy_version_must_not_change_within_an_id()
-    {
-        using var baseline = new SchemaDirectory().WriteSchema(V2, Placed, legacyVersion: 2);
-        using var current = new SchemaDirectory().WriteSchema(V2, Placed, legacyVersion: 3);
-
-        Compare(baseline, current)
-            .ShouldContain(f => f.JsonPointer == "/x-runax-legacy-version" && f.Message.Contains("changed from 2 to 3"));
-    }
-
-    [Fact]
     public void A_new_id_has_no_history_to_break()
     {
-        using var baseline = new SchemaDirectory().WriteSchema(V2, Placed, legacyVersion: 2);
+        using var baseline = new SchemaDirectory().WriteSchema(V2, Placed);
         using var current = new SchemaDirectory()
-            .WriteSchema(V2, Placed, legacyVersion: 2)
+            .WriteSchema(V2, Placed)
             .WriteSchema("orders/order-placed/v3.schema.json", """
                 "type":"object","properties":{"id":{"type":"string"}},"required":["id"]
-                """, legacyVersion: 3);
+                """);
 
         Compare(baseline, current).ShouldBeEmpty();
     }
@@ -62,9 +52,9 @@ public class ContractSchemaCompatibilityTests
     public void A_line_retired_since_the_baseline_is_not_reported()
     {
         using var baseline = new SchemaDirectory()
-            .WriteSchema(V2, Placed, legacyVersion: 2)
-            .WriteSchema("orders/order-cancelled/v1.schema.json", Placed, legacyVersion: 1);
-        using var current = new SchemaDirectory().WriteSchema(V2, Placed, legacyVersion: 2);
+            .WriteSchema(V2, Placed)
+            .WriteSchema("orders/order-cancelled/v1.schema.json", Placed);
+        using var current = new SchemaDirectory().WriteSchema(V2, Placed);
 
         Compare(baseline, current).ShouldBeEmpty();
     }

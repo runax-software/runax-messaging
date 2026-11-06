@@ -62,7 +62,7 @@ Built so far, following the recommendations in §11 unless noted:
 | §6 Conformance of a service's types to the committed file | Not started |
 | §5 Export (`ContractSerialization`) and `VerifyContractSchemas` | Not started |
 | §7 Messaging-level validation default, `IContractValidatingTransport`, the Kafka Schema Registry add-on | Not started |
-| §8 Phase 3 (parameterless constructor, deprecations) | Not started, by design: 3.0 |
+| §8 Phase 3 (parameterless constructor, deprecations) | Constructor and the one-identity rule done; the rest is [Removing integer contract versions](removing-integer-contract-versions.md) |
 
 Deviations from the text below:
 

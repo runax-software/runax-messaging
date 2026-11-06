@@ -10,6 +10,13 @@ For how versions are *matched* at dispatch time, see
 [Consuming & reliability](consuming.md); for the envelope that carries the version on the
 wire, see [Serialization](serialization.md).
 
+> **The integer version is on its way out.** It is a label, not a check: two services that both say
+> "version 2" can disagree on the shape and nothing notices. Identify contracts by their schema's
+> `$id` instead — see [JSON Schema contracts](json-schema-contracts.md) — and note that a type
+> declares one identity or the other, never both. This page covers the integer, which still works for
+> contracts that have no schema and is removed in 3.0
+> ([plan](specs/removing-integer-contract-versions.md)).
+
 ## Designing contract types
 
 A contract type is a plain data carrier. Records fit naturally:

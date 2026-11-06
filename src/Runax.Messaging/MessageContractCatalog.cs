@@ -5,11 +5,11 @@ using Runax.Messaging.Consumers;
 namespace Runax.Messaging;
 
 /// <summary>
-/// A topic and a contract a registered consumer handles. <see cref="Version"/> is <see langword="null"/> for an
-/// unversioned (accept-all) consumer, unless <see cref="Schema"/> is set: then it's the schema line's legacy
-/// version when known.
+/// A topic and a contract a registered consumer handles. Exactly one identity is set: <see cref="Schema"/>
+/// for a contract identified by its schema, <see cref="Version"/> for one identified by an integer, and
+/// neither for an unversioned (accept-all) consumer.
 /// </summary>
-public sealed record HandledContract(string Topic, int? Version)
+public sealed record HandledContract(string Topic, int? Version = null)
 {
     /// <summary>
     /// Gets the contract schema <c>$id</c> handled, including lines a consumer's type <c>Reads</c>;
@@ -26,7 +26,7 @@ public interface IMessageContractCatalog
 {
     /// <summary>
     /// Gets the distinct contracts handled by registered consumers: one entry per (topic, version) for
-    /// consumers without a schema, and one per (topic, schema line) for consumers with one.
+    /// consumers identified by an integer, and one per (topic, schema line) for consumers with schemas.
     /// </summary>
     IReadOnlyCollection<HandledContract> Handled { get; }
 
@@ -72,22 +72,11 @@ internal sealed class MessageContractCatalog(
 
     private static Entry[] BuildEntries(IServiceProvider serviceProvider, IEnumerable<ConsumerRegistration> registrations)
     {
-        var matcher = serviceProvider.GetService<IContractSchemaMatcher>();
         var entries = new List<Entry>();
         foreach (var registration in registrations)
         {
             var consumer = (IMessageConsumer)serviceProvider.GetRequiredService(registration.ConsumerType);
-            var versions = new HashSet<int>();
-            if (consumer.ContractVersion is { } version)
-                versions.Add(version);
-            foreach (var line in consumer.ContractSchemas)
-            {
-                if (matcher?.LegacyVersionOf(line) is { } legacy)
-                    versions.Add(legacy);
-            }
-
-            entries.Add(new Entry(
-                consumer.Topic, consumer.ContractVersion, consumer.ContractSchema, consumer.ContractSchemas, versions, matcher));
+            entries.Add(new Entry(consumer.Topic, consumer.ContractVersion, consumer.ContractSchemas));
         }
 
         return [.. entries];
@@ -100,38 +89,30 @@ internal sealed class MessageContractCatalog(
         {
             if (entry.Schemas.Count == 0)
             {
-                handled.Add(new HandledContract(entry.Topic, entry.TypeVersion));
+                handled.Add(new HandledContract(entry.Topic, entry.Version));
                 continue;
             }
 
             foreach (var line in entry.Schemas)
-            {
-                var version = line == entry.TypeSchema ? entry.TypeVersion : entry.Matcher?.LegacyVersionOf(line);
-                handled.Add(new HandledContract(entry.Topic, version) { Schema = line });
-            }
+                handled.Add(new HandledContract(entry.Topic) { Schema = line });
         }
 
         return [.. handled];
     }
 
-    private sealed record Entry(
-        string Topic,
-        int? TypeVersion,
-        string? TypeSchema,
-        IReadOnlySet<string> Schemas,
-        IReadOnlySet<int> Versions,
-        IContractSchemaMatcher? Matcher)
+    private sealed record Entry(string Topic, int? Version, IReadOnlySet<string> Schemas)
     {
-        // The dispatcher's rule for an identified message (see ContractRouter), without the per-bus safety valve.
+        // The dispatcher's rule for an identified message (see ContractRouter). Routing an unidentified
+        // message needs its body, which the catalog doesn't have, so only accept-all consumers count there.
         public bool Accepts(string? wireSchema, int? wireVersion)
         {
-            if (Schemas.Count == 0 && Versions.Count == 0)
+            if (Schemas.Count == 0 && Version is null)
                 return true;
 
-            if (wireSchema is not null && Schemas.Count > 0)
-                return Schemas.Contains(wireSchema);
+            if (Schemas.Count > 0)
+                return wireSchema is not null && Schemas.Contains(wireSchema);
 
-            return wireVersion is { } version && Versions.Contains(version);
+            return wireVersion == Version;
         }
     }
 }

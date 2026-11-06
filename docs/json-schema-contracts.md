@@ -14,9 +14,9 @@ carry no identity at all by the schemas their consumers declare.
 
 ## Declaring a schema
 
-`[MessageContract]` gains a `Schema`: the `$id` of the contract's JSON Schema document, an absolute
+`[MessageContract]` takes a `Schema`: the `$id` of the contract's JSON Schema document, an absolute
 URI with one value per **breaking line**. Additive changes keep the `$id`; a breaking change mints
-a new one (`…/v3`).
+a new one (`…/v3`). The `$id` is the identity — there is no integer alongside it.
 
 ```csharp
 public static class OrderContracts
@@ -25,48 +25,55 @@ public static class OrderContracts
     public const string OrderPlacedV3 = "https://contracts.acme.dev/orders/order-placed/v3";
 }
 
-[MessageContract(2, Schema = OrderContracts.OrderPlacedV2)]
+[MessageContract(Schema = OrderContracts.OrderPlacedV2)]
 public sealed record OrderPlaced(Guid OrderId, string CustomerId, decimal Total, string Currency);
 ```
 
-Keep the integer while 2.x services still route by it. Publishing then writes both: the `$id` as
-`__runax.contract_schema` and as the native header `runax-contract-schema`, and the integer as before.
+Publishing writes the `$id` as `__runax.contract_schema` and as the native header
+`runax-contract-schema`.
+
+Declaring an integer version as well — `[MessageContract(2, Schema = …)]` — is a configuration error:
+the `$id` already names the contract, so a number next to it is a second identity that nothing keeps
+in step with the first. The integer form, `[MessageContract(2)]`, is only for contracts that have not
+adopted schemas, and is removed in 3.0; see
+[Removing integer contract versions](specs/removing-integer-contract-versions.md).
 
 A type that can read an earlier breaking line says so with `Reads`, and its consumers accept
 messages of both lines:
 
 ```csharp
 // v3 dropped legacyCode, which v2 required: breaking for v2 readers, but a v3 reader just ignores it.
-[MessageContract(3, Schema = OrderContracts.OrderPlacedV3, Reads = [OrderContracts.OrderPlacedV2])]
+[MessageContract(Schema = OrderContracts.OrderPlacedV3, Reads = [OrderContracts.OrderPlacedV2])]
 public sealed record OrderPlacedV3(Guid OrderId, string CustomerId, decimal Total, string Currency);
 ```
 
+`Reads` is how a line is migrated: deploy the reader that accepts both, then move the writers.
 `Reads` without a `Schema` is a configuration error.
 
 ## Routing
 
 The dispatcher decides per consumer, in this order:
 
+A consumer declares one identity or none, and the dispatcher decides per consumer:
+
 1. **Unversioned consumers** (no `[MessageContract]`) accept every message, as always.
-2. **A schema `$id` decides when both sides have one.** The consumer accepts its `Schema` and its
-   `Reads`. A mismatched `$id` is rejected even if the integer matches: that's the drift schemas
-   exist to catch.
-3. **Otherwise the integer decides.** A consumer accepts its type's integer and, when schemas are
-   loaded, the `x-runax-legacy-version` each of its lines records. So a v3 consumer that reads v2
-   also accepts an integer-only `2` from a 2.x producer.
-4. **A message with neither is routed by validation**, when schemas are loaded (below) and the
-   bus doesn't set `RequireContractIdentity`. Its body is validated against the lines the topic's
+2. **A schema consumer is reached by its `$id`.** It accepts its `Schema` and its `Reads`. A
+   mismatched `$id` is rejected: that's the drift schemas exist to catch. An integer on the wire says
+   nothing about a schema contract, so it is not a fallback.
+3. **An integer consumer is reached by its integer**, and only by that.
+4. **A message carrying no identity is routed by validation**, when schemas are loaded (below) and
+   the bus doesn't set `RequireContractIdentity`. Its body is validated against the lines the topic's
    consumers declare, and it reaches the consumers whose line accepts it.
 
 | Consumer declares | Message carries | Delivered? |
 | --- | --- | --- |
 | Nothing | Anything | Yes |
 | `Schema` (+ `Reads`) | That `$id`, or one in `Reads` | Yes |
-| `Schema` + int 2 | Another `$id`, int 2 | No, unless the bus sets `ContractSchemaMismatch = Report` |
-| `Schema` + int 2 | No `$id`, int 2 | Yes, by the integer |
-| int 2 only | `$id` + int 2 | Yes, by the integer |
-| int 2 only | `$id` only | No |
+| `Schema` | Another `$id` | No |
+| `Schema` | int 2, no `$id` | No — a schema contract has no integer |
 | `Schema` | Nothing | Yes, if the body validates against one of its lines and isn't ambiguous |
+| int 2 | int 2 (with or without a `$id`) | Yes |
+| int 2 | `$id` only | No |
 
 Because `$id`s are globally unique, several message types can share a topic and still route to
 the right consumers.
@@ -105,7 +112,6 @@ Commit one document per `$id` (draft 2020-12), embed them, and load them once:
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.acme.dev/orders/order-placed/v2",
-  "x-runax-legacy-version": 2,
   "type": "object",
   "properties": {
     "kind": { "const": "order.placed" },
@@ -126,8 +132,7 @@ builder.Services.AddRunaxMessaging(messaging =>
 ```
 
 `AddSchema(json)` adds a document from text. Two different documents with one `$id` fail at
-startup. Loading the package is what turns on routing by validation and the legacy versions lines
-record.
+startup. Loading the package is what turns on routing by validation.
 
 ### The contract profile
 
@@ -214,16 +219,16 @@ reading, and `ToString()` renders one finding per line so a failure says what wa
   2020-12 `$schema`, an absolute `$id` of at most 256 bytes that matches the file path
   (`schemas/orders/order-placed/v2.schema.json` for `…/orders/order-placed/v2`), only profile
   keywords (a typo like `requried` is an error; custom annotations start with `x-`), an open root
-  object, unique `$id`s, and a distinct `x-runax-legacy-version` per line of a contract. It warns
-  about lines that accept any object and about formats that aren't asserted. It runs the same schema
-  compiler the runtime does, so it rejects exactly what the runtime rejects.
+  object, and unique `$id`s. It warns about lines that accept any object and about formats that
+  aren't asserted. It runs the same schema compiler the runtime does, so it rejects exactly what the
+  runtime rejects.
 - **`ContractSchemaCompatibility.Compare(baseline, current)`** compares each file with the file
   declaring the same `$id` in a baseline directory — a checkout of the base branch, say — both ways:
   readers of either must accept what the other writes. Adding or removing an optional property is
   the one freedom; anything else, such as a new required property, a type change, or a tightened
   constraint, is breaking, and the message says which new `$id` to mint. A changed `default` is a
-  warning, and the legacy version must never change. A line with no counterpart in the baseline is
-  new and has no history to break; one that has been retired isn't reported.
+  warning. A line with no counterpart in the baseline is new and has no history to break; one that
+  has been retired isn't reported.
 
 Getting a baseline in GitHub Actions is one extra checkout:
 
@@ -247,7 +252,6 @@ Getting a baseline in GitHub Actions is one extra checkout:
 | Setting | Default | Effect |
 | --- | --- | --- |
 | `RequireContractIdentity` | `false` | `true` turns off routing by validation: unidentified messages only reach unversioned consumers |
-| `ContractSchemaMismatch` | `Reject` | `Report` delivers a message whose `$id` mismatches but whose integer matches, with a warning and `runax.messaging.contract.schema_mismatch`. A safety valve while a contract is being adopted |
 | `ValidateContracts(...)` | off | Library validation, above |
 
 ## From other languages
@@ -261,7 +265,6 @@ producer.Produce(&kafka.Message{
     Value:          body,
     Headers: []kafka.Header{ // optional
         {Key: "runax-contract-schema", Value: []byte("https://contracts.acme.dev/orders/order-placed/v2")},
-        {Key: "runax-contract-version", Value: []byte("2")}, // only while 2.x consumers remain
     },
 }, nil)
 ```

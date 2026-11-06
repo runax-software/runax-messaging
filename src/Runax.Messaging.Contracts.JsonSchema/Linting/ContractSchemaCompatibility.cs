@@ -8,7 +8,7 @@ namespace Runax.Messaging.Contracts.JsonSchema;
 /// <para>
 /// In practice one freedom is left: an optional property may be added or removed on an open object. Every
 /// other structural difference is breaking, and the finding says which new <c>$id</c> to mint. A changed
-/// <c>default</c> is a warning, and <c>x-runax-legacy-version</c> must never change within a <c>$id</c>.
+/// <c>default</c> is a warning.
 /// </para>
 /// <example>
 /// <code>
@@ -100,22 +100,12 @@ public static class ContractSchemaCompatibility
         if (earlier.Id != current.Id)
             return;
 
-        if (earlier.LegacyVersion != current.LegacyVersion)
-        {
-            findings.Add(new ContractSchemaFinding(file, "/x-runax-legacy-version", ContractSchemaSeverity.Error,
-                $"the legacy version changed from {Show(earlier.LegacyVersion)} to {Show(current.LegacyVersion)} " +
-                $"since {revision}. It must never change within a $id."));
-        }
-
         foreach (var (pointer, severity, message) in CompatibilityChecker.Compare(earlier, current))
         {
             var advice = severity == ContractSchemaSeverity.Error ? $" {Advice(current.Id)}" : "";
             findings.Add(new ContractSchemaFinding(file, pointer, severity, $"{message} since {revision}.{advice}"));
         }
     }
-
-    private static string Show(int? version) =>
-        version?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(none)";
 
     // "…/order-placed/v2" suggests "…/order-placed/v3".
     internal static string Advice(string id)
@@ -125,7 +115,7 @@ public static class ContractSchemaCompatibility
         var next = last.Length > 1 && last[0] == 'v' && int.TryParse(last[1..], out var major)
             ? $"'{id[..cut]}v{major + 1}'"
             : "a new $id";
-        return $"Breaking changes need a new line: mint {next} (with a new legacy version) and keep '{id}' unchanged " +
-               "until its consumers are drained.";
+        return $"Breaking changes need a new line: mint {next}, declare it in the reading type's Reads, and keep " +
+               $"'{id}' unchanged until its consumers are drained.";
     }
 }

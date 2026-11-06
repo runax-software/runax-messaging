@@ -66,12 +66,6 @@ public sealed class BusBuilder
     public bool RequireContractIdentity { get; set; }
 
     /// <summary>
-    /// Gets or sets what happens to a message whose contract schema <c>$id</c> doesn't match a consumer's
-    /// while its contract version does. Defaults to <see cref="SchemaMismatch.Reject"/>.
-    /// </summary>
-    public SchemaMismatch ContractSchemaMismatch { get; set; } = SchemaMismatch.Reject;
-
-    /// <summary>
     /// Gets a shared property bag for extension packages (e.g. the outbox) to keep per-bus
     /// configuration state that participates in end-of-block validation.
     /// </summary>

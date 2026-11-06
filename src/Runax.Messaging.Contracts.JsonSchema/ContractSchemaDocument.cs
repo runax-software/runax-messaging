@@ -12,10 +12,9 @@ public sealed class ContractSchemaDocument
 
     private readonly SchemaNode _root;
 
-    private ContractSchemaDocument(string id, int? legacyVersion, string json, SchemaNode root)
+    private ContractSchemaDocument(string id, string json, SchemaNode root)
     {
         Id = id;
-        LegacyVersion = legacyVersion;
         Json = json;
         _root = root;
         IsSelective = !SchemaEvaluator.IsValid(root, EmptyObject);
@@ -26,12 +25,6 @@ public sealed class ContractSchemaDocument
 
     /// <summary>Gets the document's <c>$id</c>, which identifies its contract line.</summary>
     public string Id { get; }
-
-    /// <summary>
-    /// Gets the integer contract version the line records in <c>x-runax-legacy-version</c>, if any. Consumers
-    /// of the line accept messages carrying it, which keeps integer-only producers working.
-    /// </summary>
-    public int? LegacyVersion { get; }
 
     /// <summary>Gets the document's JSON text.</summary>
     public string Json { get; }
@@ -75,15 +68,7 @@ public sealed class ContractSchemaDocument
 
         var id = ContractSchemaId.Normalize(idElement.GetString()!);
 
-        int? legacyVersion = null;
-        if (root.TryGetProperty("x-runax-legacy-version", out var legacy))
-        {
-            legacyVersion = legacy.ValueKind == JsonValueKind.Number && legacy.TryGetInt32(out var version)
-                ? version
-                : throw new ContractSchemaException($"Contract schema '{id}': 'x-runax-legacy-version' must be an integer.");
-        }
-
-        return new ContractSchemaDocument(id, legacyVersion, json, SchemaCompiler.Compile(root, id));
+        return new ContractSchemaDocument(id, json, SchemaCompiler.Compile(root, id));
     }
 
     /// <summary>

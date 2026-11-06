@@ -10,8 +10,8 @@ public class ContractSchemaLinterTests
     public void A_valid_set_of_files_has_no_findings()
     {
         using var dir = new SchemaDirectory()
-            .WriteSchema("orders/order-placed/v2.schema.json", Placed, legacyVersion: 2)
-            .WriteSchema("orders/order-placed/v3.schema.json", Placed, legacyVersion: 3);
+            .WriteSchema("orders/order-placed/v2.schema.json", Placed)
+            .WriteSchema("orders/order-placed/v3.schema.json", Placed);
 
         Lint(dir).ShouldBeEmpty();
     }
@@ -82,19 +82,6 @@ public class ContractSchemaLinterTests
                 $$"""{"$schema":"{{SchemaDirectory.Draft}}","$id":"https://contracts.test/a/orders/order-placed/v2",{{Placed}}}""");
 
         Lint(dir).ShouldContain(f => f.Message.Contains("is already declared by a/orders/order-placed/v2.schema.json"));
-    }
-
-    [Fact]
-    public void Two_lines_of_one_contract_cannot_share_a_legacy_version()
-    {
-        using var dir = new SchemaDirectory()
-            .WriteSchema("orders/order-placed/v2.schema.json", Placed, legacyVersion: 2)
-            .WriteSchema("orders/order-placed/v3.schema.json", Placed, legacyVersion: 2)
-            .WriteSchema("orders/order-cancelled/v1.schema.json", Placed, legacyVersion: 2);
-
-        var findings = Lint(dir);
-
-        findings.ShouldHaveSingleItem().Message.ShouldContain("legacy version 2 is already used by 'https://contracts.test/orders/order-placed/v2'");
     }
 
     [Fact]

@@ -2,7 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.test/orders/order-placed/v2",
   "title": "OrderPlaced",
-  "x-runax-legacy-version": 2,
   "type": "object",
   "properties": {
     "kind": { "const": "order.placed" },

@@ -4,14 +4,11 @@ using Runax.Messaging.Consumers;
 namespace Runax.Messaging.Contracts.JsonSchema;
 
 /// <summary>
-/// Core's <see cref="IContractSchemaMatcher"/>, backed by the loaded contract schemas: it supplies each line's
-/// legacy version and validates unidentified message bodies against candidate lines.
+/// Core's <see cref="IContractSchemaMatcher"/>, backed by the loaded contract schemas: it validates
+/// unidentified message bodies against candidate lines.
 /// </summary>
 internal sealed class JsonSchemaContractMatcher(IContractSchemaProvider provider) : IContractSchemaMatcher
 {
-    public int? LegacyVersionOf(string contractSchema) =>
-        provider.TryGet(contractSchema, out var document) ? document.LegacyVersion : null;
-
     public ContractMatch Match(string body, IReadOnlyCollection<string> candidates)
     {
         JsonDocument parsed;

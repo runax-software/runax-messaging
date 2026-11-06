@@ -172,15 +172,6 @@ internal sealed class MessageConsumerHostedService(
                 "consumers ({Schemas}); no schema consumer receives it.",
                 topic, busName, route.Detail);
         }
-
-        foreach (var consumer in route.Mismatched)
-        {
-            MessagingDiagnostics.ContractSchemaMismatch.Add(1, tags);
-            logger.LogWarning(
-                "Delivering a message with contract schema '{Schema}' to {Consumer} on topic '{Topic}' (bus '{Bus}') " +
-                "by its version {Version}, although the consumer declares other schemas.",
-                context.ContractSchema, consumer.GetType().Name, topic, busName, context.ContractVersion);
-        }
     }
 
     private static MessageContext WithInferred(MessageContext context, IReadOnlyList<string> inferred) => new()
