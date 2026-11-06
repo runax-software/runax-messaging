@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Runax.Messaging.Contracts.JsonSchema" />
     <InternalsVisibleTo Include="Runax.Messaging.Outbox" />
     <InternalsVisibleTo Include="Runax.Messaging.TestKit" />
     <InternalsVisibleTo Include="Runax.Messaging.Tests" />

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.test/orders/order-cancelled/v1",
+  "title": "OrderCancelled",
+  "type": "object",
+  "properties": {
+    "kind": { "const": "order.cancelled" },
+    "id": { "type": "integer" },
+    "reason": { "type": ["string", "null"] }
+  },
+  "required": ["kind", "id"]
+}

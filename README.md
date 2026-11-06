@@ -19,8 +19,10 @@ strongly-typed messages without coupling your application to a specific broker.
 - **Configurable** — DataAnnotations-validated transport configs with `IConfiguration`
   binding, and a pluggable body serializer set per bus or per topic (the `__runax`
   envelope stays framework-owned).
-- **Contract versioning** — optional `[MessageContract(version)]`; consumers subscribe per version, with a
-  pluggable strategy (dead-letter/requeue/custom) for versions no consumer handles.
+- **JSON Schema contracts** — optional `[MessageContract(Schema = "…")]` identifies a contract by its
+  schema's `$id`; consumers subscribe per contract and per earlier line they can read, bodies are
+  validated against the schema, and plain JSON from other languages is routed by the schemas consumers
+  declare. A pluggable strategy (dead-letter/requeue/custom) handles contracts no consumer accepts.
 - **Transactional outbox** — optional package for atomic database-write + publish.
 - **Native broker headers** — headers, trace context, and contract version travel both in the
   envelope and as native headers (AMQP, Kafka, SQS/SNS attributes, ...), so Go, Java, and Node
@@ -45,6 +47,7 @@ strongly-typed messages without coupling your application to a specific broker.
 | [`Runax.Messaging.Transports.Google.PubSub`](src/Runax.Messaging.Transports.Google.PubSub/README.md) | Google Cloud Pub/Sub transport. |
 | [`Runax.Messaging.Transports.Redis`](src/Runax.Messaging.Transports.Redis/README.md) | Redis Streams transport (Redis and Valkey). |
 | [`Runax.Messaging.Outbox`](src/Runax.Messaging.Outbox/README.md) | Transactional outbox: persist in your DB transaction, dispatch reliably. |
+| [`Runax.Messaging.Contracts.JsonSchema`](src/Runax.Messaging.Contracts.JsonSchema/README.md) | JSON Schema contracts: embedded schemas, validation on publish and consume, routing messages without identity by their consumers' schemas. |
 | [`Runax.Messaging.TestKit`](src/Runax.Messaging.TestKit/README.md) | Test-support: a broker-free `MessagingTestHarness` to publish messages and assert what your consumers handled, retried, or dead-lettered. |
 
 Application code that only publishes needs `Runax.Messaging.Abstractions`. The
@@ -259,6 +262,7 @@ Start at the [documentation index](docs/README.md).
 - [Headers & interop](docs/headers.md): native broker headers, precedence, producing from other languages
 - [Consuming & reliability](docs/consuming.md): consumers, contract versioning, retries, dead-lettering, unroutable messages
 - [Message contracts](docs/contracts.md): designing and sharing contract types, versioning, evolution, safe rollout
+- [JSON Schema contracts](docs/json-schema-contracts.md): schema identity, validation, routing messages without identity
 - [Transactional outbox](docs/outbox.md): the pattern, wiring, writing a real store, delivery guarantees
 - [Testing](docs/testing.md): the TestKit harness, multi-bus tests, integration tests
 - [Observability](docs/observability.md): tracing, metrics, health checks, logging

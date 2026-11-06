@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Runax.Messaging;
 using Runax.Messaging.Abstractions;
 using Runax.Messaging.AotSmoke;
+using Runax.Messaging.Contracts.JsonSchema;
 using Runax.Messaging.InMemory;
 using Runax.Messaging.Outbox;
 using Runax.Messaging.TestKit;
@@ -41,11 +42,19 @@ async Task RunHostAsync()
 
     builder.Services.AddRunaxMessaging(messaging =>
     {
+        // Embedded contract schemas, validated on both sides (registry, evaluator, and formats under AOT).
+        messaging.AddJsonSchemaContracts(c => c.AddEmbeddedSchemas(typeof(Probe).Assembly));
+
         messaging.AddBus(bus =>
         {
             bus.AddTransport(new InMemoryConfig());
             bus.AddConsumer<OrderPlacedConsumer>();
             bus.WithRetry(o => o.InitialDelay = TimeSpan.FromMilliseconds(10));
+            bus.ValidateContracts(v =>
+            {
+                v.OnPublish = ContractValidation.Enforce;
+                v.OnConsume = ContractValidation.Enforce;
+            });
         });
 
         messaging.AddBus("outbox", bus =>
@@ -78,6 +87,16 @@ async Task RunHostAsync()
 
     Expect(await probe.Orders.Task.WaitAsync(timeout), new OrderPlaced(42, "widget"));
     Expect(await probe.Invoices.Task.WaitAsync(timeout), new InvoiceIssued(42, 9.99m));
+
+    // An invalid message never leaves the producer.
+    try
+    {
+        await buses.GetBus(BusNames.Default).PublishAsync("orders", new OrderPlaced(0, "Widget"));
+        throw new InvalidOperationException("Expected contract validation to reject the message.");
+    }
+    catch (ContractValidationException ex) when (ex.Errors.Count == 2)
+    {
+    }
 
     await host.StopAsync();
 }

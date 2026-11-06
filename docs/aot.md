@@ -14,6 +14,7 @@ Two things are needed from your side: **source-generated JSON** for your message
 | --- | --- | --- |
 | `Runax.Messaging.Abstractions`, `Runax.Messaging` | Yes | Including the in-memory transport |
 | `Runax.Messaging.Outbox` | Yes | |
+| `Runax.Messaging.Contracts.JsonSchema` | Yes | Embed the schema files; the evaluator has no dependencies |
 | `Runax.Messaging.TestKit` | Yes | |
 | `Runax.Messaging.Transports.RabbitMq` | Yes | |
 | `Runax.Messaging.Transports.Aws.Sqs` / `.Aws.Sns` | Yes | |

@@ -8,6 +8,32 @@ All packages in the repository are versioned together.
 
 ## [Unreleased]
 
+### Breaking
+
+- **A contract has one identity.** Declaring both a `Schema` and an integer version on
+  `[MessageContract]` is now a configuration error, rejected the first time the type is used: the
+  `$id` already names the contract, so a number next to it is a second identity nothing keeps in step
+  with the first. Drop the integer from every type that has a `Schema`. `MessageContractAttribute`
+  gains a parameterless constructor for the schema form, and `Version` is now `int?`.
+- **`x-runax-legacy-version` is removed** from the contract profile, from `ContractSchemaDocument`,
+  from the linter and from the compatibility check. A leftover one in a committed file loads as a
+  plain `x-` annotation rather than failing.
+- **An integer no longer routes to a schema consumer, or a `$id` to an integer consumer.** A consumer
+  accepts its schema lines or its integer, never both. Migrating a line is what `Reads` is for.
+- **`SchemaMismatch` is removed**, with `bus.ContractSchemaMismatch` and the
+  `runax.messaging.contract.schema_mismatch` metric. It delivered a message whose `$id` mismatched
+  but whose integer matched, which has no meaning now that a schema contract carries no integer.
+- `HandledContract.Version` is `null` for every schema line, and its constructor takes the topic
+  alone. `IMessageContractCatalog.Accepts(topic, version)` no longer matches schema consumers.
+
+The integer form, `[MessageContract(2)]`, still works for contracts that have not adopted schemas,
+and is removed in the next major release. The plan, the full remaining surface, and the open
+questions are in
+[docs/specs/removing-integer-contract-versions.md](docs/specs/removing-integer-contract-versions.md).
+
+Because this release breaks API, it is a major. The integer's removal is therefore the major after
+it, not this one.
+
 ### Added
 
 - **.NET 8 and .NET 9 support** — every shipped package now targets `net8.0`, `net9.0`, and
@@ -32,8 +58,29 @@ All packages in the repository are versioned together.
   `PublishBatchAsync`, and `SubscribeAsync` that carry native headers. They have default
   implementations, so existing custom transports keep working (metadata stays in the envelope).
 
+- **JSON Schema contracts** (first part of the [spec](docs/specs/json-schema-contracts.md)) —
+  `[MessageContract]` gains `Schema` (the contract schema's `$id`) and `Reads`. The `$id` travels as
+  `__runax.contract_schema` and the `runax-contract-schema` header, and decides routing when both
+  sides carry one. Without one, the integer decides, and a consumer also accepts the legacy versions
+  its schema lines record. The new `Runax.Messaging.Contracts.JsonSchema` package loads embedded
+  schemas (a built-in, AOT-safe evaluator for a draft 2020-12 profile), validates bodies on publish
+  and consume (`bus.ValidateContracts`: off, report, or enforce), routes messages without identity
+  by the schemas their consumers declare, and warns at startup about missing, non-selective, or
+  overlapping schemas. New bus settings: `RequireContractIdentity`, `ContractSchemaMismatch`, and
+  `DecorateSerializer`. `UnroutableMessage` gains `ContractSchema` and `Reason`;
+  `IMessageContractCatalog` gains schema-aware `Accepts` overloads. Guide:
+  [docs/json-schema-contracts.md](docs/json-schema-contracts.md).
+- **Checks for committed schema files**, in `Runax.Messaging.Contracts.JsonSchema`, to assert over
+  from your own test suite. `ContractSchemaLinter.Lint(directory)` checks a schema folder against the
+  contract profile (draft, `$id` and file path, keywords, open root, unique `$id`s and legacy
+  versions), running the same compiler the runtime does. `ContractSchemaCompatibility.Compare` checks
+  that a line stays fully compatible with an earlier revision — a baseline directory, or a
+  `ContractSchemaDocument` per revision where a line's full history is available — and says which new
+  `$id` to mint when it doesn't.
+
 ### Changed
 
+- `PoisonMessageException` is no longer sealed, so `ContractValidationException` can derive from it.
 - The default System.Text.Json serializer resolves metadata through the options'
   `TypeInfoResolver`, so a source-generated `JsonSerializerContext` is all a native AOT app
   needs. Options without a resolver still fall back to reflection under the JIT. The

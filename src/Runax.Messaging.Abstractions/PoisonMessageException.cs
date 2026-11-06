@@ -4,7 +4,7 @@ namespace Runax.Messaging.Abstractions;
 /// Thrown by a consumer to signal that a message can never be processed successfully.
 /// The dispatch pipeline skips any remaining retry attempts and dead-letters the message immediately.
 /// </summary>
-public sealed class PoisonMessageException : Exception
+public class PoisonMessageException : Exception
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="PoisonMessageException"/> class.

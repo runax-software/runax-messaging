@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Runax.Messaging.Abstractions;
 using Runax.Messaging.Consumers;
 
@@ -27,6 +28,11 @@ public abstract class MessageConsumer<TMessage> : IMessageConsumer
     string IMessageConsumer.Topic => Topic;
 
     int? IMessageConsumer.ContractVersion => MessageContractCache.For(typeof(TMessage))?.Version;
+
+    string? IMessageConsumer.ContractSchema =>
+        ContractSchemaId.NormalizeOrNull(MessageContractCache.For(typeof(TMessage))?.Schema);
+
+    FrozenSet<string> IMessageConsumer.ContractSchemas => MessageContractCache.SchemasFor(typeof(TMessage));
 
     ValueTask IMessageConsumer.HandleAsync(MessageContext context, CancellationToken cancellationToken)
     {

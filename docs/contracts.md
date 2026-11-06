@@ -10,6 +10,13 @@ For how versions are *matched* at dispatch time, see
 [Consuming & reliability](consuming.md); for the envelope that carries the version on the
 wire, see [Serialization](serialization.md).
 
+> **The integer version is on its way out.** It is a label, not a check: two services that both say
+> "version 2" can disagree on the shape and nothing notices. Identify contracts by their schema's
+> `$id` instead — see [JSON Schema contracts](json-schema-contracts.md) — and note that a type
+> declares one identity or the other, never both. This page covers the integer, which still works for
+> contracts that have no schema and is removed in the next major release
+> ([plan](specs/removing-integer-contract-versions.md)).
+
 ## Designing contract types
 
 A contract type is a plain data carrier. Records fit naturally:
@@ -98,6 +105,11 @@ one version; a consumer for V2 references the V2 type.
 The wire version is read from the envelope's `contract_version` or from the native
 `runax-contract-version` header, which is how producers in other languages version a plain
 JSON message (see [Headers & interop](headers.md#producing-from-other-languages)).
+
+An integer only labels a contract; nothing checks that both sides agree on the shape. Add a
+`Schema` (the `$id` of the contract's JSON Schema) to identify it by schema, validate bodies,
+and route messages that carry no identity at all. When both sides carry a `$id`, it decides
+routing instead of the integer. See [JSON Schema contracts](json-schema-contracts.md).
 
 A message no consumer on the bus accepts is **unroutable** and goes to the configured
 strategy — dead-letter by default. See
