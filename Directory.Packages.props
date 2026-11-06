@@ -8,7 +8,12 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
-  <!-- Core / shared abstractions used by Runax.Messaging and every transport. -->
+  <!-- Core / shared abstractions used by Runax.Messaging and every transport.
+       One version for all target frameworks, not a lower floor per TFM: the broker SDKs
+       already require Microsoft.Extensions.* 10.0.x from their net8.0 assets too (Azure.Core
+       -> Hosting.Abstractions 10.0.10, StackExchange.Redis -> Logging.Abstractions 10.0.13),
+       so pinning these back for net8.0/net9.0 only produces NU1109 downgrade errors. The
+       packages themselves are netstandard2.0/net8.0-compatible, so they load on .NET 8. -->
   <ItemGroup Label="Core">
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.10" />

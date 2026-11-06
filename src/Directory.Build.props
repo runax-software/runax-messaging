@@ -5,7 +5,10 @@
           Condition="Exists('$([MSBuild]::GetPathOfFileAbove(`Directory.Build.props`, `$(MSBuildThisFileDirectory)../`))')" />
 
   <PropertyGroup Label="Compilation">
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- Every shippable library targets the supported .NET versions. net8.0 is the floor
+         (the oldest LTS still in support); net9.0 and net10.0 get their own assemblies so
+         each runtime binds to its own in-box types instead of package downgrades. -->
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

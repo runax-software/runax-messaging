@@ -114,6 +114,10 @@ runs the binary, which drives a real round trip: a contract-versioned message de
 retry, an outbox-routed publish, and a TestKit harness run, all over the in-memory
 transport, with every supported transport compiled in.
 
+Unlike the libraries it references, the smoke test targets net10.0 alone. The trim and AOT
+analyzers run on every target framework at build time regardless, so one publish is enough to
+turn what they report into a failure.
+
 To run it locally (needs the
 [native AOT prerequisites](https://learn.microsoft.com/dotnet/core/deploying/native-aot/#prerequisites)):
 
