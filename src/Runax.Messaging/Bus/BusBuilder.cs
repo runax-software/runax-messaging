@@ -365,7 +365,9 @@ public sealed class BusBuilder
     private static bool TryValidateTransportConfig(TransportConfig config, List<ValidationResult> results) =>
         Validator.TryValidateObject(
             config,
-            new ValidationContext(config, config.GetType().Name, serviceProvider: null, items: null),
+            // DisplayName is assigned rather than passed to the constructor: the overload that takes a
+            // display name was only added in .NET 10, and this builds for net8.0 and net9.0 as well.
+            new ValidationContext(config) { DisplayName = config.GetType().Name },
             results,
             validateAllProperties: true);
 

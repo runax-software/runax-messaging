@@ -44,6 +44,8 @@ jobs:
         with:
           warnings-as-errors: "true"
 
+      # No --framework, so this runs every test assembly the projects produce: net8.0, net9.0
+      # and net10.0. The runtimes for all three come from the SDKs the setup action installs.
       - name: Unit tests
         run: dotnet test --no-build --verbosity normal -- --filter-not-trait "Category=Integration"
 
@@ -163,6 +165,9 @@ jobs:
           docker compose logs kafka
           if [ -z "$ready" ]; then echo "::error::Kafka did not become ready"; exit 1; fi
 
+      # One target framework only. What these exercise is the broker protocol, which does not
+      # vary by target framework, and running them three times over would mean three rounds
+      # against the same emulator for no extra signal. The unit tests cover every framework.
       - name: Integration tests (${{ matrix.transport }})
         env:
           RABBITMQ_HOST: localhost
@@ -174,7 +179,7 @@ jobs:
         run: >-
           dotnet test
           --project tests/Runax.Messaging.Transports.${{ matrix.transport }}.Tests/Runax.Messaging.Transports.${{ matrix.transport }}.Tests.csproj
-          --no-build --verbosity normal -- --filter-trait "Category=Integration"
+          --no-build --framework net10.0 --verbosity normal -- --filter-trait "Category=Integration"
 
   # Aggregate gate so branch protection can require the stable context "integration-tests"
   # instead of the per-transport matrix contexts. No name: field, so the context stays "integration-tests".

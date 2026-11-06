@@ -383,14 +383,18 @@ Transport packages are verified against real (containerized) brokers. The repo's
 
 ```bash
 docker compose up -d
-dotnet test -- --filter-trait "Category=Integration"
+dotnet test --framework net10.0 -- --filter-trait "Category=Integration"
 ```
 
 Integration tests are marked with `[Trait("Category", "Integration")]`; the plain
 unit run excludes them with `--filter-not-trait "Category=Integration"` (this
 repository uses xUnit v3 on Microsoft.Testing.Platform, hence the `--` argument
-separator). Each suite reads its endpoint from an environment variable and falls
-back to the compose defaults:
+separator). The test projects multi-target `net8.0;net9.0;net10.0`, so without
+`--framework` every suite runs three times over; CI pins the integration tests to
+one framework for the same reason.
+
+Each suite reads its endpoint from an environment variable and falls back to the
+compose defaults:
 
 | Variable | Default | Backing service in `compose.yml` |
 | --- | --- | --- |

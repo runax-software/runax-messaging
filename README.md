@@ -58,6 +58,10 @@ dotnet add package Runax.Messaging
 dotnet add package Runax.Messaging.Transports.Aws.Sqs        # or .Transports.RabbitMq, or use the built-in in-memory transport
 ```
 
+Every package targets **net8.0**, **net9.0**, and **net10.0**, so apps on any supported
+.NET version get an assembly built against their own framework. Unit tests run on all three
+in CI.
+
 ## Quick start
 
 Register messaging, add a bus with a transport, and add consumers:

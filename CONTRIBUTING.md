@@ -6,7 +6,12 @@ with a separate library for each transport. Here's how to get started.
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (the exact version is pinned in `global.json`)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (the exact version is pinned in `global.json`) —
+  it builds every target framework on its own
+- The [.NET 8](https://dotnet.microsoft.com/download/dotnet/8.0) and
+  [.NET 9](https://dotnet.microsoft.com/download/dotnet/9.0) runtimes, to run the test
+  assemblies for those frameworks (see [Target frameworks](#target-frameworks)). Installing
+  those SDKs gets you the runtimes too.
 - A code editor (Rider, Visual Studio, or VS Code with the C# Dev Kit)
 
 ## Getting started
@@ -36,6 +41,7 @@ src/
   Runax.Messaging.Transports.<Name>/  # One library per transport (e.g. Runax.Messaging.Transports.Aws.Sqs)
 tests/
   Directory.Build.props         # Shared settings for test projects (xUnit v3 on MTP)
+  Compat/                       # Shims compiled into the test projects for net8.0 only
 Directory.Packages.props        # Central Package Management — all NuGet versions live here
 global.json                     # Pins the .NET SDK and selects the test runner
 nuget.config                    # Package sources
@@ -44,6 +50,25 @@ nuget.config                    # Package sources
 Each transport lives in its own `Runax.Messaging.Transports.<Name>` library that depends only on
 the core `Runax.Messaging` package — never on another transport. Keep transport-specific SDKs
 (AWS, RabbitMQ, Google Cloud, Kafka, ...) out of the core.
+
+## Target frameworks
+
+Everything under `src/` and `tests/` multi-targets `net8.0;net9.0;net10.0`, set once in the two
+`Directory.Build.props` files. A few consequences worth knowing:
+
+- **Code has to compile against the oldest framework.** net8.0 is the floor, so an API that
+  arrived later needs an `#if NET9_0_OR_GREATER` (or an equivalent that works everywhere).
+  `dotnet build` catches this: it builds all three.
+- **`dotnet test` runs every framework.** One test assembly per framework, so a run of the unit
+  tests is three times the assemblies. Pass `--framework net10.0` to narrow it while iterating.
+  The integration tests in CI run on net10.0 only — they exercise broker protocols, which don't
+  vary by framework.
+- **net8.0-only shims live in `tests/Compat`.** Those files are compiled into every test project
+  for net8.0 alone; `tests/Directory.Build.props` wires them up.
+- **Package versions stay single.** `Directory.Packages.props` declares one version per package
+  for all three frameworks rather than a lower floor per framework — the broker SDKs require
+  `Microsoft.Extensions.*` 10.0.x from their own net8.0 assets, so a lower floor only produces
+  NU1109 downgrade errors.
 
 ## Making changes
 

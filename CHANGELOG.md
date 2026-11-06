@@ -10,6 +10,9 @@ All packages in the repository are versioned together.
 
 ### Added
 
+- **.NET 8 and .NET 9 support** — every shipped package now targets `net8.0`, `net9.0`, and
+  `net10.0` instead of `net10.0` alone, so apps on any supported .NET version get an assembly
+  built against their own framework. The unit tests run on all three frameworks in CI.
 - **Native AOT & trimming support** — every shipped package is built with `IsAotCompatible`,
   so the trim and AOT analyzers check it on every build. The core, outbox, TestKit, and the
   RabbitMQ, SQS, SNS, Service Bus, Event Hubs, and Redis transports are verified by a native

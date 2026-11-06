@@ -15,7 +15,12 @@ public class MessagingTestHarnessTests
     private sealed class OrderStore
     {
         private readonly List<int> _handled = [];
+#if NET9_0_OR_GREATER
         private readonly Lock _gate = new();
+#else
+        // System.Threading.Lock was introduced in .NET 9.
+        private readonly object _gate = new();
+#endif
 
         public IReadOnlyList<int> Handled
         {
