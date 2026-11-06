@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Step 1 done, the rest planned for 3.0 |
+| **Status** | Step 1 done, the rest planned for the major after it |
 | **Replaces** | `[MessageContract(version)]`, `contract_version`, `runax-contract-version` |
 | **Related** | [JSON Schema contracts](json-schema-contracts.md), [docs/contracts.md](../contracts.md) |
 
@@ -11,8 +11,12 @@ disagree on the shape and nothing notices, which is the whole reason schema cont
 contract is identified by its schema's `$id`, the integer is a second identity that nothing keeps in
 step with the first — so it goes.
 
-This is the plan for finishing that. Step 1 has shipped; the rest is 3.0, because the integer is in
-the wire format and on the public API of packages already on NuGet (1.0.0 and 2.0.0).
+This is the plan for finishing that. Step 1 has shipped; the rest waits for a major, because the
+integer is in the wire format and on the public API of packages already on NuGet (1.0.0 and 2.0.0).
+
+**Which major.** Step 1 itself breaks API, so the release carrying it is 3.0 and the removal below is
+4.0. Keep that straight when writing the deprecation messages: pointing a user at "removed in 3.0"
+from inside 3.0 is the mistake to avoid.
 
 ## Step 1 — done
 
@@ -83,16 +87,17 @@ carries one. See the open questions.
 - `docs/headers.md`, `docs/observability.md`, `docs/configuration.md`: `runax-contract-version` and
   any version tag.
 - `README.md`: the "Contract versioning" feature bullet.
-- `docs/specs/json-schema-contracts.md`: §8 phase 3 becomes this document.
-- A `docs/migrating-to-3.0.md`, alongside the existing `migrating-to-2.0.md`.
+- `docs/specs/json-schema-contracts.md`: §8 phase 3 points here; its coexistence matrix has been
+  corrected for the dropped bridge, but the surrounding rollout narrative still assumes one.
+- A `docs/migrating-to-4.0.md`, alongside the existing `migrating-to-2.0.md`.
 
 ## Order of work
 
 1. **Deprecate.** Mark every member in the table `[Obsolete]` with a message pointing at `Schema`, in
-   a 2.x minor. Note that `src/` builds with `TreatWarningsAsErrors`, so the repo's own integer tests
+   a 3.x minor. Note that `src/` builds with `TreatWarningsAsErrors`, so the repo's own integer tests
    need `#pragma warning disable` or converting at the same time — do not let this land half-done, or
    the build goes red for everyone.
-2. **Write `docs/migrating-to-3.0.md`** before removing anything, so the deprecation message has
+2. **Write `docs/migrating-to-4.0.md`** before removing anything, so the deprecation message has
    something to point at.
 3. **Remove the API**, `ContractRouter`'s branch, and the catalog's half. One commit, since the
    interface member makes them inseparable.
@@ -109,13 +114,13 @@ carries one. See the open questions.
    rather than silent.*
 2. **Do we keep reading the envelope key for one more major?** Writing it has to stop for the format
    to be clean, but reading it costs nothing and makes a mixed fleet work. *Leaning: stop writing in
-   3.0, keep tolerating the key, and stop reading in 4.0.*
+   4.0, keep tolerating the key, and stop reading in 5.0.*
 3. **Does `[MessageContract]` still make sense with no version?** With only `Name`, `Schema` and
    `Reads` left, it is "declare this type's contract identity". `Schema` becomes effectively required,
    since `Name` alone only renames the topic. Consider requiring `Schema` and rejecting a bare
    `[MessageContract]`.
 4. **What replaces integer-only contracts for people who don't want schemas?** Today
-   `[MessageContract(2)]` is a cheap way to version without authoring JSON Schema. After 3.0 the
+   `[MessageContract(2)]` is a cheap way to version without authoring JSON Schema. Afterwards the
    cheapest path is a one-line schema with a required discriminator. That should be the first example
    in the migration guide, because it is the answer to "I just wanted a number".
 5. **`IMessageConsumer` is public.** Removing a member breaks custom implementations. Check whether

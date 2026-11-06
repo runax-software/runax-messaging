@@ -35,7 +35,7 @@ Publishing writes the `$id` as `__runax.contract_schema` and as the native heade
 Declaring an integer version as well — `[MessageContract(2, Schema = …)]` — is a configuration error:
 the `$id` already names the contract, so a number next to it is a second identity that nothing keeps
 in step with the first. The integer form, `[MessageContract(2)]`, is only for contracts that have not
-adopted schemas, and is removed in 3.0; see
+adopted schemas, and is removed in the next major release; see
 [Removing integer contract versions](specs/removing-integer-contract-versions.md).
 
 A type that can read an earlier breaking line says so with `Reads`, and its consumers accept

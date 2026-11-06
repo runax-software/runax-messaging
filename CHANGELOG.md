@@ -27,8 +27,12 @@ All packages in the repository are versioned together.
   alone. `IMessageContractCatalog.Accepts(topic, version)` no longer matches schema consumers.
 
 The integer form, `[MessageContract(2)]`, still works for contracts that have not adopted schemas,
-and is removed in 3.0. The plan, the full remaining surface, and the open questions are in
+and is removed in the next major release. The plan, the full remaining surface, and the open
+questions are in
 [docs/specs/removing-integer-contract-versions.md](docs/specs/removing-integer-contract-versions.md).
+
+Because this release breaks API, it is a major. The integer's removal is therefore the major after
+it, not this one.
 
 ### Added
 

@@ -314,12 +314,11 @@ integers that match. The default is `Reject` (open question 29).
 | Consumer declares | Wire carries | Result |
 | --- | --- | --- |
 | Nothing (unversioned) | Anything | Delivered (unchanged) |
-| `Schema` (+ int) | Same `$id` | Delivered |
-| `Schema` (+ int) | A `$id` in `Reads` | Delivered |
-| `Schema` + int 2 | Different `$id`, int 2 | **Not delivered.** A mismatched `$id` is exactly the drift this feature exists to catch, so there's no fallback to the integer here, unless the bus opts into the adoption safety valve below. |
-| `Schema` + int 2 | No `$id`, int 2 (2.x or foreign producer) | Delivered by the integer |
-| `Schema` only (3.0) | No `$id`, int 2 | Delivered if 2 is the `x-runax-legacy-version` of one of its lines, which needs the documents embedded (§5). Otherwise not delivered: the integer is an identity claim, so it isn't validated (open question 27). |
-| `Schema` (+ int) | **No `$id`, no int** | **Delivered if the body validates against one of the consumer's lines, and the match isn't ambiguous** (next section) |
+| `Schema` | Same `$id` | Delivered |
+| `Schema` | A `$id` in `Reads` | Delivered |
+| `Schema` | A different `$id` | **Not delivered.** A mismatched `$id` is exactly the drift this feature exists to catch. |
+| `Schema` | No `$id`, int 2 (2.x or foreign producer) | **Not delivered.** A schema contract carries no integer, so an integer claim says nothing about it, and a claimed identity is never validated against the body. |
+| `Schema` | **No `$id`, no int** | **Delivered if the body validates against one of the consumer's lines, and the match isn't ambiguous** (next section) |
 | int 2 only (legacy) | `$id` + int 2 (dual-writing producer) | Delivered by the integer |
 | int 2 only (legacy) | `$id` only | Not delivered |
 | int 2 only (legacy) | No `$id`, no int | Not delivered: there's no schema to validate against (unchanged) |
@@ -1056,42 +1055,48 @@ installed, it adds the registry header and strips foreign prefixes on receive.
    `runax-contract-schema` header.
 4. Run validation in `Report` mode in staging.
 
-**Phase 3: 3.0. Breaking API changes, same wire.**
+**Phase 3: the next major. Breaking API changes, same wire.** Built, but not as planned
+here — see [Removing integer contract versions](removing-integer-contract-versions.md) for what
+shipped and what is left.
 
-- `[MessageContract(Schema = …)]` without an integer becomes valid: a new parameterless
-  constructor, with `Version` becoming `int?`.
-- The `int` constructor, `HandledContract.Version`, `Accepts(string, int)`,
-  `MessageContext.ContractVersion` and `UnroutableMessage.ContractVersion` are marked
-  `[Obsolete]` (a warning, not an error).
-- Dropping the integer from a contract **type** is safe once the service embeds its schema
-  documents (§5). The line's file keeps the integer, so the service still writes it as a
-  producer and still accepts it as a consumer (§4). A service without embedded documents
-  keeps the integer on the type until nothing routes by it: no 2.x consumer of that contract
-  (check with the catalog or manifest, or broker metrics), and no int-only messages left in
-  DLQs or outbox backlogs.
-- The integer leaves the **wire** only when the fleet is done with it: a later release stops
-  writing it, and reading it stays supported (open question 9).
-- `migrating-to-3.0.md` documents the switch.
+- `[MessageContract(Schema = …)]` without an integer is valid: a new parameterless constructor,
+  with `Version` becoming `int?`. **As built, declaring both is a configuration error** rather
+  than merely allowed-but-redundant, because a second identity nothing keeps in step with the
+  first is worse than no second identity.
+- **The plan above assumed a gradual coexistence that no longer exists.** It had a type keep its
+  integer while `x-runax-legacy-version` bridged the two, so a schema consumer still accepted an
+  integer-only message. That bridge and the keyword are gone: a consumer accepts its schema lines
+  or its integer, never both. Migrating a line is `Reads`, declared on the type that can read both
+  shapes.
+- The `int` constructor and the rest of the integer surface are **not** `[Obsolete]` yet. That is
+  step 1 of the removal plan, and it needs the repo's own integer tests converted in the same
+  change, because `src/` builds with `TreatWarningsAsErrors`.
+- The integer leaves the **wire** in a later major: a release stops writing it, and reading it
+  stays supported for one more (open question 9).
+- A migration guide documents the switch.
 
 ### Compatibility during coexistence
 
-"2.y" below is the phase 1 minor release. "2.x" is any earlier 2.x (or 1.x) service.
+"2.x" below is any 2.x (or 1.x) service, which identifies contracts by an integer. A type
+declares one identity or the other, so there is no "`Schema` + int" service to put in a column.
 
-| Producer ↓ / Consumer → | 2.x, int | 2.y+ with `Schema` + int | 3.0, `Schema` only |
-| --- | --- | --- | --- |
-| 2.x, int | ✓ int | ✓ int | ✓ int via the line's legacy version¹, else ✗ unroutable |
-| 2.y+ with `Schema` + int | ✓ int | ✓ `$id` | ✓ `$id` |
-| 3.0, `Schema` only | ✓ int via the line's legacy version¹, else ✗ unroutable | ✓ `$id` | ✓ `$id` |
-| Foreign, `runax-contract-version` only | ✓ int | ✓ int | ✓ int via the line's legacy version¹, else ✗ unroutable |
-| Foreign, `runax-contract-schema` (+ version) | ✓ int if the version is set | ✓ `$id` | ✓ `$id` |
-| Foreign or untyped, **no identity** | ✗ unroutable (as today) | ✓ by validation, if selective and unambiguous | ✓ by validation, if selective and unambiguous |
+| Producer ↓ / Consumer → | 2.x, int | `Schema` only |
+| --- | --- | --- |
+| 2.x, int | ✓ int | ✗ unroutable |
+| `Schema` only | ✗ unroutable | ✓ `$id` |
+| Foreign, `runax-contract-version` only | ✓ int | ✗ unroutable |
+| Foreign, `runax-contract-schema` | ✗ unroutable | ✓ `$id` |
+| Foreign or untyped, **no identity** | ✗ unroutable (as today) | ✓ by validation, if selective and unambiguous |
 
-¹ When the 3.0 service embeds its schema documents (§5), which it already needs for
-validation and for routing unidentified messages.
+**A contract switches identity in one step per line, not gradually.** The two unroutable cells
+are the cost of dropping the bridge: an integer producer and a schema consumer of the same
+contract cannot coexist. Either move a contract's producers and consumers together, or publish
+both shapes to separate topics while the rollout runs. Producers that set no identity at all are
+unaffected — validation-based routing (§4) reaches a schema consumer regardless.
 
 Producers that never set identity, such as plain-JSON services in other languages, only need
 their consumers to declare `Schema`. Validation-based routing (§4) then works the same
-before and after 3.0.
+before and after the switch.
 
 The remaining ✗ cells only affect 3.0 services that don't embed their documents, and they're
 the reason those services keep the integer on their types. They fail safe: the message is

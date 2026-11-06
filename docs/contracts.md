@@ -14,7 +14,7 @@ wire, see [Serialization](serialization.md).
 > "version 2" can disagree on the shape and nothing notices. Identify contracts by their schema's
 > `$id` instead — see [JSON Schema contracts](json-schema-contracts.md) — and note that a type
 > declares one identity or the other, never both. This page covers the integer, which still works for
-> contracts that have no schema and is removed in 3.0
+> contracts that have no schema and is removed in the next major release
 > ([plan](specs/removing-integer-contract-versions.md)).
 
 ## Designing contract types

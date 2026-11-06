@@ -14,7 +14,7 @@ namespace Runax.Messaging.Abstractions;
 /// <para>
 /// Prefer <see cref="Schema"/>. An integer is a label rather than a check — two services that both say
 /// "version 2" can disagree on the shape and nothing notices — and it is kept only for contracts that
-/// have not adopted schemas. It is removed in 3.0; see
+/// have not adopted schemas. It is removed in the next major release; see
 /// <c>docs/specs/removing-integer-contract-versions.md</c>.
 /// </para>
 /// <para>
@@ -35,7 +35,7 @@ public sealed class MessageContractAttribute : Attribute
 
     /// <summary>
     /// Declares a contract identified by an integer version, for a contract that has no schema. Removed
-    /// in 3.0 — set <see cref="Schema"/> instead.
+    /// in the next major release — set <see cref="Schema"/> instead.
     /// </summary>
     /// <param name="version">The contract version carried in the envelope and matched against consumers.</param>
     public MessageContractAttribute(int version) => Version = version;
