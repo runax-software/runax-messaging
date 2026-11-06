@@ -1,10 +1,6 @@
-using System.Diagnostics;
+namespace Runax.Messaging.Contracts.JsonSchema.Tests;
 
-using Runax.Messaging.Cli.Contracts;
-
-namespace Runax.Messaging.Cli.Tests;
-
-/// <summary>A throwaway directory of schema files, optionally a git repository.</summary>
+/// <summary>A throwaway directory of schema files.</summary>
 internal sealed class SchemaDirectory : IDisposable
 {
     public const string Draft = "https://json-schema.org/draft/2020-12/schema";
@@ -34,19 +30,6 @@ internal sealed class SchemaDirectory : IDisposable
         return Write(relativePath, $$"""{"$schema":"{{Draft}}","$id":"{{id}}",{{legacy}}{{body}}}""");
     }
 
-    public SchemaDirectory InitGit()
-    {
-        Git("init", "--quiet");
-        return this;
-    }
-
-    public SchemaDirectory Commit(string message)
-    {
-        Git("add", "--all");
-        Git("-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "--quiet", "-m", message);
-        return this;
-    }
-
     public void Dispose()
     {
         try
@@ -59,18 +42,5 @@ internal sealed class SchemaDirectory : IDisposable
         catch (UnauthorizedAccessException)
         {
         }
-    }
-
-    private void Git(params string[] arguments)
-    {
-        var start = new ProcessStartInfo("git") { WorkingDirectory = Root, UseShellExecute = false, RedirectStandardError = true };
-        foreach (var argument in arguments)
-            start.ArgumentList.Add(argument);
-
-        using var process = Process.Start(start)!;
-        var error = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        if (process.ExitCode != 0)
-            throw new InvalidOperationException($"git {string.Join(' ', arguments)} failed: {error}");
     }
 }

@@ -1,22 +1,39 @@
 using System.Text;
 using System.Text.Json;
-using Runax.Messaging.Contracts.JsonSchema;
-
-namespace Runax.Messaging.Cli.Contracts;
+namespace Runax.Messaging.Contracts.JsonSchema;
 
 /// <summary>
-/// <c>runax-messaging contracts lint</c>: checks each schema file on its own, and the set of files together, against
-/// the contract profile. The runtime loads exactly what passes.
+/// Checks committed contract schema files against the contract profile: a draft 2020-12 <c>$schema</c>, an
+/// absolute <c>$id</c> that matches the file path, only profile keywords, an open root object, unique
+/// <c>$id</c>s, and a distinct <c>x-runax-legacy-version</c> per line of a contract. It runs the same schema
+/// compiler the runtime does, so it rejects exactly what <see cref="ContractSchemaDocument.Parse"/> rejects.
+/// <para>
+/// Assert over this from your test suite, so a schema that the runtime could not load, or a typo that a
+/// validator would silently ignore, fails before it is deployed:
+/// </para>
+/// <example>
+/// <code>
+/// ContractSchemaLinter.Lint("schemas").Errors.ShouldBeEmpty();
+/// </code>
+/// </example>
 /// </summary>
-internal static class Linter
+public static class ContractSchemaLinter
 {
-    public const string Draft202012 = "https://json-schema.org/draft/2020-12/schema";
+    internal const string Draft202012 = "https://json-schema.org/draft/2020-12/schema";
 
     private const int MaxIdBytes = 256;
 
-    public static List<Finding> Lint(IReadOnlyList<SchemaFile> files)
+    /// <summary>
+    /// Lints every <c>*.schema.json</c> file under <paramref name="directory"/>, recursively. The paths in
+    /// the findings are relative to it, and the <c>$id</c> of each document has to match its path.
+    /// </summary>
+    /// <exception cref="DirectoryNotFoundException"><paramref name="directory"/> does not exist.</exception>
+    public static ContractSchemaReport Lint(string directory) =>
+        new(Lint(SchemaFile.FindAll(directory)));
+
+    internal static List<ContractSchemaFinding> Lint(IReadOnlyList<SchemaFile> files)
     {
-        var findings = new List<Finding>();
+        var findings = new List<ContractSchemaFinding>();
         var loaded = new List<(SchemaFile File, ContractSchemaDocument Document)>();
 
         foreach (var file in files)
@@ -29,7 +46,7 @@ internal static class Linter
         return findings;
     }
 
-    private static ContractSchemaDocument? LintFile(SchemaFile file, List<Finding> findings)
+    private static ContractSchemaDocument? LintFile(SchemaFile file, List<ContractSchemaFinding> findings)
     {
         using var parsed = file.TryParse(findings);
         if (parsed is null)
@@ -39,11 +56,11 @@ internal static class Linter
         if (root.ValueKind == JsonValueKind.Object)
         {
             if (!root.TryGetProperty("$schema", out var draft) || draft.GetString() != Draft202012)
-                Add(findings, file, "", Severity.Error, $"'$schema' must be \"{Draft202012}\".");
+                Add(findings, file, "", ContractSchemaSeverity.Error, $"'$schema' must be \"{Draft202012}\".");
 
             if (root.TryGetProperty("additionalProperties", out var additional) && additional.ValueKind == JsonValueKind.False)
             {
-                Add(findings, file, "/additionalProperties", Severity.Error,
+                Add(findings, file, "/additionalProperties", ContractSchemaSeverity.Error,
                     "the root object must stay open: Runax messages carry '__runax' next to the payload, and readers " +
                     "must ignore properties newer writers add.");
             }
@@ -56,19 +73,19 @@ internal static class Linter
             return null;
 
         if (Encoding.UTF8.GetByteCount(document.Id) > MaxIdBytes)
-            Add(findings, file, "/$id", Severity.Error, $"the $id is longer than {MaxIdBytes} bytes.");
+            Add(findings, file, "/$id", ContractSchemaSeverity.Error, $"the $id is longer than {MaxIdBytes} bytes.");
 
         var expected = ExpectedPath(document.Id);
         var actual = file.RelativePath[..^".schema.json".Length];
         if (expected is null || !SegmentsEndWith(expected, actual.Split('/')))
         {
-            Add(findings, file, "/$id", Severity.Error,
+            Add(findings, file, "/$id", ContractSchemaSeverity.Error,
                 $"the file path must match the $id '{document.Id}': expected the $id to end with '/{actual}'.");
         }
 
         if (!document.IsSelective)
         {
-            Add(findings, file, "", Severity.Warning,
+            Add(findings, file, "", ContractSchemaSeverity.Warning,
                 "the schema accepts any JSON object, so it can't route messages that carry no contract identity. " +
                 "Require a property, such as a type discriminator.");
         }
@@ -76,13 +93,13 @@ internal static class Linter
         return document;
     }
 
-    private static void LintSet(List<(SchemaFile File, ContractSchemaDocument Document)> loaded, List<Finding> findings)
+    private static void LintSet(List<(SchemaFile File, ContractSchemaDocument Document)> loaded, List<ContractSchemaFinding> findings)
     {
         foreach (var duplicate in loaded.GroupBy(x => x.Document.Id, StringComparer.Ordinal).Where(g => g.Count() > 1))
         {
             foreach (var (file, _) in duplicate.Skip(1))
             {
-                Add(findings, file, "/$id", Severity.Error,
+                Add(findings, file, "/$id", ContractSchemaSeverity.Error,
                     $"'{duplicate.Key}' is already declared by {duplicate.First().File.RelativePath}.");
             }
         }
@@ -96,7 +113,7 @@ internal static class Linter
         {
             foreach (var (file, document) in shared.Skip(1))
             {
-                Add(findings, file, "/x-runax-legacy-version", Severity.Error,
+                Add(findings, file, "/x-runax-legacy-version", ContractSchemaSeverity.Error,
                     $"legacy version {shared.Key.Version} is already used by '{shared.First().Document.Id}'. A breaking " +
                     "change mints a new $id and a new integer together.");
             }
@@ -104,7 +121,7 @@ internal static class Linter
     }
 
     // Unknown keywords would be silently ignored by validators; a typo like "requried" must not pass.
-    private static void WalkKeywords(SchemaFile file, JsonElement schema, string pointer, List<Finding> findings)
+    private static void WalkKeywords(SchemaFile file, JsonElement schema, string pointer, List<ContractSchemaFinding> findings)
     {
         if (schema.ValueKind != JsonValueKind.Object)
             return;
@@ -130,7 +147,7 @@ internal static class Linter
                     continue;
                 case "format" when keyword.Value.ValueKind == JsonValueKind.String
                                    && !SchemaCompiler.AssertedFormats.Contains(keyword.Value.GetString()!):
-                    Add(findings, file, at, Severity.Warning,
+                    Add(findings, file, at, ContractSchemaSeverity.Warning,
                         $"format '{keyword.Value.GetString()}' isn't checked; only " +
                         $"{string.Join(", ", SchemaCompiler.AssertedFormats)} are asserted.");
                     continue;
@@ -142,7 +159,7 @@ internal static class Linter
                         || name.StartsWith("x-", StringComparison.Ordinal);
             if (!known)
             {
-                Add(findings, file, at, Severity.Error,
+                Add(findings, file, at, ContractSchemaSeverity.Error,
                     $"unknown keyword '{name}'. Custom annotations must start with 'x-'.");
             }
         }
@@ -169,8 +186,8 @@ internal static class Linter
         segments.Length >= suffix.Length
         && segments.AsSpan(segments.Length - suffix.Length).SequenceEqual(suffix);
 
-    private static void Add(List<Finding> findings, SchemaFile file, string pointer, Severity severity, string message) =>
-        findings.Add(new Finding(file.RelativePath, pointer, severity, message));
+    private static void Add(List<ContractSchemaFinding> findings, SchemaFile file, string pointer, ContractSchemaSeverity severity, string message) =>
+        findings.Add(new ContractSchemaFinding(file.RelativePath, pointer, severity, message));
 
     private static string Escape(string name) =>
         name.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);

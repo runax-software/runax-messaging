@@ -25,9 +25,11 @@
   the C# type with `JsonSchemaExporter`, which is AOT-clean (verified below), and CI fails if
   the file drifts from the type. Go, Java and Node teams either author the file by hand or
   export it from their own types.
-- **Gate.** The `runax-messaging contracts` commands of the `Runax.Messaging.Cli` tool, shipped as a native binary so non-.NET pipelines don't
-  need the .NET SDK. It checks that every revision of a `$id` is fully compatible with all
-  earlier ones, and that each service's types conform to the committed file.
+- **Gate.** A lint and a compatibility check, exposed as API from
+  `Runax.Messaging.Contracts.JsonSchema` and asserted over from a test suite. They check that every
+  revision of a `$id` is fully compatible with the earlier ones, and (later) that each service's
+  types conform to the committed file. §6 below still describes these as commands of a
+  `runax-messaging` tool; see the decision note under "Implementation status".
 - **Validation.** An optional `ISerializer` decorator validates on publish and/or consume.
   It's off by default and can either report or enforce.
 - **Broker-native validation.** When validation is on, the library validates on every bus by
@@ -56,17 +58,30 @@ Built so far, following the recommendations in §11 unless noted:
 | §6 Profile evaluator (in-house, open question 6) with formats asserted by System.Text.Json's rules | Done |
 | §6 Runtime validation (`bus.ValidateContracts`), the `DecorateSerializer` hook, `ContractValidationException` | Done |
 | §4 Startup overlap, non-selective and missing-document warnings | Done |
-| §6 `runax-messaging contracts lint` and `check` (`Runax.Messaging.Cli`, a .NET tool) | Done |
-| §6 `contracts conform`, native binaries and a container image | Not started |
-| §5 Export (`contracts export`, `ContractSerialization`) and `VerifyContractSchemas` | Not started |
+| §6 Lint and compatibility check, as API on `Runax.Messaging.Contracts.JsonSchema` | Done |
+| §6 Conformance of a service's types to the committed file | Not started |
+| §5 Export (`ContractSerialization`) and `VerifyContractSchemas` | Not started |
 | §7 Messaging-level validation default, `IContractValidatingTransport`, the Kafka Schema Registry add-on | Not started |
 | §8 Phase 3 (parameterless constructor, deprecations) | Not started, by design: 3.0 |
 
 Deviations from the text below:
 
-- The tool is `Runax.Messaging.Cli` with the command `runax-messaging`, and contract commands are grouped
-  under `contracts` (`runax-messaging contracts lint`), so other areas can be added later. It's built on
-  System.CommandLine. Text output and GitHub Actions annotations (`--format github`) replace SARIF for now.
+- **There is no command-line tool.** The text below describes the gate — and the unbuilt `conform`,
+  `export` and `manifest` steps — as `runax-messaging contracts` commands of a
+  `Runax.Messaging.Cli` .NET tool. That tool was built and then dropped:
+  shipping, versioning and documenting a second artifact bought little over exposing the same checks as
+  API, and most of `lint` was already a thin layer over the schema compiler the runtime uses. The
+  checks now live in `Runax.Messaging.Contracts.JsonSchema` as `ContractSchemaLinter.Lint(directory)`
+  and `ContractSchemaCompatibility.Compare(...)`, both returning a `ContractSchemaReport` to assert
+  over from a test suite. Read every `runax-messaging contracts lint` / `check` in the text below as
+  one of those two calls.
+
+  Two consequences. Comparing against git history is gone with the tool, since shelling out to git
+  does not belong in a messaging library: `Compare(baseline, current)` takes a baseline directory (a
+  checkout of the base branch), and a caller that can enumerate a line's full history calls the
+  `ContractSchemaDocument` overload once per revision. And there is no native binary or container
+  image, so a non-.NET pipeline needs the .NET SDK to run the gate — or has to reimplement the rules
+  in §6. Revisit if a non-.NET team actually needs it.
 
 - `DecorateSerializer` takes `Func<IServiceProvider, ISerializer, ISerializer>`, so decorators can
   resolve services such as loggers.
@@ -564,11 +579,16 @@ warning.
 
 ## 6. The CI compatibility gate and runtime validation
 
-### The `runax-messaging contracts` commands
+### The contract checks
 
-The tool ships as a .NET tool and as a native AOT single-file binary (linux-x64,
-linux-arm64, osx-arm64, win-x64) plus a container image, so Go, Java and Node pipelines
-don't need the .NET SDK. Apart from `export`, it only reads schema files.
+> **As built, these are API rather than commands.** `lint` and `check` are
+> `ContractSchemaLinter.Lint(directory)` and `ContractSchemaCompatibility.Compare(...)` on
+> `Runax.Messaging.Contracts.JsonSchema`, asserted over from a test suite; there is no tool, no
+> native binary and no container image, and git history is replaced by a baseline directory or a
+> document per revision. See the decision note under "Implementation status". The rules below are
+> what the checks apply.
+
+The checks only read schema files. `conform` and `export` are not built.
 
 | Command | Checks |
 | --- | --- |
@@ -577,14 +597,17 @@ don't need the .NET SDK. Apart from `export`, it only reads schema files.
 | `conform --canonical <file> --writer <schema>` / `--reader <schema>` | **Conformance:** a service's own types against the canonical file |
 | `export --assembly <dll>` | .NET only: writes schema files from `[MessageContract(Schema = …)]` types |
 
-Output is human-readable text plus SARIF, for PR annotations. A nonzero exit fails the job.
+Each finding carries a severity, the file, and a JSON pointer into the schema; errors fail the
+check. As built, that is a `ContractSchemaReport` whose `Errors` a test asserts is empty, so the
+gate is whatever runs the tests:
 
 ```yaml
 - uses: actions/checkout@v5
-  with: { fetch-depth: 0 }          # `check` compares against every earlier revision
-- run: dotnet tool install --global Runax.Messaging.Cli
-- run: runax-messaging contracts lint schemas/
-- run: runax-messaging contracts check schemas/ --history git
+- uses: actions/checkout@v5                  # the base branch, for the compatibility check
+  with:
+    ref: ${{ github.event.pull_request.base.sha }}
+    path: .baseline
+- run: dotnet test
 ```
 
 ### The contract profile
@@ -1012,7 +1035,7 @@ versus closed objects, so which one wins is open question 21.
   the `IMessageContractCatalog` additions, and `MessageHeaders.ContractSchema` with the new
   priority order.
 - New package `Runax.Messaging.Contracts.JsonSchema` (export profile, embedded schema
-  provider, validating serializer, self-check) and the `runax-messaging` tool.
+  provider, validating serializer, self-check, and the lint and compatibility checks).
 - The validation scope (`messaging.ValidateContracts` and the per-bus override) and the
   `IContractValidatingTransport` capability ship here too (§7), so that native validation
   can be added later without touching core again.
@@ -1120,9 +1143,11 @@ non-routing label.
    attribute, embedded schema provider, profile evaluator, `ValidateContracts`,
    `VerifyContractSchemas`, and the matcher for unidentified messages, including the
    startup overlap warning (§4).
-5. **`Runax.Messaging.Cli` (`runax-messaging contracts`):** lint, check, conform, export. Shipped as a .NET tool, native
-   binaries, and a container image. Optionally, a `register` command that publishes
-   committed files to a Confluent Schema Registry (§7).
+5. **The contract checks:** lint and compatibility, as API on
+   `Runax.Messaging.Contracts.JsonSchema` (conform and export are not built). These were a
+   `Runax.Messaging.Cli` tool in the original plan; see the decision note under "Implementation
+   status". Publishing committed files to a Confluent Schema Registry (§7) would need a home of
+   its own.
 6. **`Runax.Messaging.Transports.Kafka.SchemaRegistry` (phase 1b):**
    - `$id` → GUID mapping, and writing the registry header.
    - Client-side validation with NJsonSchema.

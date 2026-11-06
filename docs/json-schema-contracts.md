@@ -5,12 +5,12 @@ can disagree on the shape, and nothing notices. JSON Schema contracts identify e
 its schema document's `$id`, validate bodies against that schema, and can route messages that
 carry no identity at all by the schemas their consumers declare.
 
-> **Status.** This page covers what ships today: identity and routing in `Runax.Messaging`;
-> embedded schemas, validation, and routing by validation in `Runax.Messaging.Contracts.JsonSchema`;
-> and the `runax-messaging contracts lint` / `check` CI gate in `Runax.Messaging.Cli`. `conform`,
-> `export`, a messaging-wide validation default, broker-native validation (Kafka with Confluent Schema
-> Registry), and the startup self-check are designed in the [spec](specs/json-schema-contracts.md) but
-> not built yet.
+> **Status.** This page covers what ships today: identity and routing in `Runax.Messaging`; and
+> embedded schemas, validation, routing by validation, and the lint and compatibility checks in
+> `Runax.Messaging.Contracts.JsonSchema`. Conformance and export of schemas from types, a
+> messaging-wide validation default, broker-native validation (Kafka with Confluent Schema Registry),
+> and the startup self-check are designed in the [spec](specs/json-schema-contracts.md) but not built
+> yet.
 
 ## Declaring a schema
 
@@ -192,38 +192,55 @@ When the host starts, the package warns, per bus and topic, about:
 
 Exact `$id` matching is only safe if every revision under one `$id` stays compatible with all the
 earlier ones, so `…/v2` keeps meaning one shape. A running service can't check that: it only has the
-current file. The `runax-messaging` tool checks it in CI, before anything is deployed:
+current file. `Runax.Messaging.Contracts.JsonSchema` exposes the two checks, so you assert over your
+committed schema files from your own test suite and they run wherever your tests do:
 
-```bash
-dotnet tool install --global Runax.Messaging.Cli
-runax-messaging contracts lint schemas/
-runax-messaging contracts check schemas/
+```csharp
+[Fact]
+public void Schemas_pass_the_contract_profile() =>
+    ContractSchemaLinter.Lint("schemas").Errors.ShouldBeEmpty();
+
+[Fact]
+public void Schemas_stay_compatible_with_the_base_branch() =>
+    ContractSchemaCompatibility.Compare("../.baseline/schemas", "schemas").Errors.ShouldBeEmpty();
 ```
 
-- **`contracts lint`** checks each file on its own and the files together: a 2020-12 `$schema`, an
-  absolute `$id` of at most 256 bytes that matches the file path (`schemas/orders/order-placed/v2.schema.json`
-  for `…/orders/order-placed/v2`), only profile keywords (a typo like `requried` is an error; custom
-  annotations start with `x-`), an open root object, unique `$id`s, and a distinct
-  `x-runax-legacy-version` per line of a contract. It warns about lines that accept any object and
-  about formats that aren't asserted.
-- **`contracts check`** compares each file with **every** earlier revision of the same `$id` in git
-  history, both ways: readers of either must accept what the other writes. Adding or removing an
-  optional property is the one freedom; anything else, such as a new required property, a type
-  change, or a tightened constraint, is breaking, and the message says which new `$id` to mint. A
-  changed `default` is a warning, and the legacy version must never change. `--baseline <dir>`
-  compares against another directory instead, such as a checkout of the base branch.
+Both return a `ContractSchemaReport`: `Errors` is what to assert is empty, `Warnings` is worth
+reading, and `ToString()` renders one finding per line so a failure says what was wrong. Each
+`ContractSchemaFinding` carries the `File`, the `JsonPointer` into the schema, a `Severity`, and a
+`Message`.
 
-Exit codes are `0` (no errors), `1` (errors found), and `2` (usage problems, such as a missing
-directory or no git repository). In GitHub Actions, check out the full history and use
-`--format github` to annotate the pull request:
+- **`ContractSchemaLinter.Lint(directory)`** checks each file on its own and the files together: a
+  2020-12 `$schema`, an absolute `$id` of at most 256 bytes that matches the file path
+  (`schemas/orders/order-placed/v2.schema.json` for `…/orders/order-placed/v2`), only profile
+  keywords (a typo like `requried` is an error; custom annotations start with `x-`), an open root
+  object, unique `$id`s, and a distinct `x-runax-legacy-version` per line of a contract. It warns
+  about lines that accept any object and about formats that aren't asserted. It runs the same schema
+  compiler the runtime does, so it rejects exactly what the runtime rejects.
+- **`ContractSchemaCompatibility.Compare(baseline, current)`** compares each file with the file
+  declaring the same `$id` in a baseline directory — a checkout of the base branch, say — both ways:
+  readers of either must accept what the other writes. Adding or removing an optional property is
+  the one freedom; anything else, such as a new required property, a type change, or a tightened
+  constraint, is breaking, and the message says which new `$id` to mint. A changed `default` is a
+  warning, and the legacy version must never change. A line with no counterpart in the baseline is
+  new and has no history to break; one that has been retired isn't reported.
+
+Getting a baseline in GitHub Actions is one extra checkout:
 
 ```yaml
 - uses: actions/checkout@v5
-  with: { fetch-depth: 0 }          # check compares against every earlier revision
-- run: dotnet tool install --global Runax.Messaging.Cli
-- run: runax-messaging contracts lint schemas/ --format github
-- run: runax-messaging contracts check schemas/ --format github
+- uses: actions/checkout@v5                  # the base branch, for the compatibility check
+  with:
+    ref: ${{ github.event.pull_request.base.sha }}
+    path: .baseline
+- run: dotnet test
 ```
+
+> **Compatibility isn't transitive.** A revision can be compatible with the one before it and still
+> break an older one, whose writers may still be running, so a single baseline is a floor rather
+> than a proof. `ContractSchemaCompatibility.Compare(earlier, current, label)` takes two
+> `ContractSchemaDocument`s, so if you can enumerate a line's full history — from version control,
+> or from an archive of what you published — loop over it and compare against every revision.
 
 ## Bus settings
 

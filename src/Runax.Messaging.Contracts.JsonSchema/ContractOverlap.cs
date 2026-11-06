@@ -32,7 +32,7 @@ internal static class ContractOverlap
     private static bool Disjoint(SchemaNode x, SchemaNode y)
     {
         if (Values(x) is { } xs && Values(y) is { } ys)
-            return !xs.Any(v => ys.Any(w => JsonElement.DeepEquals(v, w)));
+            return !xs.Any(v => ys.Any(w => JsonValueEquality.Equal(v, w)));
 
         if (x.Types != JsonTypes.None && y.Types != JsonTypes.None)
             return (Widen(x.Types) & Widen(y.Types)) == JsonTypes.None;

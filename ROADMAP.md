@@ -77,17 +77,17 @@ observability (see [CHANGELOG.md](CHANGELOG.md)).
   replace integer contract versions with schema-based contracts, because an
   integer doesn't check that producer and consumer shapes match. **Design:
   [docs/specs/json-schema-contracts.md](docs/specs/json-schema-contracts.md).
-  In progress: identity, routing, embedded schemas and validation are built
-  ([guide](docs/json-schema-contracts.md)), and so are the `runax-messaging
-  contracts lint` / `check` CI commands; broker-native validation is next.** In short: the schema's `$id` becomes the
+  In progress: identity, routing, embedded schemas, validation, and the lint
+  and compatibility checks are built ([guide](docs/json-schema-contracts.md));
+  broker-native validation is next.** In short: the schema's `$id` becomes the
   wire identity, in a new `__runax.contract_schema` key and
   `runax-contract-schema` native header next to the existing slots, so no
   transport changes. Consumers match the `$id` exactly. Identity on the wire
   is optional: a message without it is routed by validating its body against
   the schemas its consumers declare, and no schema consumer gets it when that's ambiguous. A
-  `runax-messaging contracts` CI gate checks that revisions under one `$id` stay
-  compatible and that each service's types conform to the committed schema,
-  in any language. Opt-in
+  lint and compatibility check, to assert over from a test suite, keeps
+  revisions under one `$id` compatible; conformance of a service's types to the
+  committed schema is still to come. Opt-in
   publish/consume validation goes through the `ISerializer` seam, off by
   default. When it's on, the library validates on every bus by default. A
   bus whose broker validates natively can rely on the broker alone. That's a

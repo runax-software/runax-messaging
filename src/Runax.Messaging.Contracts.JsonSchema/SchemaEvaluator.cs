@@ -29,10 +29,10 @@ internal static class SchemaEvaluator
         if (node.Types != JsonTypes.None && !MatchesType(node.Types, value))
             return Fail(errors, pointer, $"expected {Describe(node.Types)}, got {Describe(value)}");
 
-        if (node.Const is { } constant && !JsonElement.DeepEquals(constant, value))
+        if (node.Const is { } constant && !JsonValueEquality.Equal(constant, value))
             valid &= Fail(errors, pointer, $"must be {constant.GetRawText()}");
 
-        if (node.Enum is { } options && !options.Any(option => JsonElement.DeepEquals(option, value)))
+        if (node.Enum is { } options && !options.Any(option => JsonValueEquality.Equal(option, value)))
             valid &= Fail(errors, pointer, "must be one of the enumerated values");
 
         switch (value.ValueKind)
@@ -125,7 +125,7 @@ internal static class SchemaEvaluator
             {
                 for (var j = i + 1; j < elements.Length; j++)
                 {
-                    if (JsonElement.DeepEquals(elements[i], elements[j]))
+                    if (JsonValueEquality.Equal(elements[i], elements[j]))
                         return Fail(errors, pointer, $"items {i} and {j} are equal, but items must be unique");
                 }
             }

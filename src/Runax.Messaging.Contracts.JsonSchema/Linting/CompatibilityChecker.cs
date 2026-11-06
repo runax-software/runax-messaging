@@ -1,7 +1,5 @@
 using System.Text.Json;
-using Runax.Messaging.Contracts.JsonSchema;
-
-namespace Runax.Messaging.Cli.Contracts;
+namespace Runax.Messaging.Contracts.JsonSchema;
 
 /// <summary>
 /// Compares two revisions of one contract line for <b>full</b> compatibility: readers of either accept what
@@ -12,7 +10,7 @@ namespace Runax.Messaging.Cli.Contracts;
 /// </summary>
 internal sealed class CompatibilityChecker
 {
-    private readonly List<(string Pointer, Severity Severity, string Message)> _findings = [];
+    private readonly List<(string Pointer, ContractSchemaSeverity Severity, string Message)> _findings = [];
     private readonly HashSet<(SchemaNode, SchemaNode)> _visited = [];
 
     private CompatibilityChecker()
@@ -20,7 +18,7 @@ internal sealed class CompatibilityChecker
     }
 
     /// <summary>Returns every difference between <paramref name="earlier"/> and <paramref name="next"/>.</summary>
-    public static IReadOnlyList<(string Pointer, Severity Severity, string Message)> Compare(
+    public static IReadOnlyList<(string Pointer, ContractSchemaSeverity Severity, string Message)> Compare(
         ContractSchemaDocument earlier,
         ContractSchemaDocument next)
     {
@@ -72,7 +70,7 @@ internal sealed class CompatibilityChecker
         CompareBranches(earlier.OneOf, next.OneOf, pointer, "oneOf");
 
         if (!JsonEquals(earlier.Default, next.Default))
-            _findings.Add((pointer, Severity.Warning, "the default changed: same structure, different meaning"));
+            _findings.Add((pointer, ContractSchemaSeverity.Warning, "the default changed: same structure, different meaning"));
     }
 
     private void CompareTypes(JsonTypes earlier, JsonTypes next, string pointer)
@@ -97,8 +95,8 @@ internal sealed class CompatibilityChecker
 
         var before = earlier.Enum ?? [];
         var after = next.Enum ?? [];
-        var added = after.Where(v => !before.Any(w => JsonElement.DeepEquals(v, w))).Select(v => v.GetRawText()).ToArray();
-        var removed = before.Where(v => !after.Any(w => JsonElement.DeepEquals(v, w))).Select(v => v.GetRawText()).ToArray();
+        var added = after.Where(v => !before.Any(w => JsonValueEquality.Equal(v, w))).Select(v => v.GetRawText()).ToArray();
+        var removed = before.Where(v => !after.Any(w => JsonValueEquality.Equal(v, w))).Select(v => v.GetRawText()).ToArray();
         if (earlier.Enum is null || next.Enum is null)
             Breaking(pointer, earlier.Enum is null ? "an enum was added" : "the enum was removed");
         else if (added.Length > 0 || removed.Length > 0)
@@ -232,10 +230,10 @@ internal sealed class CompatibilityChecker
             probe._visited.Add(pair);
 
         probe.CompareNodes(a, b, "");
-        return probe._findings.All(f => f.Severity == Severity.Warning);
+        return probe._findings.All(f => f.Severity == ContractSchemaSeverity.Warning);
     }
 
-    private void Breaking(string pointer, string message) => _findings.Add((pointer, Severity.Error, message));
+    private void Breaking(string pointer, string message) => _findings.Add((pointer, ContractSchemaSeverity.Error, message));
 
     private static bool IsOpen(SchemaNode? additional) =>
         additional is null || ReferenceEquals(additional, SchemaNode.AlwaysValid);
@@ -259,7 +257,7 @@ internal sealed class CompatibilityChecker
         && node.MaxProperties is null;
 
     private static bool JsonEquals(JsonElement? a, JsonElement? b) =>
-        a is null ? b is null : b is not null && JsonElement.DeepEquals(a.Value, b.Value);
+        a is null ? b is null : b is not null && JsonValueEquality.Equal(a.Value, b.Value);
 
     private static string Describe(JsonTypes types) => types == JsonTypes.None
         ? "any"

@@ -55,8 +55,30 @@ Loading schemas turns on:
   schemas on one topic.
 
 Validation uses a built-in evaluator for the contract profile of JSON Schema draft 2020-12. It has
-no dependencies and is native-AOT-safe. See the
-[JSON Schema contracts guide](../../docs/json-schema-contracts.md).
+no dependencies and is native-AOT-safe.
+
+## Checking the committed schema files
+
+Exact `$id` matching is only safe while every revision published under one `$id` accepts what every
+earlier one writes. A running service can't check that — it only has the file it shipped with — so
+assert it from your test suite:
+
+```csharp
+[Fact]
+public void Schemas_pass_the_contract_profile() =>
+    ContractSchemaLinter.Lint("schemas").Errors.ShouldBeEmpty();
+
+[Fact]
+public void Schemas_stay_compatible_with_the_base_branch() =>
+    ContractSchemaCompatibility.Compare("../.baseline/schemas", "schemas").Errors.ShouldBeEmpty();
+```
+
+`ContractSchemaLinter` checks the contract profile — the draft, an `$id` that matches the file path,
+only profile keywords, an open root object, unique `$id`s and legacy versions — with the same
+compiler the runtime uses, so it rejects exactly what the runtime rejects.
+`ContractSchemaCompatibility` reports what a revision broke and which new `$id` to mint instead.
+
+See the [JSON Schema contracts guide](../../docs/json-schema-contracts.md).
 
 ## License
 

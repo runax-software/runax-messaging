@@ -1,8 +1,4 @@
-using Runax.Messaging.Contracts.JsonSchema;
-
-using Runax.Messaging.Cli.Contracts;
-
-namespace Runax.Messaging.Cli.Tests;
+namespace Runax.Messaging.Contracts.JsonSchema.Tests;
 
 /// <summary>The spec's evolution table (§6), row by row.</summary>
 public class CompatibilityCheckerTests
@@ -86,7 +82,7 @@ public class CompatibilityCheckerTests
     {
         var findings = CompatibilityChecker.Compare(Document(earlier), Document(next));
 
-        var actual = findings.Any(f => f.Severity == Severity.Error) ? Verdict.Breaking
+        var actual = findings.Any(f => f.Severity == ContractSchemaSeverity.Error) ? Verdict.Breaking
             : findings.Count > 0 ? Verdict.Warning
             : Verdict.Compatible;
         actual.ShouldBe(expected, $"{change}: {string.Join("; ", findings.Select(f => $"{f.Pointer} {f.Message}"))}");
@@ -99,7 +95,7 @@ public class CompatibilityCheckerTests
             Document(Base),
             Document(Base.Replace("\"required\":[\"id\"]", "\"required\":[\"id\",\"note\"]")));
 
-        findings.ShouldHaveSingleItem().ShouldBe(("/properties/note", Severity.Error, "optional property 'note' was made required"));
+        findings.ShouldHaveSingleItem().ShouldBe(("/properties/note", ContractSchemaSeverity.Error, "optional property 'note' was made required"));
     }
 
     [Fact]
@@ -111,7 +107,7 @@ public class CompatibilityCheckerTests
 
         CompatibilityChecker.Compare(Document(recursive), Document(recursive)).ShouldBeEmpty();
         CompatibilityChecker.Compare(Document(recursive), Document(recursive.Replace("\"integer\"", "\"string\"")))
-            .ShouldContain(f => f.Severity == Severity.Error);
+            .ShouldContain(f => f.Severity == ContractSchemaSeverity.Error);
     }
 
     private static ContractSchemaDocument Document(string body) =>

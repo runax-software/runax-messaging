@@ -1,8 +1,6 @@
-using Runax.Messaging.Cli.Contracts;
+namespace Runax.Messaging.Contracts.JsonSchema.Tests;
 
-namespace Runax.Messaging.Cli.Tests;
-
-public class LinterTests
+public class ContractSchemaLinterTests
 {
     private const string Placed = """
         "type":"object","properties":{"kind":{"const":"order.placed"},"id":{"type":"integer"}},"required":["kind","id"]
@@ -25,7 +23,7 @@ public class LinterTests
             "orders/order-placed/v2.schema.json",
             """{"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://contracts.test/orders/order-placed/v2","required":["id"]}""");
 
-        Lint(dir).ShouldContain(f => f.Severity == Severity.Error && f.Message.Contains("'$schema' must be"));
+        Lint(dir).ShouldContain(f => f.Severity == ContractSchemaSeverity.Error && f.Message.Contains("'$schema' must be"));
     }
 
     [Fact]
@@ -35,7 +33,7 @@ public class LinterTests
             "orders/order-placed/v2.schema.json",
             $$"""{"$schema":"{{SchemaDirectory.Draft}}","$id":"https://contracts.test/orders/order-placed/v3",{{Placed}}}""");
 
-        Lint(dir).ShouldContain(f => f.Pointer == "/$id" && f.Message.Contains("must match the $id"));
+        Lint(dir).ShouldContain(f => f.JsonPointer == "/$id" && f.Message.Contains("must match the $id"));
     }
 
     [Fact]
@@ -49,7 +47,7 @@ public class LinterTests
 
         var findings = Lint(dir);
 
-        findings.ShouldContain(f => f.Pointer == "/requried" && f.Message.Contains("unknown keyword 'requried'"));
+        findings.ShouldContain(f => f.JsonPointer == "/requried" && f.Message.Contains("unknown keyword 'requried'"));
         findings.ShouldNotContain(f => f.Message.Contains("x-owner"));
     }
 
@@ -61,7 +59,7 @@ public class LinterTests
                 "required":["id"],"not":{"required":["x"]}
                 """);
 
-        Lint(dir).ShouldContain(f => f.Severity == Severity.Error && f.Message.Contains("'not' is not part of the contract profile"));
+        Lint(dir).ShouldContain(f => f.Severity == ContractSchemaSeverity.Error && f.Message.Contains("'not' is not part of the contract profile"));
     }
 
     [Fact]
@@ -72,7 +70,7 @@ public class LinterTests
                 "required":["id"],"additionalProperties":false
                 """);
 
-        Lint(dir).ShouldContain(f => f.Pointer == "/additionalProperties" && f.Severity == Severity.Error);
+        Lint(dir).ShouldContain(f => f.JsonPointer == "/additionalProperties" && f.Severity == ContractSchemaSeverity.Error);
     }
 
     [Fact]
@@ -109,8 +107,8 @@ public class LinterTests
 
         var findings = Lint(dir);
 
-        findings.ShouldAllBe(f => f.Severity == Severity.Warning);
-        findings.ShouldContain(f => f.Pointer == "/properties/contact/format" && f.Message.Contains("isn't checked"));
+        findings.ShouldAllBe(f => f.Severity == ContractSchemaSeverity.Warning);
+        findings.ShouldContain(f => f.JsonPointer == "/properties/contact/format" && f.Message.Contains("isn't checked"));
         findings.ShouldContain(f => f.Message.Contains("accepts any JSON object"));
     }
 
@@ -122,5 +120,5 @@ public class LinterTests
         Lint(dir).ShouldHaveSingleItem().Message.ShouldStartWith("not valid JSON");
     }
 
-    private static List<Finding> Lint(SchemaDirectory dir) => Linter.Lint(SchemaFile.FindAll(dir.Root));
+    private static ContractSchemaReport Lint(SchemaDirectory dir) => ContractSchemaLinter.Lint(dir.Root);
 }
