@@ -8,6 +8,8 @@ All packages in the repository are versioned together.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-11-07
+
 ### Breaking
 
 - **A contract has one identity.** Declaring both a `Schema` and an integer version on
@@ -31,8 +33,8 @@ and is removed in the next major release. The plan, the full remaining surface, 
 questions are in
 [docs/specs/removing-integer-contract-versions.md](docs/specs/removing-integer-contract-versions.md).
 
-Because this release breaks API, it is a major. The integer's removal is therefore the major after
-it, not this one.
+3.0 breaks API, which is why it is a major; the integer's removal is therefore 4.0, not this
+release. Upgrading from 2.x: [docs/migrating-to-3.0.md](docs/migrating-to-3.0.md).
 
 ### Added
 
@@ -191,6 +193,7 @@ First stable release.
 - **`Runax.Messaging.TestKit`** — a broker-free `MessagingTestHarness` to publish
   messages and assert what consumers handled, retried, or dead-lettered.
 
-[Unreleased]: https://github.com/runax-software/runax-messaging/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/runax-software/runax-messaging/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/runax-software/runax-messaging/releases/tag/v3.0.0
 [2.0.0]: https://github.com/runax-software/runax-messaging/releases/tag/v2.0.0
 [1.0.0]: https://github.com/runax-software/runax-messaging/releases/tag/v1.0.0

@@ -4,11 +4,17 @@ A lightweight publish/subscribe messaging library for .NET. A small core of
 abstractions with a pluggable transport per broker — publish and consume
 strongly-typed messages without coupling your application to a specific broker.
 
-> **2.0: the bus model.** Configuration is structured around **buses** — a bus is a named,
-> self-contained messaging context wrapping exactly one transport, plus the consumers,
-> serialization, retry policy, and (optionally) outbox around it. Talking to several brokers
-> means registering several buses, and `IBus` is the single publishing abstraction. Coming
-> from 1.x? See [Migrating from 1.x to 2.0](docs/migrating-to-2.0.md).
+> **3.0: contracts identified by schema.** A contract is identified by the `$id` of its JSON
+> Schema document rather than by an integer, because an integer is a label and not a check.
+> Bodies can be validated on publish and consume, and a message carrying no identity at all is
+> routed by the schemas its consumers declare. Coming from 2.x? Almost nothing breaks — see
+> [Migrating from 2.x to 3.0](docs/migrating-to-3.0.md).
+>
+> **Configuration is structured around buses** (since 2.0) — a bus is a named, self-contained
+> messaging context wrapping exactly one transport, plus the consumers, serialization, retry
+> policy, and (optionally) outbox around it. Talking to several brokers means registering several
+> buses, and `IBus` is the single publishing abstraction. Coming from 1.x? See
+> [Migrating from 1.x to 2.0](docs/migrating-to-2.0.md).
 
 - **Typed pub/sub** over a broker-agnostic `IBus` / `MessageConsumer<T>`.
 - **Reliability** — retry with exponential backoff, poison-message handling, and
@@ -269,6 +275,7 @@ Start at the [documentation index](docs/README.md).
 
 **Reference**
 
+- [Migrating from 2.x to 3.0](docs/migrating-to-3.0.md)
 - [Migrating from 1.x to 2.0](docs/migrating-to-2.0.md)
 - [Configuration & per-bus settings](docs/configuration.md)
 - [Architecture & message flow](docs/architecture.md)

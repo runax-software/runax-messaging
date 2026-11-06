@@ -26,6 +26,7 @@ New to the library? Read the [root README](../README.md) quick start first, then
 
 | Page | What it covers |
 | --- | --- |
+| [Migrating from 2.x to 3.0](migrating-to-3.0.md) | What breaks (one thing), adopting schema contracts, switching a contract's identity |
 | [Migrating from 1.x to 2.0](migrating-to-2.0.md) | Mechanical migration rules, behavioral changes, wire-format compatibility |
 | [Configuration](configuration.md) | Every `BusBuilder` setting, scoping and fallback rules, bus modes reference |
 | [Architecture](architecture.md) | Package layering, key types, publish and consume flows, design rules |
