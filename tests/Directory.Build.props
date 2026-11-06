@@ -5,7 +5,9 @@
           Condition="Exists('$([MSBuild]::GetPathOfFileAbove(`Directory.Build.props`, `$(MSBuildThisFileDirectory)../`))')" />
 
   <PropertyGroup Label="Compilation">
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- Mirrors the target frameworks of the libraries under src/, so every supported
+         runtime is actually exercised and not just compiled against. -->
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -32,6 +34,14 @@
     <!-- Coverage is opt-in: add Microsoft.Testing.Extensions.CodeCoverage at a version
          built against the Microsoft.Testing.Platform that xunit.v3 bundles, otherwise
          it fails at run time with a TypeLoadException on IDataConsumer. -->
+  </ItemGroup>
+
+  <!-- Shouldly's net8.0 asset has no dictionary assertions for IReadOnlyDictionary, which is how
+       message headers are exposed. tests/Compat stands in for them so the assertions read the same
+       on every target framework; see the files there for details. -->
+  <ItemGroup Label="net8.0 compatibility" Condition="'$(TargetFramework)' == 'net8.0'">
+    <Compile Include="$(MSBuildThisFileDirectory)Compat/*.net8.cs"
+             Link="Compat/%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup Label="Convenience global usings">

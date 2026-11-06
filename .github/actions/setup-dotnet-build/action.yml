@@ -3,9 +3,15 @@ description: Checkout, setup .NET SDK, restore, and build the solution
 
 inputs:
   dotnet-version:
-    description: .NET SDK version
+    # The 10.0 SDK builds every target framework; the 8.0 and 9.0 SDKs are installed for the
+    # runtimes that come with them, which is what runs the net8.0 and net9.0 test assemblies.
+    # global.json pins the build to the 10.0 SDK regardless of install order.
+    description: .NET SDK versions to install, one per line
     required: false
-    default: "10.0.x"
+    default: |
+      8.0.x
+      9.0.x
+      10.0.x
   warnings-as-errors:
     description: Treat warnings as errors during build
     required: false

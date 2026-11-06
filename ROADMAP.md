@@ -33,6 +33,14 @@ observability (see [CHANGELOG.md](CHANGELOG.md)).
 
 - [ ] **ActiveMQ transport** (`Runax.Messaging.Transports.ActiveMq`) — publish/
   consume over ActiveMQ (Artemis / classic) via the `IMessagingTransport` SPI.
+- [ ] **Amazon EventBridge transport** (`Runax.Messaging.Transports.Aws.EventBridge`)
+  — publish to an EventBridge event bus with `PutEvents` (up to 10 entries per
+  call, so `PublishBatchAsync` maps onto it). Publish-only: `SubscribeAsync`
+  throws, and buses using it run in `BusMode.PublishOnly`. Consuming EventBridge
+  events goes through a rule that targets SQS, which the SQS transport already
+  covers. The topic becomes the event's `DetailType`; the event bus name and
+  `Source` come from the config. Events carry no per-event headers, so metadata
+  stays in the `__runax` envelope inside `Detail`.
 - [ ] **BullMQ transport** (`Runax.Messaging.Transports.BullMq`) — interop with
   BullMQ job queues over Redis: enqueue jobs that Node.js BullMQ workers pick up,
   and consume jobs enqueued from Node. Unlike the other transports this targets a

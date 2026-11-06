@@ -8,12 +8,17 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
-  <!-- Core / shared abstractions used by Runax.Messaging and every transport. -->
+  <!-- Core / shared abstractions used by Runax.Messaging and every transport.
+       One version for all target frameworks, not a lower floor per TFM: the broker SDKs
+       already require Microsoft.Extensions.* 10.0.x from their net8.0 assets too (Azure.Core
+       -> Hosting.Abstractions 10.0.10, StackExchange.Redis -> Logging.Abstractions 10.0.13),
+       so pinning these back for net8.0/net9.0 only produces NU1109 downgrade errors. The
+       packages themselves are netstandard2.0/net8.0-compatible, so they load on .NET 8. -->
   <ItemGroup Label="Core">
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.10" />
@@ -21,18 +26,18 @@
 
   <!-- Transport implementations, each in its own Runax.Messaging.<Transport> library. -->
   <ItemGroup Label="Transports">
-    <PackageVersion Include="AWSSDK.SQS" Version="4.0.100.17" />
-    <PackageVersion Include="AWSSDK.SimpleNotificationService" Version="4.0.100.16" />
+    <PackageVersion Include="AWSSDK.SQS" Version="4.0.100.22" />
+    <PackageVersion Include="AWSSDK.SimpleNotificationService" Version="4.0.100.22" />
     <PackageVersion Include="RabbitMQ.Client" Version="7.2.2" />
     <PackageVersion Include="Google.Cloud.PubSub.V1" Version="3.39.0" />
     <PackageVersion Include="Confluent.Kafka" Version="2.16.0" />
-    <PackageVersion Include="Azure.Core" Version="1.63.0" />
+    <PackageVersion Include="Azure.Core" Version="1.64.0" />
     <PackageVersion Include="Azure.Messaging.ServiceBus" Version="7.21.0" />
     <PackageVersion Include="Azure.Messaging.EventHubs" Version="5.12.2" />
     <PackageVersion Include="Azure.Messaging.EventHubs.Processor" Version="5.12.2" />
     <PackageVersion Include="Azure.Storage.Blobs" Version="12.30.1" />
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />
-    <PackageVersion Include="StackExchange.Redis" Version="3.4.5" />
+    <PackageVersion Include="StackExchange.Redis" Version="3.4.31" />
   </ItemGroup>
 
   <!-- The runax-messaging command-line tool. -->
@@ -49,8 +54,8 @@
     <PackageVersion Include="Shouldly" Version="4.3.0" />
     <!-- Concrete DI container, logging, and Generic Host, used to exercise
          registration and the hosted consumer end-to-end in tests. -->
-    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.Testing" Version="10.8.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />

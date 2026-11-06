@@ -32,10 +32,12 @@ needs its references:
 Reference **only** `Runax.Messaging.Abstractions` — not the core package or other
 transports.
 
-`src/Directory.Build.props` also sets `IsAotCompatible`, so the trim and AOT analyzers check
-your transport on every build. Whether apps can actually use it under native AOT also depends on
-your broker SDK; add the package to `tests/Runax.Messaging.AotSmoke` when the SDK publishes
-cleanly (see [Native AOT & trimming](aot.md)).
+`src/Directory.Build.props` also sets the target frameworks (`net8.0;net9.0;net10.0`) and
+`IsAotCompatible`, so your transport is built three times and the trim and AOT analyzers check it
+on every build. net8.0 is the floor: an API that arrived in a later framework needs an
+`#if NET9_0_OR_GREATER` around it. Whether apps can actually use the transport under native AOT
+also depends on your broker SDK; add the package to `tests/Runax.Messaging.AotSmoke` when the SDK
+publishes cleanly (see [Native AOT & trimming](aot.md)).
 
 ## 2. Implement `IMessagingTransport`
 

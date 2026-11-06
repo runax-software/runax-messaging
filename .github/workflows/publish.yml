@@ -15,10 +15,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The 10.0 SDK packs all three target frameworks on its own, but installing 8.0 and 9.0
+      # alongside it means their targeting packs come from disk instead of a NuGet download.
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: "10.0.x"
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
 
       # Exchanges the GitHub OIDC token for a short-lived nuget.org API key.
       # Requires a Trusted Publishing policy on nuget.org for this repo/workflow.
