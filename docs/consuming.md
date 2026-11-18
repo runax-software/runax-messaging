@@ -70,6 +70,43 @@ startup and handles every message for as long as the host runs. Two rules follow
   (`bus.AddConsumer<T>()` in each block) subscribes that single instance on both transports;
   each bus's traffic still flows through that bus's own retry and dead-letter policy.
 
+### Consumers from a delegate, on runtime topics
+
+`AddConsumer<T>()` needs a type whose `Topic` is fixed at compile time. When the topics come from
+configuration, or their number is known only at startup, register a delegate instead:
+
+```csharp
+builder.Services.AddRunaxMessaging(messaging =>
+{
+    messaging.AddBus("orders", bus =>
+    {
+        bus.AddTransport(new RabbitMqConfig { Uri = rabbitUri });
+
+        foreach (var topic in settings.AuditedTopics)
+            bus.AddConsumer(topic, (context, cancellationToken) => audit.WriteAsync(context, cancellationToken));
+    });
+});
+```
+
+- **The handler gets the `MessageContext`,** not a typed payload: its topic, headers, and body.
+  Call `context.Deserialize<T>()` when you want one.
+- **It declares no contract,** so it's an unversioned consumer that accepts every message on its
+  topic ([Contract versioning](#contract-versioning)).
+- **Everything else is the same pipeline.** Throw to retry; the bus's retry, poison, and
+  dead-letter policy apply exactly as for a `MessageConsumer<T>`.
+
+**From outside the bus's block.** Code that doesn't own a bus's `AddBus` block, such as a library
+adding subscriptions to a bus its host application set up, adds a delegate consumer through the
+configurator, naming the bus:
+
+```csharp
+messaging.AddConsumer("orders", "orders.placed", (context, cancellationToken) => feed.OfferAsync(context, cancellationToken));
+```
+
+The bus can be added before or after this call. It's checked when the host starts: a bus that was
+never added, or a `PublishOnly` one, fails startup. Consumers from inside and outside the block
+share the bus's one dispatcher and one subscription per topic.
+
 ## The dispatch pipeline, end to end
 
 Every delivered message runs through the same pipeline in the bus's dispatcher
@@ -393,7 +430,8 @@ runtime (and requeue, per the failure rule above) — use `DeadLetterStrategy.Br
 ## Hosting
 
 Consuming requires a .NET Generic Host. Each consuming bus gets its **own**
-`MessageConsumerHostedService`, registered automatically — a `PublishOnly` bus starts none:
+`MessageConsumerHostedService`, registered automatically when the bus has a consumer, whether
+added in its block or from outside it — a `PublishOnly` bus starts none:
 
 - **Subscribe at startup.** The service resolves the bus's registered consumers, groups them by
   `Topic`, and calls the transport's `SubscribeAsync` once for the whole topic set. A consuming

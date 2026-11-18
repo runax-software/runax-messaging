@@ -79,15 +79,74 @@ public static class MessagingConfiguratorExtensions
         services.AddKeyedSingleton<IBus>(name, (sp, _) =>
             new Bus(name, mode, headerSettings, sp, sp.GetRequiredService<IMessageSerializerProvider>()));
 
-        // Each consuming bus gets its own hosted service so buses subscribe, run, and shut
-        // down independently. A PublishOnly bus can't have consumers (validated above).
+        // A PublishOnly bus can't have consumers (validated above).
         if (builder.Consumers.Count > 0)
-        {
-            services.AddSingleton<IHostedService>(sp =>
-                ActivatorUtilities.CreateInstance<MessageConsumerHostedService>(
-                    sp, name, headerSettings, contractSettings));
-        }
+            AddConsumerHost(services, name);
 
         return configurator;
     }
+
+    /// <summary>
+    /// Adds a consumer from a delegate to a bus, outside that bus's <c>AddBus</c> block. Use it when
+    /// the code that consumes doesn't own the bus's setup, such as a library adding subscriptions to
+    /// a bus its host application registered. The bus may be added before or after this call.
+    /// </summary>
+    /// <remarks>
+    /// The consumer behaves exactly like one registered with
+    /// <see cref="BusBuilder.AddConsumer(string, Func{MessageContext, CancellationToken, ValueTask})"/>
+    /// inside the block. Whether the bus exists and can consume is checked when the host starts: a
+    /// missing bus or a <see cref="BusMode.PublishOnly"/> one fails startup.
+    /// </remarks>
+    /// <param name="configurator">The messaging configurator.</param>
+    /// <param name="busName">The name of the bus to consume on.</param>
+    /// <param name="topic">The topic to consume.</param>
+    /// <param name="handler">Handles each message. Throw to retry it per the bus's policy.</param>
+    /// <returns>The same configurator, to allow chaining.</returns>
+    /// <exception cref="ArgumentException"><paramref name="busName"/> or <paramref name="topic"/> is null or empty.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="handler"/> is null.</exception>
+    public static MessagingConfigurator AddConsumer(
+        this MessagingConfigurator configurator,
+        string busName,
+        string topic,
+        Func<MessageContext, CancellationToken, ValueTask> handler)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(busName);
+
+        configurator.Services.AddSingleton(ConsumerRegistration.ForDelegate(busName, topic, handler));
+        AddConsumerHost(configurator.Services, busName);
+        return configurator;
+    }
+
+    // Each consuming bus gets one hosted service, so buses subscribe, run, and shut down
+    // independently. It's added by whichever comes first, the bus's own block or a consumer added
+    // from outside it, so the bus is checked when the host starts rather than here.
+    private static void AddConsumerHost(IServiceCollection services, string busName)
+    {
+        if (services.Any(d => d.ImplementationInstance is ConsumerHostMarker marker && marker.Bus == busName))
+            return;
+
+        services.AddSingleton(new ConsumerHostMarker(busName));
+        services.AddSingleton<IHostedService>(sp =>
+        {
+            var bus = sp.GetServices<BusRegistration>().FirstOrDefault(r => r.Name == busName)
+                ?? throw new InvalidOperationException(
+                    $"A consumer was added to bus '{busName}', but no bus with that name is registered. " +
+                    $"Add it with messaging.AddBus(\"{busName}\", ...).");
+
+            if (bus.Mode == BusMode.PublishOnly)
+            {
+                var consumer = sp.GetServices<ConsumerRegistration>().First(r => r.Bus == busName);
+                throw new InvalidOperationException(
+                    $"Bus '{busName}' is PublishOnly, but {consumer.Description} was registered on it.");
+            }
+
+            return ActivatorUtilities.CreateInstance<MessageConsumerHostedService>(
+                sp,
+                busName,
+                sp.GetRequiredKeyedService<BusHeaderSettings>(busName),
+                sp.GetRequiredKeyedService<BusContractSettings>(busName));
+        });
+    }
+
+    private sealed record ConsumerHostMarker(string Bus);
 }

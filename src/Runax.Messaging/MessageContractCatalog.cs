@@ -75,7 +75,7 @@ internal sealed class MessageContractCatalog(
         var entries = new List<Entry>();
         foreach (var registration in registrations)
         {
-            var consumer = (IMessageConsumer)serviceProvider.GetRequiredService(registration.ConsumerType);
+            var consumer = registration.Resolve(serviceProvider);
             entries.Add(new Entry(consumer.Topic, consumer.ContractVersion, consumer.ContractSchemas));
         }
 
