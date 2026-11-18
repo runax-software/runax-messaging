@@ -8,6 +8,16 @@ All packages in the repository are versioned together.
 
 ## [Unreleased]
 
+### Added
+
+- **Consumers from a delegate, on runtime topics** — `bus.AddConsumer(topic, handler)` registers a
+  consumer whose topic is known only at startup, such as one read from configuration. The handler
+  receives the `MessageContext`; the consumer is unversioned, and the bus's retry and dead-letter
+  policy apply as for any consumer.
+- **Consumers added outside a bus's block** — `messaging.AddConsumer(busName, topic, handler)` adds a
+  delegate consumer to a bus that other code sets up, before or after its `AddBus` call. A missing
+  or `PublishOnly` bus fails startup. Guide: [consuming](docs/consuming.md#consumers-from-a-delegate-on-runtime-topics).
+
 ## [3.0.0] - 2026-11-07
 
 ### Breaking

@@ -42,7 +42,7 @@ internal sealed class MessageConsumerHostedService(
             if (registration.Bus != busName)
                 continue;
 
-            var consumer = (IMessageConsumer)serviceProvider.GetRequiredService(registration.ConsumerType);
+            var consumer = registration.Resolve(serviceProvider);
             if (!topicConsumers.TryGetValue(consumer.Topic, out var list))
             {
                 list = [];

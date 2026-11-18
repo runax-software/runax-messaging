@@ -19,7 +19,7 @@ namespace Runax.Messaging;
 /// </summary>
 public sealed class BusBuilder
 {
-    private readonly List<Type> _consumers = [];
+    private readonly List<ConsumerRegistration> _consumers = [];
     private readonly List<string> _consumeSidePolicies = [];
     private readonly List<Action<BusBuilder>> _validations = [];
     private TransportConfig? _transportConfig;
@@ -73,7 +73,7 @@ public sealed class BusBuilder
 
     internal TransportConfig? TransportConfig => _transportConfig;
 
-    internal IReadOnlyList<Type> Consumers => _consumers;
+    internal IReadOnlyList<ConsumerRegistration> Consumers => _consumers;
 
     /// <summary>
     /// Registers a validation callback run when the <c>AddBus</c> block completes. Extension
@@ -160,8 +160,32 @@ public sealed class BusBuilder
         where TConsumer : class
     {
         Services.TryAddSingleton<TConsumer>();
-        Services.AddSingleton(new ConsumerRegistration { ConsumerType = typeof(TConsumer), Bus = BusName });
-        _consumers.Add(typeof(TConsumer));
+        return AddConsumerRegistration(new ConsumerRegistration { ConsumerType = typeof(TConsumer), Bus = BusName });
+    }
+
+    /// <summary>
+    /// Registers a consumer from a delegate, on a topic known only at runtime. The handler receives
+    /// every message on the topic as a <see cref="MessageContext"/>, without deserializing it; call
+    /// <see cref="MessageContext.Deserialize{T}"/> to read the body. The bus's retry and
+    /// dead-letter policy apply as for any other consumer.
+    /// </summary>
+    /// <remarks>
+    /// The consumer declares no contract, so it accepts every message on its topic. Several
+    /// consumers on one topic share one subscription and are called one after another for each
+    /// message, so a handler that waits holds up the others.
+    /// </remarks>
+    /// <param name="topic">The topic to consume.</param>
+    /// <param name="handler">Handles each message. Throw to retry it per the bus's policy.</param>
+    /// <returns>The same builder, to allow chaining.</returns>
+    /// <exception cref="ArgumentException"><paramref name="topic"/> is null or empty.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="handler"/> is null.</exception>
+    public BusBuilder AddConsumer(string topic, Func<MessageContext, CancellationToken, ValueTask> handler) =>
+        AddConsumerRegistration(ConsumerRegistration.ForDelegate(BusName, topic, handler));
+
+    private BusBuilder AddConsumerRegistration(ConsumerRegistration registration)
+    {
+        Services.AddSingleton(registration);
+        _consumers.Add(registration);
         return this;
     }
 
@@ -354,7 +378,7 @@ public sealed class BusBuilder
             if (_consumers.Count > 0)
             {
                 throw new InvalidOperationException(
-                    $"Bus '{BusName}' is PublishOnly, but consumer '{_consumers[0].Name}' was registered on it.");
+                    $"Bus '{BusName}' is PublishOnly, but {_consumers[0].Description} was registered on it.");
             }
 
             if (_consumeSidePolicies.Count > 0)

@@ -20,7 +20,7 @@ internal sealed class ContractSchemaStartupCheck(
     public Task StartAsync(CancellationToken cancellationToken)
     {
         var topics = registrations
-            .Select(r => (r.Bus, Consumer: (IMessageConsumer)services.GetRequiredService(r.ConsumerType)))
+            .Select(r => (r.Bus, Consumer: r.Resolve(services)))
             .GroupBy(x => (x.Bus, x.Consumer.Topic));
 
         foreach (var topic in topics)
