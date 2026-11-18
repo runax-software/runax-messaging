@@ -17,6 +17,17 @@ All packages in the repository are versioned together.
 - **Consumers added outside a bus's block** — `messaging.AddConsumer(busName, topic, handler)` adds a
   delegate consumer to a bus that other code sets up, before or after its `AddBus` call. A missing
   or `PublishOnly` bus fails startup. Guide: [consuming](docs/consuming.md#consumers-from-a-delegate-on-runtime-topics).
+- **Partition keys** — set the `MessageHeaders.PartitionKey` header (`runax-partition-key`) on a publish to
+  keep messages with the same key in order. Kafka maps it to the record key and Event Hubs to the partition
+  key; other transports ignore it for now. Transports read it from the new `TransportMessage.PartitionKey`,
+  which is set even when native headers are off, and the outbox and framework-managed dead-letters keep it.
+  Guide: [publishing](docs/publishing.md#partition-keys-keeping-related-messages-in-order).
+
+### Fixed
+
+- **Kafka consumers accept keyed records.** The consumer deserialized record keys as `Null`, so a record
+  with a key, such as one from a producer in another language, failed to deserialize. Keys are now read as
+  strings, and the `DeadLetter` copy keeps the original key.
 
 ## [3.0.0] - 2026-11-07
 

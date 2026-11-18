@@ -68,6 +68,10 @@ See [Configuration & per-bus settings](../../docs/configuration.md).
 
 - **Publish** sends the serialized envelope to the event hub named after the runax topic (via
   `EventHubProducerClient`). `PublishBatchAsync` packs events into size-bounded `EventDataBatch`es.
+- **Partition key.** A message's `MessageHeaders.PartitionKey` header becomes the batch's partition key,
+  so events with the same key go to the same partition, in order. A batch holds one key, so
+  `PublishBatchAsync` starts a new batch wherever the key changes and sends them in turn, keeping the
+  original order. See [Publishing](../../docs/publishing.md#partition-keys-keeping-related-messages-in-order).
 - **Native headers** travel as event properties, and a `{topic}.dead-letter` republish keeps them.
   See [Headers & interop](../../docs/headers.md).
 - **Subscribe** runs an `EventProcessorClient` per topic over the configured consumer group, using a

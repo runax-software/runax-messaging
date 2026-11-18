@@ -21,6 +21,13 @@ public static class MessageHeaders
     /// <summary>The contract version of a <c>[MessageContract]</c> message, as an invariant-culture integer.</summary>
     public const string ContractVersion = "runax-contract-version";
 
+    /// <summary>
+    /// The message's partition or ordering key. Set it on a publish to keep messages with the same key in order:
+    /// transports that have such a key map it natively (the Kafka record key, the Event Hubs partition key), and
+    /// the others ignore it. It also travels as an ordinary header, so consumers can read it.
+    /// </summary>
+    public const string PartitionKey = "runax-partition-key";
+
     /// <summary>The W3C trace context <c>traceparent</c> header.</summary>
     public const string TraceParent = "traceparent";
 

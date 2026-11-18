@@ -40,11 +40,9 @@ internal sealed class OutboxDispatcher(
                 {
                     if (stoppingToken.IsCancellationRequested) break;
 
-                    var nativeHeaders = headerSettings.WriteNativeHeaders
-                        ? NativeHeaders.FromEnvelope(message.Payload)
-                        : null;
                     await transport.PublishAsync(
-                        new TransportMessage(message.Topic, message.Payload, nativeHeaders), stoppingToken);
+                        NativeHeaders.ForEnvelope(message.Topic, message.Payload, headerSettings.WriteNativeHeaders),
+                        stoppingToken);
                     await store.MarkDispatchedAsync(message.Id, stoppingToken);
                 }
             }

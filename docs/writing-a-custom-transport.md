@@ -141,6 +141,10 @@ so there is one code path. Implement **both** publish overloads: the default bat
 and `MessageHeaders.FormatValue` turns typed broker values into strings. Headers that don't fit
 can simply be skipped, because the envelope still carries them. See [Headers & interop](headers.md).
 
+If your broker has a partition or ordering key, map `message.PartitionKey` onto it in the same
+overloads. The bus sets it from the `MessageHeaders.PartitionKey` header, even when it writes no native
+headers. Brokers without such a key ignore it.
+
 ## 3. Derive `TransportConfig`
 
 This is how callers select your transport — instead of shipping an `Add<Broker>` extension

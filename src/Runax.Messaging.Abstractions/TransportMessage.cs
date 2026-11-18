@@ -38,4 +38,11 @@ public sealed class TransportMessage
 
     /// <summary>Gets the native headers. Empty when the message carries none.</summary>
     public IReadOnlyDictionary<string, string> Headers { get; }
+
+    /// <summary>
+    /// Gets the partition or ordering key of an outgoing message, from its <see cref="MessageHeaders.PartitionKey"/>
+    /// header, or <see langword="null"/> for none. Set even when the bus writes no native headers. Transports that
+    /// have a native key map it (the Kafka record key, the Event Hubs partition key); the others ignore it.
+    /// </summary>
+    public string? PartitionKey { get; init; }
 }
