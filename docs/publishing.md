@@ -175,6 +175,27 @@ Rules of the road:
 There is no headers overload on `PublishBatchAsync`; a batch carries only the injected
 trace context (shared by every message in the batch).
 
+### Partition keys: keeping related messages in order
+
+Set the reserved `MessageHeaders.PartitionKey` header (`runax-partition-key`) to keep messages that
+share a key in order:
+
+```csharp
+await bus.PublishAsync(
+    "orders.placed",
+    order,
+    new Dictionary<string, string> { [MessageHeaders.PartitionKey] = order.CustomerId },
+    ct);
+```
+
+- **Transports that have a key use it natively.** Kafka makes it the record key and Event Hubs the
+  partition key, so every message with the same key lands on the same partition, in order. The other
+  transports ignore it for now.
+- **It's also an ordinary header,** so consumers can read it from `MessageContext.Headers`.
+- **It works with native headers turned off** (`bus.WriteNativeHeaders = false`), and survives the
+  outbox and framework-managed dead-lettering.
+- **Batches don't carry one yet,** because `PublishBatchAsync` takes no headers.
+
 ## Batching
 
 `PublishBatchAsync` publishes several messages to the **same topic** in one call:

@@ -17,6 +17,20 @@ public class KafkaHeaderMappingTests
     }
 
     [Fact]
+    public void The_partition_key_becomes_the_record_key()
+    {
+        var record = KafkaTransport.ToKafkaMessage(new TransportMessage("orders", "{}") { PartitionKey = "customer-42" });
+
+        record.Key.ShouldBe("customer-42");
+    }
+
+    [Fact]
+    public void A_message_without_a_partition_key_gets_a_null_record_key()
+    {
+        KafkaTransport.ToKafkaMessage(new TransportMessage("orders", "{}")).Key.ShouldBeNull();
+    }
+
+    [Fact]
     public void A_message_without_headers_gets_no_record_headers()
     {
         KafkaTransport.ToKafkaMessage(new TransportMessage("orders", "{}")).Headers.ShouldBeNull();

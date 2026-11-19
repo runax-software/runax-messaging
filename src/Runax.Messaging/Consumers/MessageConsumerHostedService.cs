@@ -368,15 +368,21 @@ internal sealed class MessageConsumerHostedService(
             };
 
             var enriched = serializerProvider.For(busName, topic).EnrichHeaders(message.Body, deadLetterHeaders);
+            var headers = context?.Headers ?? message.Headers;
             var nativeHeaders = headerSettings.WriteNativeHeaders
                 ? NativeHeaders.Build(
                     context?.ContractName,
                     context?.ContractVersion,
                     context?.ContractSchema,
-                    (context?.Headers ?? message.Headers).Concat(deadLetterHeaders))
+                    headers.Concat(deadLetterHeaders))
                 : null;
 
-            await Transport.PublishAsync(new TransportMessage(deadLetterTopic, enriched, nativeHeaders), cancellationToken);
+            // Keep the partition key, so dead-lettered messages with the same key stay together and in order.
+            var deadLetter = new TransportMessage(deadLetterTopic, enriched, nativeHeaders)
+            {
+                PartitionKey = headers.GetValueOrDefault(MessageHeaders.PartitionKey),
+            };
+            await Transport.PublishAsync(deadLetter, cancellationToken);
             logger.LogInformation("Dead-lettered message from '{Topic}' to '{DeadLetterTopic}'.", topic, deadLetterTopic);
             return MessageDisposition.Acknowledge;
         }

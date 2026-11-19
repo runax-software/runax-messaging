@@ -71,6 +71,9 @@ Kafka for events and Kafka for audit are simply two buses, each with its own `Ka
   by default. A `ConsumeOnly` bus creates no producer.
 - **Batch publish** (`PublishBatchAsync`) pipelines every produce and awaits all
   delivery reports for the batch together.
+- **Partition key.** A message's `MessageHeaders.PartitionKey` header becomes the record key, so
+  records with the same key go to the same partition, in order. Without one the key is null. The
+  `DeadLetter` copy keeps the key. See [Publishing](../../docs/publishing.md#partition-keys-keeping-related-messages-in-order).
 - **Native headers** travel as UTF-8 record headers; a repeated key resolves to its last
   value. The `DeadLetter` copy keeps the original record headers. See [Headers & interop](../../docs/headers.md).
 - **Subscribe** joins `ConsumerGroupId`, subscribes to each topic, and polls on a

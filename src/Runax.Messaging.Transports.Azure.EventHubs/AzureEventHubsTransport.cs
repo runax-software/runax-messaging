@@ -43,7 +43,8 @@ internal sealed class AzureEventHubsTransport : IMessagingTransport, IDisposable
     public async ValueTask PublishAsync(TransportMessage message, CancellationToken cancellationToken = default)
     {
         var producer = GetProducer(message.Topic);
-        using var batch = await producer.CreateBatchAsync(cancellationToken).ConfigureAwait(false);
+        using var batch = await producer.CreateBatchAsync(BatchOptions(message.PartitionKey), cancellationToken)
+            .ConfigureAwait(false);
         if (!batch.TryAdd(ToEventData(message)))
             throw new InvalidOperationException($"Event for topic '{message.Topic}' is too large for an Event Hubs batch.");
 
@@ -70,30 +71,52 @@ internal sealed class AzureEventHubsTransport : IMessagingTransport, IDisposable
         CancellationToken cancellationToken)
     {
         var producer = GetProducer(topic);
+        await SendInBatchesAsync(
+                topic,
+                messages,
+                (options, ct) => producer.CreateBatchAsync(options, ct),
+                (batch, ct) => producer.SendAsync(batch, ct),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
 
-        // Event Hubs batches are size-bounded; roll over to a new batch whenever an event does not fit.
-        var batch = await producer.CreateBatchAsync(cancellationToken).ConfigureAwait(false);
+    // Event Hubs batches are size-bounded, and every event in a batch shares one partition key. Roll over to a new
+    // batch whenever an event does not fit or its key differs from the previous one; sending the batches in turn
+    // keeps the messages in their original order.
+    internal static async ValueTask SendInBatchesAsync(
+        string topic,
+        IReadOnlyList<TransportMessage> messages,
+        Func<CreateBatchOptions, CancellationToken, ValueTask<EventDataBatch>> createBatch,
+        Func<EventDataBatch, CancellationToken, Task> send,
+        CancellationToken cancellationToken)
+    {
+        var partitionKey = messages[0].PartitionKey;
+        var batch = await createBatch(BatchOptions(partitionKey), cancellationToken).ConfigureAwait(false);
         try
         {
             foreach (var message in messages)
             {
                 var eventData = ToEventData(message);
-                if (batch.TryAdd(eventData))
+                var sameKey = string.Equals(message.PartitionKey, partitionKey, StringComparison.Ordinal);
+                if (sameKey && batch.TryAdd(eventData))
                     continue;
 
-                if (batch.Count == 0)
+                if (sameKey && batch.Count == 0)
                     throw new InvalidOperationException($"Event for topic '{topic}' is too large for an Event Hubs batch.");
 
-                await producer.SendAsync(batch, cancellationToken).ConfigureAwait(false);
+                if (batch.Count > 0)
+                    await send(batch, cancellationToken).ConfigureAwait(false);
+
                 batch.Dispose();
-                batch = await producer.CreateBatchAsync(cancellationToken).ConfigureAwait(false);
+                partitionKey = message.PartitionKey;
+                batch = await createBatch(BatchOptions(partitionKey), cancellationToken).ConfigureAwait(false);
 
                 if (!batch.TryAdd(eventData))
                     throw new InvalidOperationException($"Event for topic '{topic}' is too large for an Event Hubs batch.");
             }
 
             if (batch.Count > 0)
-                await producer.SendAsync(batch, cancellationToken).ConfigureAwait(false);
+                await send(batch, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -235,6 +258,9 @@ internal sealed class AzureEventHubsTransport : IMessagingTransport, IDisposable
         // Advance past the message in both cases so it is not reprocessed.
         await args.UpdateCheckpointAsync(args.CancellationToken).ConfigureAwait(false);
     }
+
+    // Event Hubs hashes the partition key to pick a partition, so events with the same key stay in order.
+    internal static CreateBatchOptions BatchOptions(string? partitionKey) => new() { PartitionKey = partitionKey };
 
     internal static EventData ToEventData(TransportMessage message)
     {

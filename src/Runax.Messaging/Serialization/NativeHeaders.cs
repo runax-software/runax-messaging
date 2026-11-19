@@ -59,6 +59,23 @@ internal static class NativeHeaders
     }
 
     /// <summary>
+    /// Builds the transport message for an already-serialized envelope (e.g. one stored by the outbox): its
+    /// native headers when <paramref name="writeNativeHeaders"/> is set, and its partition key either way.
+    /// </summary>
+    public static TransportMessage ForEnvelope(string topic, string envelopeJson, bool writeNativeHeaders)
+    {
+        var metadata = EnvelopeSerializer.ReadMetadata(envelopeJson);
+        var native = writeNativeHeaders
+            ? Build(metadata.ContractName, metadata.ContractVersion, metadata.ContractSchema, metadata.Headers)
+            : null;
+
+        return new TransportMessage(topic, envelopeJson, native)
+        {
+            PartitionKey = metadata.Headers.GetValueOrDefault(MessageHeaders.PartitionKey),
+        };
+    }
+
+    /// <summary>
     /// Merges a received message's native headers into the context decoded from its envelope. Headers are
     /// merged key by key, and so are the contract name and version (read from <see cref="MessageHeaders"/>'s
     /// contract headers, which are not repeated in <see cref="MessageContext.Headers"/>); where both copies

@@ -62,6 +62,54 @@ public class NativeHeadersTests
         transport.Published.ShouldAllBe(m => m.Headers[MessageHeaders.ContractVersion] == "2");
     }
 
+    // --- Partition key ---------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task The_partition_key_header_reaches_the_transport_whether_or_not_native_headers_are_written(bool native)
+    {
+        var transport = new CapturingTransport();
+        await using var provider = BuildProvider(transport, bus => bus.WriteNativeHeaders = native);
+
+        await provider.GetRequiredService<IBus>().PublishAsync(
+            "orders", new OrderPlaced(1), new Dictionary<string, string> { [MessageHeaders.PartitionKey] = "customer-42" });
+
+        var message = transport.Published.ShouldHaveSingleItem();
+        message.PartitionKey.ShouldBe("customer-42");
+        message.Body.ShouldContain("\"runax-partition-key\":\"customer-42\"");
+    }
+
+    [Fact]
+    public async Task A_message_without_the_partition_key_header_has_no_partition_key()
+    {
+        var transport = new CapturingTransport();
+        await using var provider = BuildProvider(transport);
+
+        await provider.GetRequiredService<IBus>().PublishAsync("orders", new OrderPlaced(1), TenantHeader);
+
+        transport.Published.ShouldHaveSingleItem().PartitionKey.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void A_stored_envelope_keeps_its_partition_key(bool native)
+    {
+        var envelope = new EnvelopeSerializer(new SystemTextJsonSerializer()).Serialize(
+            new OrderPlaced(1), new Dictionary<string, string> { [MessageHeaders.PartitionKey] = "customer-42" });
+
+        var message = NativeHeaders.ForEnvelope("orders", envelope, native);
+
+        message.Topic.ShouldBe("orders");
+        message.Body.ShouldBe(envelope);
+        message.PartitionKey.ShouldBe("customer-42");
+        if (native)
+            message.Headers.ShouldContainKeyAndValue(MessageHeaders.ContractVersion, "2");
+        else
+            message.Headers.ShouldBeEmpty();
+    }
+
     // --- Merging on receive ---------------------------------------------------------------------
 
     [Fact]
@@ -175,7 +223,7 @@ public class NativeHeadersTests
     }
 
     [Fact]
-    public async Task A_dead_lettered_copy_keeps_the_native_headers_and_adds_the_dead_letter_reason()
+    public async Task A_dead_lettered_copy_keeps_the_native_headers_and_partition_key_and_adds_the_dead_letter_reason()
     {
         var builder = Host.CreateApplicationBuilder();
         builder.Services.AddRunaxMessaging(m => m.AddBus(bus =>
@@ -195,12 +243,14 @@ public class NativeHeadersTests
             return ValueTask.FromResult(MessageDisposition.Acknowledge);
         }, stop.Token);
 
-        await transport.PublishAsync(new TransportMessage("orders", """{"Id":7}""", TenantHeader));
+        var headers = new Dictionary<string, string>(TenantHeader) { [MessageHeaders.PartitionKey] = "customer-42" };
+        await transport.PublishAsync(new TransportMessage("orders", """{"Id":7}""", headers));
 
         var message = await deadLettered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         message.Headers.ShouldContainKeyAndValue("tenant", "acme");
         message.Headers.ShouldContainKeyAndValue("x-runax-dlq-original-topic", "orders");
         message.Headers.ShouldContainKey("x-runax-dlq-reason");
+        message.PartitionKey.ShouldBe("customer-42");
 
         await stop.CancelAsync();
         await listener;

@@ -18,14 +18,14 @@ internal sealed class KafkaTransport : IMessagingTransport, IDisposable
 {
     private readonly KafkaConfig _options;
     private readonly ILogger<KafkaTransport> _logger;
-    private readonly Lazy<IProducer<Null, string>> _producer;
+    private readonly Lazy<IProducer<string?, string>> _producer;
 
     public KafkaTransport(KafkaConfig options, ILogger<KafkaTransport> logger)
     {
         _options = options;
         _logger = logger;
-        _producer = new Lazy<IProducer<Null, string>>(
-            () => new ProducerBuilder<Null, string>(BuildProducerConfig()).Build());
+        _producer = new Lazy<IProducer<string?, string>>(
+            () => new ProducerBuilder<string?, string>(BuildProducerConfig()).Build());
     }
 
     internal const string TransportName = "kafka";
@@ -58,7 +58,7 @@ internal sealed class KafkaTransport : IMessagingTransport, IDisposable
         var producer = _producer.Value;
 
         // Fire every produce without awaiting the per-message delivery, then flush the whole batch once.
-        var pending = new List<Task<DeliveryResult<Null, string>>>(messages.Count);
+        var pending = new List<Task<DeliveryResult<string?, string>>>(messages.Count);
         foreach (var message in messages)
             pending.Add(producer.ProduceAsync(message.Topic, ToKafkaMessage(message), cancellationToken));
 
@@ -89,7 +89,7 @@ internal sealed class KafkaTransport : IMessagingTransport, IDisposable
         Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken)
     {
-        using var consumer = new ConsumerBuilder<Null, string>(BuildConsumerConfig()).Build();
+        using var consumer = new ConsumerBuilder<string?, string>(BuildConsumerConfig()).Build();
         consumer.Subscribe(topics);
 
         _logger.LogInformation("Kafka consumer started in group {Group} for {Count} topic(s)",
@@ -99,7 +99,7 @@ internal sealed class KafkaTransport : IMessagingTransport, IDisposable
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                ConsumeResult<Null, string>? result;
+                ConsumeResult<string?, string>? result;
                 try
                 {
                     result = consumer.Consume(_options.PollTimeout);
@@ -129,8 +129,8 @@ internal sealed class KafkaTransport : IMessagingTransport, IDisposable
     }
 
     private async Task SettleAsync(
-        IConsumer<Null, string> consumer,
-        ConsumeResult<Null, string> result,
+        IConsumer<string?, string> consumer,
+        ConsumeResult<string?, string> result,
         Func<TransportMessage, ValueTask<MessageDisposition>> onMessage,
         CancellationToken cancellationToken)
     {
@@ -160,7 +160,12 @@ internal sealed class KafkaTransport : IMessagingTransport, IDisposable
                     var deadLetterTopic = result.Topic + _options.DeadLetterTopicSuffix;
                     await _producer.Value.ProduceAsync(
                         deadLetterTopic,
-                        new Message<Null, string> { Value = result.Message.Value, Headers = result.Message.Headers },
+                        new Message<string?, string>
+                        {
+                            Key = result.Message.Key,
+                            Value = result.Message.Value,
+                            Headers = result.Message.Headers,
+                        },
                         cancellationToken).ConfigureAwait(false);
                     consumer.Commit(result);
                     break;
@@ -177,9 +182,11 @@ internal sealed class KafkaTransport : IMessagingTransport, IDisposable
         }
     }
 
-    internal static Message<Null, string> ToKafkaMessage(TransportMessage message)
+    // The partition key becomes the record key, so Kafka sends every record with the same key to the same
+    // partition, in order. Without one the key is null and the producer spreads records across partitions.
+    internal static Message<string?, string> ToKafkaMessage(TransportMessage message)
     {
-        var record = new Message<Null, string> { Value = message.Body };
+        var record = new Message<string?, string> { Key = message.PartitionKey, Value = message.Body };
         if (message.Headers.Count > 0)
         {
             record.Headers = new Headers();

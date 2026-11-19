@@ -78,6 +78,54 @@ public sealed class KafkaTransportIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task A_keyed_record_is_written_with_its_partition_key_and_consumed_by_the_transport()
+    {
+        var transport = _provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);
+        var envelope = $$"""{"probe":"{{Guid.NewGuid():N}}"}""";
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var received = new TaskCompletionSource<TransportMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var subscription = transport.SubscribeAsync(
+            [_topic],
+            message =>
+            {
+                received.TrySetResult(message);
+                return ValueTask.FromResult(MessageDisposition.Acknowledge);
+            },
+            cts.Token);
+
+        await Task.Delay(3000);
+        await transport.PublishAsync(new TransportMessage(_topic, envelope) { PartitionKey = "customer-42" });
+
+        // The transport's own consumer reads a keyed record (a Null key deserializer would reject it).
+        (await received.Task.WaitAsync(cts.Token)).Body.ShouldBe(envelope);
+
+        using var raw = new ConsumerBuilder<string, string>(new ConsumerConfig
+        {
+            BootstrapServers = BootstrapServers,
+            GroupId = $"runax-test-key-{Guid.NewGuid():N}",
+            AutoOffsetReset = AutoOffsetReset.Earliest,
+            EnableAutoCommit = false,
+        }).Build();
+        raw.Subscribe(_topic);
+
+        var record = raw.Consume(cts.Token);
+        record.Message.Key.ShouldBe("customer-42");
+        raw.Close();
+
+        await cts.CancelAsync();
+        try
+        {
+            await subscription;
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected on shutdown.
+        }
+    }
+
+    [Fact]
     public async Task Batch_publish_delivers_every_message()
     {
         var transport = _provider.GetRequiredKeyedService<IMessagingTransport>(BusNames.Default);

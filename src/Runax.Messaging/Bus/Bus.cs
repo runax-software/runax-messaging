@@ -120,9 +120,11 @@ internal sealed class Bus(
         try
         {
             var envelope = serializerProvider.For(Name, topic).Serialize(message, carrier);
-            await Sink.PublishAsync(
-                new TransportMessage(topic, envelope, NativeHeadersFor<TMessage>(carrier)), cancellationToken)
-                .ConfigureAwait(false);
+            var outgoing = new TransportMessage(topic, envelope, NativeHeadersFor<TMessage>(carrier))
+            {
+                PartitionKey = carrier.GetValueOrDefault(MessageHeaders.PartitionKey),
+            };
+            await Sink.PublishAsync(outgoing, cancellationToken).ConfigureAwait(false);
             MessagingDiagnostics.Published.Add(1, MessagingDiagnostics.Tags(Transport.SystemName, topic, Name));
         }
         catch (Exception ex)
